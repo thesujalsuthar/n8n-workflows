@@ -1,0 +1,193 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "functionCode": "const keywords = $json.keywords || ['developer', 'engineer'];\nconst jobBoards = [\n  {\n    name: 'Indeed',\n    url: `https://www.indeed.com/jobs?q=${encodeURIComponent(keywords.join('+'))}&l=`\n  },\n  {\n    name: 'LinkedIn',\n    url: `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(keywords.join('%20'))}`\n  }\n];\n\nreturn jobBoards.map(board => ({ json: { url: board.url, source: board.name } }));"
+      },
+      "name": "Generate Job Board URLs",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$json.url}}",
+        "responseFormat": "string",
+        "options": {
+          "headers": {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0 Safari/537.36"
+          }
+        }
+      },
+      "name": "HTTP Request - Scrape",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const source = $json.source;\nconst html = $json.body;\nconst criteria = {\n  location: $json.location || 'Remote',\n  minSalary: $json.minSalary || 60000\n};\n\nconst cheerio = require('cheerio');\nconst $ = cheerio.load(html);\nconst jobs = [];\n\nif (source === 'Indeed') {\n  $('.jobsearch-SerpJobCard').each((i, el) => {\n    const title = $(el).find('.title a').text().trim();\n    const location = $(el).find('.location').text().trim() || $(el).find('.sjcl .location').text().trim();\n    const salaryText = $(el).find('.salaryText').text().trim();\n    let salary = 0;\n    if (salaryText) {\n      const salaryMatch = salaryText.replace(/\\$|,/g, '').match(/\\d+/g);\n      if (salaryMatch) {\n        salary = Math.max(...salaryMatch.map(Number));\n      }\n    }\n\n    if ((location.includes(criteria.location) || criteria.location.toLowerCase() === 'remote' && location === '') && salary >= criteria.minSalary) {\n      jobs.push({ title, location, salary, url: 'https://indeed.com' + $(el).find('.title a').attr('href'), source });\n    }\n  });\n} else if (source === 'LinkedIn') {\n  $('.result-card.job-result-card').each((i, el) => {\n    const title = $(el).find('.result-card__title.job-result-card__title').text().trim();\n    const location = $(el).find('.result-card__location.job-result-card__location').text().trim();\n    let salary = 0; // LinkedIn does not typically display salary\n\n    if ((location.includes(criteria.location) || criteria.location.toLowerCase() === 'remote' && location === '') && salary >= criteria.minSalary) {\n      jobs.push({ title, location, salary, url: $(el).find('a.result-card__full-card-link').attr('href'), source });\n    }\n  });\n}\n\nreturn jobs.map(job => ({ json: job }));"
+      },
+      "name": "Parse and Filter Listings",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ],
+      "notesInFlow": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "lookup",
+        "lookupColumn": "Job URL",
+        "lookupValue": "={{$json.url}}",
+        "options": {}
+      },
+      "name": "Google Sheets - Check Existing",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": "Google Sheets OAuth2"
+      },
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "sheetId": "YOUR_GOOGLE_SHEET_ID",
+        "range": "A1",
+        "options": {},
+        "valueInputMode": "USER_ENTERED",
+        "columns": [
+          {
+            "header": "Job Title",
+            "value": "={{$json[\"title\"]}}"
+          },
+          {
+            "header": "Location",
+            "value": "={{$json[\"location\"]}}"
+          },
+          {
+            "header": "Salary",
+            "value": "={{$json[\"salary\"]}}"
+          },
+          {
+            "header": "Job URL",
+            "value": "={{$json[\"url\"]}}"
+          },
+          {
+            "header": "Source",
+            "value": "={{$json[\"source\"]}}"
+          },
+          {
+            "header": "Application Status",
+            "value": "Not Applied"
+          },
+          {
+            "header": "Last Follow Up",
+            "value": ""
+          },
+          {
+            "header": "Next Follow Up Reminder",
+            "value": ""
+          }
+        ]
+      },
+      "name": "Google Sheets - Append New Job",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": "Google Sheets OAuth2"
+      }
+    },
+    {
+      "parameters": {
+        "mode": "passThrough"
+      },
+      "name": "IF - New Job?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        950,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Generate Job Board URLs": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - Scrape",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - Scrape": {
+      "main": [
+        [
+          {
+            "node": "Parse and Filter Listings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse and Filter Listings": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Check Existing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Check Existing": {
+      "main": [
+        [
+          {
+            "node": "IF - New Job?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - New Job?": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Google Sheets - Append New Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
