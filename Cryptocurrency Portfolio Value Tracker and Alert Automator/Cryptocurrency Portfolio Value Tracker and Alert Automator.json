@@ -1,0 +1,207 @@
+{
+  "name": "Automated Cryptocurrency Portfolio Tracker and Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.binance.com/api/v3/ticker/price?symbols=[\"BTCUSDT\",\"ETHUSDT\",\"BNBUSDT\"]",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Fetch Binance Prices",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.coinbase.com/v2/prices/BTC-USD/spot",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Fetch Coinbase BTC Price",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.coinbase.com/v2/prices/ETH-USD/spot",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Fetch Coinbase ETH Price",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const portfolio = {\n  BTC: 0.5,\n  ETH: 2,\n  BNB: 10\n};\n\nconst pricesBinance = {};\n\n// Parse Binance prices\nitems[0].json.forEach(item => {\n  // item.symbol like BTCUSDT\n  const symbol = item.symbol.replace('USDT', '');\n  pricesBinance[symbol] = parseFloat(item.price);\n});\n\n// Get Coinbase prices from response items\nconst coinbaseBTC = parseFloat(items[1].json.data.amount);\nconst coinbaseETH = parseFloat(items[2].json.data.amount);\n\n// Use Binance prices if available, otherwise fallback to Coinbase for BTC/ETH\nconst btcPrice = pricesBinance.BTC || coinbaseBTC;\nconst ethPrice = pricesBinance.ETH || coinbaseETH;\nconst bnbPrice = pricesBinance.BNB || 0;\n\nconst portfolioValue = \n  (portfolio.BTC * btcPrice) + \n  (portfolio.ETH * ethPrice) + \n  (portfolio.BNB * bnbPrice);\n\nreturn [{ json: {\n  btcPrice,\n  ethPrice,\n  bnbPrice,\n  portfolioValue\n} }];"
+      },
+      "name": "Calculate Portfolio Value",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        550,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "append",
+        "path": "cryptocurrency-portfolio-values.json",
+        "dataPropertyName": "portfolioValue",
+        "options": {
+          "overwriteFile": false,
+          "jsonIndentation": 2,
+          "appendNewLine": true,
+          "includeTimestamp": true,
+          "timestampFormat": "isoDateTime"
+        }
+      },
+      "name": "Append Portfolio Value to File",
+      "type": "file",
+      "typeVersion": 1,
+      "position": [
+        850,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const THRESHOLD_PERCENT = 5;\nconst fs = require('fs');\nconst path = 'cryptocurrency-portfolio-values.json';\n\n// Read last two portfolio values\nlet contents = '';\ntry {\n  contents = fs.readFileSync(path, 'utf8');\n} catch (e) {\n  return [];\n}\n\nconst lines = contents.trim().split('\\n');\nif (lines.length < 2) {\n  return [];\n}\n\nconst getValueFromLine = (line) => {\n  try {\n    const obj = JSON.parse(line);\n    return obj.portfolioValue;\n  } catch(e) {\n    return null;\n  }\n}\n\nconst lastValue = getValueFromLine(lines[lines.length-1]);\nconst prevValue = getValueFromLine(lines[lines.length-2]);\n\nif (lastValue === null || prevValue === null) {\n  return [];\n}\n\nconst changePercent = ((lastValue - prevValue) / prevValue) * 100;\n\nif (Math.abs(changePercent) >= THRESHOLD_PERCENT) {\n  return [{ json: { changePercent }}];\n} else {\n  return [];\n}"
+      },
+      "name": "Check for Significant Change",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "subject": "🚨 Portfolio Alert: Significant Change Detected",
+        "text": "Your cryptocurrency portfolio value has changed by {{$json[\"changePercent\"].toFixed(2)}}% since the last check.",
+        "options": {}
+      },
+      "name": "Send Email Alert",
+      "type": "emailSend",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        350
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "1",
+          "name": "SMTP Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "YOUR_CHAT_ID",
+        "text": "🚨 Portfolio Alert: Your cryptocurrency portfolio value has changed by {{$json[\"changePercent\"].toFixed(2)}}%.",
+        "additionalFields": {}
+      },
+      "name": "Send Messaging App Alert",
+      "type": "telegram",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        550
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "2",
+          "name": "Telegram API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Fetch Binance Prices": {
+      "main": [
+        [
+          {
+            "node": "Fetch Coinbase BTC Price",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Coinbase BTC Price": {
+      "main": [
+        [
+          {
+            "node": "Fetch Coinbase ETH Price",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Coinbase ETH Price": {
+      "main": [
+        [
+          {
+            "node": "Calculate Portfolio Value",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Portfolio Value": {
+      "main": [
+        [
+          {
+            "node": "Append Portfolio Value to File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append Portfolio Value to File": {
+      "main": [
+        [
+          {
+            "node": "Check for Significant Change",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check for Significant Change": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Messaging App Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
