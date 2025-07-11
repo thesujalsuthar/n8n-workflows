@@ -1,0 +1,151 @@
+```json
+{
+  "name": "Daily Expense Tracker",
+  "nodes": [
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "getAll",
+        "folder": "INBOX",
+        "filters": {
+          "subject": {
+            "contains": "receipt"
+          },
+          "isUnread": true
+        },
+        "options": {
+          "limit": 20,
+          "downloadAttachments": false
+        }
+      },
+      "name": "Gmail Get Receipts",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "credentials": {
+        "gmailOAuth2Api": {
+          "id": "1",
+          "name": "Gmail OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const categoryList = [\n  { keyword: ['restaurant', 'cafe', 'coffee', 'food'], category: 'Food' },\n  { keyword: ['uber', 'lyft', 'taxi', 'bus', 'metro', 'train'], category: 'Transport' },\n  { keyword: ['electricity', 'water', 'gas', 'internet', 'utility'], category: 'Utilities' }\n];\n\nconst emails = $input.all();\n\nreturn emails.map(email => {\n  const body = email.json.textPlain || email.json.textHtml || '';\n  const date = email.json.internalDate ? new Date(parseInt(email.json.internalDate)).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];\n\n  // Basic regex to extract amount (supports USD, EUR, etc.)\n  const amountRegex = /\\$\\s?([0-9]+(?:\\.[0-9]{1,2})?)/i;\n  const amountMatch = body.match(amountRegex);\n  const amount = amountMatch ? parseFloat(amountMatch[1]) : null;\n\n  // Extract vendor as the sender's name or from the subject\n  const vendor = email.json.from ? email.json.from[0].name || email.json.from[0].address : (email.json.subject || 'Unknown Vendor');\n\n  // Determine category\n  let category = 'Uncategorized';\n  for (const cat of categoryList) {\n    for (const kw of cat.keyword) {\n      if (body.toLowerCase().includes(kw)) {\n        category = cat.category;\n        break;\n      }\n    }\n    if (category !== 'Uncategorized') break;\n  }\n\n  return {\n    json: {\n      date,\n      amount,\n      category,\n      vendor\n    }\n  };\n});"
+      },
+      "name": "Extract & Categorize",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "sheetId": "YOUR_GOOGLE_SHEETS_ID",
+        "range": "Sheet1!A:D",
+        "valueInputMode": "USER_ENTERED",
+        "options": {},
+        "dataPropertyName": "data",
+        "values": [
+          ["={{ $json[\"date\"] }}", "={{ $json[\"amount\"] }}", "={{ $json[\"category\"] }}", "={{ $json[\"vendor\"] }}"]
+        ]
+      },
+      "name": "Add Row to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 2,
+      "position": [780, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "1",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "modify",
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json[\"amount\"]}}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "name": "Filter Valid Expenses",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "operation": "modify",
+        "readOnly": true
+      },
+      "name": "Mark Emails Read",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 1,
+      "position": [850, 450],
+      "credentials": {
+        "gmailOAuth2Api": {
+          "id": "1",
+          "name": "Gmail OAuth2 API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Gmail Get Receipts": {
+      "main": [
+        [
+          {
+            "node": "Extract & Categorize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract & Categorize": {
+      "main": [
+        [
+          {
+            "node": "Filter Valid Expenses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Valid Expenses": {
+      "main": [
+        [
+          {
+            "node": "Add Row to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Emails Read",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Row to Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Mark Emails Read",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
+```
