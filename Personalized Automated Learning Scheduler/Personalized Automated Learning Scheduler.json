@@ -1,0 +1,277 @@
+{
+  "name": "Automated Personal Learning Path Generator",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 9,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.education-platform.com/v1/user/profile",
+        "options": {},
+        "headers": {
+          "Authorization": "Bearer={{$credentials.educationPlatformApi.apiKey}}"
+        }
+      },
+      "name": "Get User Profile",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        500,
+        200
+      ],
+      "credentials": {
+        "educationPlatformApi": {
+          "id": "1",
+          "name": "Education Platform API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.education-platform.com/v1/user/progress",
+        "options": {},
+        "headers": {
+          "Authorization": "Bearer={{$credentials.educationPlatformApi.apiKey}}"
+        }
+      },
+      "name": "Get User Progress",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        500,
+        400
+      ],
+      "credentials": {
+        "educationPlatformApi": {
+          "id": "1",
+          "name": "Education Platform API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.education-platform.com/v1/recommendations",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {},
+        "headers": {
+          "Authorization": "Bearer={{$credentials.educationPlatformApi.apiKey}}",
+          "Content-Type": "application/json"
+        },
+        "bodyParametersJson": "={\n  \"interests\": $json[\"profile\"][\"interests\"],\n  \"goals\": $json[\"profile\"][\"goals\"],\n  \"progress\": $json[\"progress\"]\n}"
+      },
+      "name": "Generate Recommendations",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ],
+      "credentials": {
+        "educationPlatformApi": {
+          "id": "1",
+          "name": "Education Platform API"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "calendar",
+        "operation": "createEvent",
+        "calendarId": "primary",
+        "summary": "Learning: {{$json[\"title\"]}}",
+        "description": "Part of your personalized learning path generated automatically.",
+        "startDateTime": "={{$json[\"schedule\"]?.start || new Date().toISOString()}}",
+        "endDateTime": "={{$json[\"schedule\"]?.end || new Date(new Date().getTime() + 60 * 60 * 1000).toISOString()}}"
+      },
+      "name": "Schedule in Calendar",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        300
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "2",
+          "name": "Google Calendar OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.note-taking-app.com/v1/notes",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {},
+        "headers": {
+          "Authorization": "Bearer={{$credentials.noteTakingApi.apiKey}}",
+          "Content-Type": "application/json"
+        },
+        "bodyParametersJson": "={\n  \"title\": \"Learning Path: {{$json[\"title\"]}}\",\n  \"content\": \"Recommendations:\\n\" + $json[\"recommendations\"].map(r => `- ${r.title}: ${r.description}`).join('\\n')\n}"
+      },
+      "name": "Create/Update Notes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        500
+      ],
+      "credentials": {
+        "noteTakingApi": {
+          "id": "3",
+          "name": "Note Taking API"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "name": "Merge User Data",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ],
+      "mergeOperation": "mergeByIndex"
+    },
+    {
+      "parameters": {
+        "functionCode": "const profile = items[0].json;\nconst progress = items[1].json;\nreturn [{ json: { profile, progress } }];"
+      },
+      "name": "Combine Profile and Progress",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const recs = items[0].json.recommendations || [];\nreturn recs.map(rec => ({ json: rec }));"
+      },
+      "name": "Split Recommendations",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get User Profile",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get User Progress",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get User Profile": {
+      "main": [
+        [
+          {
+            "node": "Merge User Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get User Progress": {
+      "main": [
+        [
+          {
+            "node": "Merge User Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge User Data": {
+      "main": [
+        [
+          {
+            "node": "Combine Profile and Progress",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine Profile and Progress": {
+      "main": [
+        [
+          {
+            "node": "Generate Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Split Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Schedule in Calendar",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create/Update Notes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "id": "autogen-personal-learning-path-001"
+}
