@@ -1,0 +1,166 @@
+{
+  "name": "Automated Climate Impact Tracker and Report Generator",
+  "nodes": [
+    {
+      "parameters": {
+        "resource": "httpRequest",
+        "requestMethod": "GET",
+        "url": "https://api.climateapi.example.com/v1/carbon-emissions",
+        "responseFormat": "json",
+        "jsonParameters": true,
+        "options": {}
+      },
+      "name": "Get Carbon Emissions Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "httpRequest",
+        "requestMethod": "GET",
+        "url": "https://api.climateapi.example.com/v1/temperature-changes",
+        "responseFormat": "json",
+        "jsonParameters": true,
+        "options": {}
+      },
+      "name": "Get Temperature Changes Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        200,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const carbonData = items[0].json;\nconst tempData = items[1].json;\n\n// Aggregate data by year\nconst aggregated = {};\n\ncarbonData.forEach(entry => {\n  const year = entry.year;\n  if(!aggregated[year]) {\n    aggregated[year] = {carbonEmissions: 0, tempChange: 0, countTemp: 0};\n  }\n  aggregated[year].carbonEmissions += entry.emission;\n});\n\ntempData.forEach(entry => {\n  const year = entry.year;\n  if(!aggregated[year]) {\n    aggregated[year] = {carbonEmissions: 0, tempChange: 0, countTemp: 0};\n  }\n  aggregated[year].tempChange += entry.change;\n  aggregated[year].countTemp += 1;\n});\n\n// Average temperature change if multiple entries\nfor (const year in aggregated) {\n  if(aggregated[year].countTemp > 0) {\n    aggregated[year].tempChange = aggregated[year].tempChange / aggregated[year].countTemp;\n  }\n}\n\n// Prepare output\nconst result = Object.keys(aggregated).map(year => {\n  return {\n    year: year,\n    carbonEmissions: aggregated[year].carbonEmissions,\n    temperatureChange: aggregated[year].tempChange\n  };\n});\n\nreturn result.map(r => ({ json: r }));"
+      },
+      "name": "Aggregate and Analyze Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        400
+      ],
+      "alwaysOutputData": false,
+      "notesInFlow": true,
+      "notes": "Aggregates carbon emissions and temperature changes by year and averages temperature changes"
+    },
+    {
+      "parameters": {
+        "functionCode": "const data = items.map(item => item.json);\n\nlet report = '# Climate Impact Report\\n\\n';\nreport += 'Year | Carbon Emissions (MtCO2e) | Temperature Change (°C)\\n';\nreport += '--- | --- | ---\\n';\nfor (const entry of data) {\n  report += `${entry.year} | ${entry.carbonEmissions.toFixed(2)} | ${entry.temperatureChange.toFixed(2)}\\n`;\n}\n\nreport += '\\n*Generated automatically by the Automated Climate Impact Tracker.*';\n\nreturn [\n  {\n    json: { report }\n  }\n];"
+      },
+      "name": "Generate Report",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "no-reply@climate-tracker.example.com",
+        "toEmail": "stakeholders@company.com",
+        "subject": "Automated Climate Impact Report",
+        "text": "={{$json[\"report\"]}}",
+        "html": "={{`<pre>${$json[\"report\"]}</pre>`}}"
+      },
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        950,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 9,
+              "minute": 0
+            }
+          ]
+        },
+        "weekDays": [
+          "Monday"
+        ]
+      },
+      "name": "Scheduled Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        50,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Scheduled Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Carbon Emissions Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Temperature Changes Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Carbon Emissions Data": {
+      "main": [
+        [
+          {
+            "node": "Aggregate and Analyze Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Temperature Changes Data": {
+      "main": [
+        [
+          {
+            "node": "Aggregate and Analyze Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Aggregate and Analyze Data": {
+      "main": [
+        [
+          {
+            "node": "Generate Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Report": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
