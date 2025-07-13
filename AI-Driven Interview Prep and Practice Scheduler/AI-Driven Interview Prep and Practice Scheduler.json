@@ -1,0 +1,249 @@
+{
+  "name": "Automated AI-Powered Job Interview Preparation Assistant",
+  "nodes": [
+    {
+      "parameters": {
+        "mode": "manual",
+        "triggerOn": "webhook",
+        "path": "start-interview-prep"
+      },
+      "id": "WebhookNode1",
+      "name": "Start Interview Prep",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const role = $json[\"body\"][\"role\"] || \"software engineer\";\nreturn [{ json: { role } }];"
+      },
+      "id": "ExtractRole",
+      "name": "Extract Role",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "document",
+        "operation": "search",
+        "query": "common interview questions for {{ $json.role }} role",
+        "additionalFields": {
+          "maxResults": 10
+        }
+      },
+      "id": "SearchInterviewQuestions",
+      "name": "Search Interview Questions",
+      "type": "n8n-nodes-base.googleCustomSearch",
+      "typeVersion": 1,
+      "position": [
+        650,
+        250
+      ],
+      "credentials": {
+        "googleCustomSearchApi": "Google Custom Search API"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const questions = items[0].json.items.map(item => item.title).filter(title => title.toLowerCase().includes('question') || title.endsWith('?'));\nif(questions.length === 0){\n  questions.push(\"Tell me about yourself\", \"What are your strengths?\", \"Why do you want this job?\");\n}\nreturn questions.map(q => ({ json: { question: q } }));"
+      },
+      "id": "ExtractQuestions",
+      "name": "Extract Questions",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an expert job coach."
+          },
+          {
+            "role": "user",
+            "content": "Generate an ideal model answer for the interview question: {{ $json.question }} for the role of {{ $json.role }}."
+          }
+        ]
+      },
+      "id": "GenerateModelAnswers",
+      "name": "Generate Model Answers",
+      "type": "n8n-nodes-base.openAI",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        250
+      ],
+      "credentials": {
+        "openAIApi": "OpenAI API"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.map(item => ({ json: { question: item.json.question, modelAnswer: item.json.choices[0].message.content, role: $json.role } }));"
+      },
+      "id": "FormatAnswers",
+      "name": "Format Answers",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "resource": "event",
+        "summary": "Interview Practice Session",
+        "description": "Practice session for {{ $json.role }} interview questions.",
+        "startDateTime": "=new Date(new Date().getTime() + 86400000).toISOString()",
+        "endDateTime": "=new Date(new Date().getTime() + 90000000).toISOString()",
+        "attendees": [],
+        "additionalFields": {}
+      },
+      "id": "SchedulePracticeSession",
+      "name": "Schedule Practice Session",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        250
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": "Google Calendar OAuth2 API"
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "to": "={{ $json.body.email }}",
+        "subject": "Your Interview Practice Session Scheduled",
+        "text": "Hello,\n\nYour interview practice session for the role of {{ $json.role }} has been scheduled for tomorrow.\n\nHere are some model answers to common questions:\n\n{{ $items(\"Format Answers\").map(item => `Q: ${item.json.question}\\nA: ${item.json.modelAnswer}`).join('\\n\\n') }}\n\nGood luck with your preparation!"
+      },
+      "id": "SendEmailReminder",
+      "name": "Send Email Reminder",
+      "type": "n8n-nodes-base.smtp",
+      "typeVersion": 1,
+      "position": [
+        1650,
+        250
+      ],
+      "credentials": {
+        "smtp": "SMTP Account"
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "to": "={{ $json.body.messagingAppId }}",
+        "text": "Reminder: Your practice session for the {{ $json.role }} interview is tomorrow. Here are some tips and model answers:\n\n{{ $items(\"Format Answers\").map(item => `Q: ${item.json.question}\\nA: ${item.json.modelAnswer}`).join('\\n\\n') }}"
+      },
+      "id": "SendMessageReminder",
+      "name": "Send Messaging App Reminder",
+      "type": "n8n-nodes-base.twilioSendMessage",
+      "typeVersion": 1,
+      "position": [
+        1650,
+        400
+      ],
+      "credentials": {
+        "twilioApi": "Twilio API"
+      }
+    }
+  ],
+  "connections": {
+    "Start Interview Prep": {
+      "main": [
+        [
+          {
+            "node": "Extract Role",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Role": {
+      "main": [
+        [
+          {
+            "node": "Search Interview Questions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Interview Questions": {
+      "main": [
+        [
+          {
+            "node": "Extract Questions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Questions": {
+      "main": [
+        [
+          {
+            "node": "Generate Model Answers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Model Answers": {
+      "main": [
+        [
+          {
+            "node": "Format Answers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Answers": {
+      "main": [
+        [
+          {
+            "node": "Schedule Practice Session",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Email Reminder",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Messaging App Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  ],
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
