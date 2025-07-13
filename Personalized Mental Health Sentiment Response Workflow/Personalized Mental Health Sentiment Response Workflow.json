@@ -1,0 +1,120 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "mental-health-checkin",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "text",
+        "operation": "analyzeSentiment",
+        "text": "={{ $json[\"text\"] }}",
+        "additionalFields": {}
+      },
+      "name": "Sentiment Analysis",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        550,
+        300
+      ],
+      "credentials": {
+        "openAiApi": "OpenAI API"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const sentimentScore = $json.choices[0].message.content.trim();\n// Simple parsing expecting a sentiment score or label\n// Example: \"positive\", \"neutral\", \"negative\" or a numeric score\n\nlet sentiment = \"neutral\";\nif (sentimentScore.toLowerCase().includes(\"positive\")) {\n  sentiment = \"positive\";\n} else if (sentimentScore.toLowerCase().includes(\"negative\")) {\n  sentiment = \"negative\";\n} else if (!isNaN(parseFloat(sentimentScore))) {\n  const score = parseFloat(sentimentScore);\n  if (score > 0.2) {\n    sentiment = \"positive\";\n  } else if (score < -0.2) {\n    sentiment = \"negative\";\n  } else {\n    sentiment = \"neutral\";\n  }\n}\n\nreturn [{ json: { sentiment } }];"
+      },
+      "name": "Parse Sentiment",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const sentiment = $json.sentiment;\n\nlet resources = [];\n\nif (sentiment === \"positive\") {\n  resources = [\n    { type: \"activity\", title: \"Gratitude journaling\", description: \"Write down things you are grateful for.\" },\n    { type: \"resource\", title: \"Keep positive mindset\", description: \"Continue to engage in positive social activities.\" }\n  ];\n} else if (sentiment === \"neutral\") {\n  resources = [\n    { type: \"activity\", title: \"Mindfulness meditation\", description: \"Spend 10 minutes on mindfulness meditation.\" },\n    { type: \"resource\", title: \"Mental wellness tips\", description: \"Explore general mental wellness guidelines.\" }\n  ];\n} else if (sentiment === \"negative\") {\n  resources = [\n    { type: \"activity\", title: \"Breathing exercises\", description: \"Practice deep breathing for relaxation.\" },\n    { type: \"resource\", title: \"Crisis hotline\", description: \"Call or chat with a mental health professional at 1-800-273-8255.\" },\n    { type: \"resource\", title: \"CBT techniques\", description: \"Learn cognitive behavioral therapy strategies.\" }\n  ];\n} else {\n  resources = [\n    { type: \"resource\", title: \"General mental health\", description: \"Explore mental health resources.\" }\n  ];\n}\n\nreturn [{ json: { resources } }];"
+      },
+      "name": "Recommend Resources",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        950,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "json",
+        "json": "={{ $json.resources }}"
+      },
+      "name": "Respond with Resources",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Sentiment Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sentiment Analysis": {
+      "main": [
+        [
+          {
+            "node": "Parse Sentiment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Sentiment": {
+      "main": [
+        [
+          {
+            "node": "Recommend Resources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recommend Resources": {
+      "main": [
+        [
+          {
+            "node": "Respond with Resources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
