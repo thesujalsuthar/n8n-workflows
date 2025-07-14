@@ -1,0 +1,219 @@
+{
+  "name": "Real-time Wildfire Risk and Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.openweathermap.org/data/2.5/weather",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "lat",
+              "value": "={{$json[\"latitude\"]}}"
+            },
+            {
+              "name": "lon",
+              "value": "={{$json[\"longitude\"]}}"
+            },
+            {
+              "name": "appid",
+              "value": "<OPENWEATHERMAP_API_KEY>"
+            }
+          ]
+        }
+      },
+      "name": "Get Weather Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.nasa.gov/planetary/earth/assets",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "lon",
+              "value": "={{$json[\"longitude\"]}}"
+            },
+            {
+              "name": "lat",
+              "value": "={{$json[\"latitude\"]}}"
+            },
+            {
+              "name": "api_key",
+              "value": "<NASA_API_KEY>"
+            },
+            {
+              "name": "begin",
+              "value": "={{new Date(new Date().setDate(new Date().getDate()-1)).toISOString().split(\"T\")[0]}}"
+            },
+            {
+              "name": "end",
+              "value": "={{new Date().toISOString().split(\"T\")[0]}}"
+            }
+          ]
+        }
+      },
+      "name": "Get Satellite Fire Detection Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const weather = items[0].json;\nconst fireData = items[1].json;\n\n// Example thresholds\nconst temperatureThreshold = 35; // Celsius\nconst windSpeedThreshold = 10; // m/s\n\n// Assume fireData contains a list of detected fires with confidence\n// For demo purposes, consider if any detected fire exists within proximity\nconst fireDetected = fireData.count > 0;\n\n// Extract temperature and wind speed from weather data\nconst tempK = weather.main.temp;\nconst tempC = tempK - 273.15;\nconst windSpeed = weather.wind.speed;\n\n// Simple risk calculation\nlet riskLevel = \"Low\";\nif (tempC >= temperatureThreshold && windSpeed >= windSpeedThreshold && fireDetected) {\n  riskLevel = \"High\";\n} else if (tempC >= temperatureThreshold || fireDetected) {\n  riskLevel = \"Moderate\";\n}\n\nreturn [{\n  json: {\n    temperatureCelsius: tempC.toFixed(2),\n    windSpeed,\n    fireDetected,\n    riskLevel\n  }\n}];"
+      },
+      "name": "Risk Analysis",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        375
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "to": "={{$json[\"userPhone\"]}}",
+        "message": "={{`Wildfire Risk Alert: Your area risk level is ${$json[\"riskLevel\"]}. Stay alert and follow safety guidelines.`}}"
+      },
+      "name": "Send SMS Alert",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        800,
+        300
+      ],
+      "credentials": {
+        "twilioApi": {
+          "id": "<CREDENTIAL_ID>",
+          "name": "Twilio Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "alerts@wildfirealerts.com",
+        "toEmail": "={{$json[\"userEmail\"]}}",
+        "subject": "Wildfire Risk Alert",
+        "text": "={{`Dear user,\n\nYour area's current wildfire risk level is: ${$json[\"riskLevel\"]}.\nPlease stay prepared and monitor local emergency instructions.\n\nStay safe,\nWildfire Alert System`}}"
+      },
+      "name": "Send Email Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        800,
+        450
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "<CREDENTIAL_ID>",
+          "name": "SMTP Email"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "userIds": "={{[$json[\"userPushId\"]]}}",
+        "title": "Wildfire Risk Alert",
+        "message": "={{`Risk level for your area is currently ${$json[\"riskLevel\"]}. Please remain vigilant.`}}"
+      },
+      "name": "Send Push Notification",
+      "type": "n8n-nodes-base.pushover",
+      "typeVersion": 1,
+      "position": [
+        800,
+        600
+      ],
+      "credentials": {
+        "pushoverApi": {
+          "id": "<CREDENTIAL_ID>",
+          "name": "Pushover API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return [\n  {\n    json: {\n      latitude: 38.8951,\n      longitude: -77.0364,\n      userPhone: \"+15550001111\",\n      userEmail: \"user1@example.com\",\n      userPushId: \"user1_push_id\"\n    }\n  },\n  {\n    json: {\n      latitude: 34.0522,\n      longitude: -118.2437,\n      userPhone: \"+15550002222\",\n      userEmail: \"user2@example.com\",\n      userPushId: \"user2_push_id\"\n    }\n  }\n];"
+      },
+      "name": "Subscribers List",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        50,
+        375
+      ]
+    }
+  ],
+  "connections": {
+    "Subscribers List": {
+      "main": [
+        [
+          {
+            "node": "Get Weather Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Satellite Fire Detection Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Weather Data": {
+      "main": [
+        [
+          {
+            "node": "Risk Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Satellite Fire Detection Data": {
+      "main": [
+        [
+          {
+            "node": "Risk Analysis",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Risk Analysis": {
+      "main": [
+        [
+          {
+            "node": "Send SMS Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Push Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
