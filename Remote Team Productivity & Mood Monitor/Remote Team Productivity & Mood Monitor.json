@@ -1,0 +1,243 @@
+{
+  "name": "Real-Time Remote Team Productivity and Mood Tracker",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 9,
+              "minute": 0
+            },
+            {
+              "hour": 12,
+              "minute": 0
+            },
+            {
+              "hour": 15,
+              "minute": 0
+            },
+            {
+              "hour": 18,
+              "minute": 0
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Scheduler",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "messages",
+        "operation": "list",
+        "channel": "CHANNEL_ID",
+        "additionalFields": {
+          "limit": 100,
+          "oldest": "={{$node[\"Scheduler\"].parameter[\"triggerTimes\"][0] ? $now.setHours(0,0,0,0) / 1000 : ''}}"
+        }
+      },
+      "name": "Slack Get Messages",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        300,
+        150
+      ],
+      "credentials": {
+        "slackOAuth2Api": "Slack Account"
+      }
+    },
+    {
+      "parameters": {
+        "sheetId": "GOOGLE_SHEET_ID",
+        "range": "Feedback!A2:C",
+        "options": {}
+      },
+      "name": "Google Sheets Get Feedback",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [
+        300,
+        300
+      ],
+      "credentials": {
+        "googleApi": "Google Sheets Account"
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "operation": "list",
+        "projectId": "GCP_PROJECT_ID",
+        "filter": "status = \"completed\" AND updatedAt >= \"{{$now.subtract(1, 'day').toISOString()}}\""
+      },
+      "name": "Task Management Get Completed Tasks",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        300,
+        450
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "user": "API_USER",
+          "password": "API_PASSWORD"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const slackMessages = items.find(i => i.json.channel === 'Slack Get Messages').json.messages || [];\nconst feedback = items.find(i => i.json.sheetName === 'Feedback').json.values || [];\nconst completedTasksResponse = items.find(i => i.json.projectId === 'GCP_PROJECT_ID');\n\nlet completedTasks = [];\nif (completedTasksResponse) {\n  try {\n    completedTasks = JSON.parse(completedTasksResponse.json.body).tasks || [];\n  } catch (e) {\n    completedTasks = [];\n  }\n}\n\n// Aggregate productivity metrics\nconst tasksCompletedCount = completedTasks.length;\n\n// Aggregating mood from feedback (expecting feedback format: [employee, moodScore, comment])\nlet totalMood = 0;\nlet moodCount = 0;\nfor (const row of feedback) {\n  const moodScore = parseInt(row[1], 10);\n  if (!isNaN(moodScore)) {\n    totalMood += moodScore;\n    moodCount++;\n  }\n}\nconst averageMood = moodCount > 0 ? totalMood / moodCount : null;\n\n// Slack message activity count (proxy for collaboration activity)\nconst messageCount = slackMessages.length;\n\nreturn [{\n  json: {\n    tasksCompletedCount,\n    averageMood,\n    moodCount,\n    messageCount\n  }\n}];"
+      },
+      "name": "Calculate Metrics",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const tasks = items[0].json.tasksCompletedCount;\nconst mood = items[0].json.averageMood;\nconst messageCount = items[0].json.messageCount;\n\nconst alerts = [];\n\nif (tasks < 5) {\n  alerts.push('Low task completion: ' + tasks + ' tasks completed in the last day');\n}\n\nif (mood !== null && mood < 3) {\n  alerts.push('Low average mood score: ' + mood.toFixed(2));\n}\n\nif (messageCount < 10) {\n  alerts.push('Low collaboration activity: ' + messageCount + ' messages today');\n}\n\nreturn [{ json: { alerts, hasAlerts: alerts.length > 0 } }];"
+      },
+      "name": "Evaluate Alerts",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "alerts@company.com",
+        "toEmail": "manager@company.com",
+        "subject": "Team Productivity and Mood Alert",
+        "text": "={{$json[\"alerts\"].join('\\n')}}",
+        "options": {}
+      },
+      "name": "Send Email Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ],
+      "credentials": {
+        "smtp": "SMTP Credentials"
+      },
+      "enabled": false
+    },
+    {
+      "parameters": {
+        "resource": "chat.postMessage",
+        "operation": "postMessage",
+        "channel": "CHANNEL_ID",
+        "text": "={{'⚠️ Alerts:\\n' + $json[\"alerts\"].join('\\n')}}"
+      },
+      "name": "Slack Alert Message",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        450
+      ],
+      "credentials": {
+        "slackOAuth2Api": "Slack Account"
+      },
+      "enabled": false
+    }
+  ],
+  "connections": {
+    "Scheduler": {
+      "main": [
+        [
+          {
+            "node": "Slack Get Messages",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Google Sheets Get Feedback",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Task Management Get Completed Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack Get Messages": {
+      "main": [
+        [
+          {
+            "node": "Calculate Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets Get Feedback": {
+      "main": [
+        [
+          {
+            "node": "Calculate Metrics",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Task Management Get Completed Tasks": {
+      "main": [
+        [
+          {
+            "node": "Calculate Metrics",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Calculate Metrics": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Alerts": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Slack Alert Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
