@@ -1,0 +1,97 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "submit-activity",
+        "options": {}
+      },
+      "name": "Webhook - Receive Activity Data",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ],
+      "webhookId": "auto-carbon-footprint-submit"
+    },
+    {
+      "parameters": {
+        "functionCode": "const data = items[0].json;\n\n// Define emission factors (kg CO2 per unit)\nconst emissionFactors = {\n  transportation: {\n    car_km: 0.21,\n    bus_km: 0.05,\n    train_km: 0.04,\n    bike_km: 0,\n    walk_km: 0\n  },\n  energy: {\n    electricity_kwh: 0.233,\n    natural_gas_m3: 2.02\n  },\n  waste: {\n    kg_waste: 0.45\n  }\n};\n\n// Parse user inputs\nconst transportation = data.transportation || {};\nconst energy = data.energy || {};\nconst waste = data.waste || {};\n\n// Calculate transportation emissions\nconst transportEmissions =\n  (transportation.car_km || 0) * emissionFactors.transportation.car_km +\n  (transportation.bus_km || 0) * emissionFactors.transportation.bus_km +\n  (transportation.train_km || 0) * emissionFactors.transportation.train_km +\n  (transportation.bike_km || 0) * emissionFactors.transportation.bike_km +\n  (transportation.walk_km || 0) * emissionFactors.transportation.walk_km;\n\n// Calculate energy emissions\nconst energyEmissions =\n  (energy.electricity_kwh || 0) * emissionFactors.energy.electricity_kwh +\n  (energy.natural_gas_m3 || 0) * emissionFactors.energy.natural_gas_m3;\n\n// Calculate waste emissions\nconst wasteEmissions = (waste.kg_waste || 0) * emissionFactors.waste.kg_waste;\n\nconst totalEmissions = transportEmissions + energyEmissions + wasteEmissions;\n\nreturn [{\n  json: {\n    totalEmissions: parseFloat(totalEmissions.toFixed(3)),\n    breakdown: {\n      transportation: parseFloat(transportEmissions.toFixed(3)),\n      energy: parseFloat(energyEmissions.toFixed(3)),\n      waste: parseFloat(wasteEmissions.toFixed(3))\n    },\n    inputData: data\n  }\n}];"
+      },
+      "name": "Calculate Carbon Footprint",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const { breakdown } = items[0].json;\n\n// Personalized recommendations based on emission categories\nconst recommendations = [];\n\nif (breakdown.transportation > 1) {\n  recommendations.push(\"Consider reducing car travel and use public transportation, biking, or walking more frequently.\");\n} else {\n  recommendations.push(\"Transportation emissions are low; keep it up!\");\n}\n\nif (breakdown.energy > 1) {\n  recommendations.push(\"Reduce electricity usage by turning off unused devices and consider switching to renewable energy providers.\");\n} else {\n  recommendations.push(\"Energy consumption is efficient; maintain current habits.\");\n}\n\nif (breakdown.waste > 0.5) {\n  recommendations.push(\"Increase recycling efforts and reduce waste generation by composting and reusing materials.\");\n} else {\n  recommendations.push(\"Waste production is minimal; great job!\");\n}\n\nreturn [{\n  json: {\n    recommendations\n  }\n}];"
+      },
+      "name": "Generate Recommendations",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "message": "={{{\n  const data = $json;\n  return {\n    chat_id: $json.inputData.chat_id || null,\n    text: `Your daily carbon footprint is ${data.totalEmissions} kg CO2.\nBreakdown:\\n- Transportation: ${data.breakdown.transportation} kg CO2\\n- Energy: ${data.breakdown.energy} kg CO2\\n- Waste: ${data.breakdown.waste} kg CO2\\n\\nRecommendations:\\n${$items(\"Generate Recommendations\")[0].json.recommendations.map((rec, i) => `${i+1}. ${rec}`).join('\\n')}`\n  };\n}}"
+      },
+      "name": "Send Results to User",
+      "type": "n8n-nodes-base.telegram",
+      "credentials": {
+        "telegramApi": "Telegram API"
+      },
+      "typeVersion": 1,
+      "position": [
+        1200,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook - Receive Activity Data": {
+      "main": [
+        [
+          {
+            "node": "Calculate Carbon Footprint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Carbon Footprint": {
+      "main": [
+        [
+          {
+            "node": "Generate Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Send Results to User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {}
+}
