@@ -1,0 +1,120 @@
+{
+  "name": "AI-Powered Personalized Nutrition Planner and Grocery List Generator",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "createCompletion",
+        "model": "gpt-4",
+        "prompt": "You are an expert nutrition planner. Based on the following user input, generate a personalized 7-day meal plan with breakfast, lunch, dinner, and two snacks each day. Consider dietary preferences, health goals, and restrictions:\n\n{{ $json.userPreferences }}\n\nProvide the meal plan in JSON format with fields: day, meals (breakfast, lunch, dinner, snacks).",
+        "temperature": 0.7,
+        "maxTokens": 1000,
+        "topP": 1,
+        "frequencyPenalty": 0,
+        "presencePenalty": 0,
+        "stop": null
+      },
+      "name": "Generate Meal Plan",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 2,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const mealPlan = JSON.parse(items[0].json.choices[0].message.content);\n\n// Build grocery list by extracting ingredients mentioned in meals\n// For simplicity, this example assumes each meal is a string listing dishes; \n// ideally, you'd parse ingredients but here we'll just extract words after 'with' as items\n\nconst grocerySet = new Set();\n\nmealPlan.forEach(day => {\n  ['breakfast', 'lunch', 'dinner'].forEach(mealType => {\n    const meal = day.meals[mealType];\n    if (meal) {\n      // simple heuristic to extract grocery items\n      // This is a placeholder; replace with real extraction in practice\n      const ingredients = meal.match(/with ([\\w\\s,]+)/i);\n      if (ingredients && ingredients[1]) {\n        ingredients[1].split(/,|and/).forEach(item => {\n          const trimmed = item.trim();\n          if (trimmed.length > 0) {\n            grocerySet.add(trimmed);\n          }\n        });\n      }\n    }\n  });\n  if (day.meals.snacks) {\n    day.meals.snacks.forEach(snack => {\n      // Assume snack is an object with name and ingredients or a string\n      if (typeof snack === 'string') {\n        grocerySet.add(snack);\n      } else if (snack.name) {\n        grocerySet.add(snack.name);\n      }\n    });\n  }\n});\n\nreturn [{ json: { groceryList: Array.from(grocerySet) } }];"
+      },
+      "name": "Extract Grocery List",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "nutrition-plan",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ],
+      "webhookId": "d1a8c7e9-5d34-4c2a-9f40-0bfc9f57e15d"
+    },
+    {
+      "parameters": {
+        "expression": "{{$json[\"groceryList\"]}}"
+      },
+      "name": "Respond with Grocery List",
+      "type": "n8n-nodes-base.respondToWebHook",
+      "typeVersion": 1,
+      "position": [
+        950,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "expression": "{{$json[\"mealPlan\"]}}"
+      },
+      "name": "Respond with Meal Plan",
+      "type": "n8n-nodes-base.respondToWebHook",
+      "typeVersion": 1,
+      "position": [
+        950,
+        260
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Generate Meal Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Meal Plan": {
+      "main": [
+        [
+          {
+            "node": "Extract Grocery List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Grocery List": {
+      "main": [
+        [
+          {
+            "node": "Respond with Grocery List",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Respond with Meal Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
