@@ -1,0 +1,250 @@
+{
+  "name": "Automated Virtual Event Networking Assistant",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "register-participant",
+        "responseMode": "onReceived",
+        "options": {},
+        "responseData": "={{ { success: true, message: 'Participant registered successfully', participantId: $json.id } }}"
+      },
+      "name": "Register Participant",
+      "type": "n8n-nodes-base.httpTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const participant = {\n  id: $json.id || $json.participantId || $json.email || Math.random().toString(36).substr(2, 9),\n  name: $json.name,\n  email: $json.email,\n  interests: $json.interests || [],\n  professionalBackground: $json.professionalBackground || '',\n  timeZone: $json.timeZone || 'UTC'\n};\n\nreturn [{ json: participant }];"
+      },
+      "name": "Parse Participant Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "database": "VirtualEventDB",
+        "collection": "Participants",
+        "data": "={{ $json }}",
+        "options": {}
+      },
+      "name": "Save Participant",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        700,
+        300
+      ],
+      "credentials": {
+        "mongodb": "MongoDB Virtual Event DB"
+      }
+    },
+    {
+      "parameters": {
+        "triggerOnStartup": true,
+        "pollingInterval": 300
+      },
+      "name": "Scheduled Matching Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        180,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "findAll",
+        "database": "VirtualEventDB",
+        "collection": "Participants",
+        "query": {},
+        "options": {}
+      },
+      "name": "Get All Participants",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        400,
+        700
+      ],
+      "credentials": {
+        "mongodb": "MongoDB Virtual Event DB"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n This node matches participants by comparing interests and professional backgrounds.\n It outputs pairs of matched participants.\n*/\n\nconst participants = items.map(item => item.json);\n\n// Helper function to score similarity\nfunction similarityScore(p1, p2) {\n  let score = 0;\n\n  // Count shared interests\n  const sharedInterests = p1.interests.filter(i => p2.interests.includes(i));\n  score += sharedInterests.length * 2; // weighted\n\n  // Professional background match (simple substring check)\n  if (p1.professionalBackground.toLowerCase().includes(p2.professionalBackground.toLowerCase()) ||\n      p2.professionalBackground.toLowerCase().includes(p1.professionalBackground.toLowerCase())) {\n    score += 3;\n  }\n\n  return score;\n}\n\n// We'll create pairs with a threshold score\nconst threshold = 3;\n\nconst matchedPairs = [];\nconst used = new Set();\n\nfor (let i = 0; i < participants.length; i++) {\n  if (used.has(participants[i].id)) continue;\n\n  let bestMatch = null;\n  let bestScore = 0;\n\n  for (let j = i + 1; j < participants.length; j++) {\n    if (used.has(participants[j].id)) continue;\n    const score = similarityScore(participants[i], participants[j]);\n    if (score > bestScore && score >= threshold) {\n      bestMatch = participants[j];\n      bestScore = score;\n    }\n  }\n\n  if (bestMatch) {\n    matchedPairs.push({\n      participantA: participants[i],\n      participantB: bestMatch\n    });\n    used.add(participants[i].id);\n    used.add(bestMatch.id);\n  }\n}\n\nreturn matchedPairs.map(pair => ({ json: pair }));"
+      },
+      "name": "Match Participants",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        640,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const moment = require('moment-timezone');\n\nconst pairs = items.map(item => item.json);\nconst scheduledCalls = [];\n\nfor (const pair of pairs) {\n  // Schedule a call 1 day in the future at 3 PM participantA's timezone\n  const dateA = moment().tz(pair.participantA.timeZone).add(1, 'days').hour(15).minute(0).second(0);\n  // Convert to ISO string\n  const scheduledTime = dateA.toISOString();\n\n  scheduledCalls.push({\n    participantA: pair.participantA.email,\n    participantB: pair.participantB.email,\n    scheduledTime: scheduledTime,\n    videoCallLink: `https://video.example.com/call/${pair.participantA.id}-${pair.participantB.id}`\n  });\n}\n\nreturn scheduledCalls.map(call => ({ json: call }));"
+      },
+      "name": "Schedule Video Calls",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        880,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "database": "VirtualEventDB",
+        "collection": "ScheduledCalls",
+        "data": "={{ $json }}",
+        "options": {}
+      },
+      "name": "Save Scheduled Calls",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        700
+      ],
+      "credentials": {
+        "mongodb": "MongoDB Virtual Event DB"
+      }
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "toEmail": "={{ $json.participantA }}",
+        "subject": "Your Scheduled Networking Call Reminder",
+        "message": "Hello! You have a networking call scheduled with {{ $json.participantB }} on {{ $json.scheduledTime }}. Join using this link: {{ $json.videoCallLink }}\n\nLooking forward to your conversation!"
+      },
+      "name": "Email Participant A",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        630
+      ],
+      "credentials": {
+        "smtp": "SMTP Email Account"
+      }
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "toEmail": "={{ $json.participantB }}",
+        "subject": "Your Scheduled Networking Call Reminder",
+        "message": "Hello! You have a networking call scheduled with {{ $json.participantA }} on {{ $json.scheduledTime }}. Join using this link: {{ $json.videoCallLink }}\n\nLooking forward to your conversation!"
+      },
+      "name": "Email Participant B",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        770
+      ],
+      "credentials": {
+        "smtp": "SMTP Email Account"
+      }
+    }
+  ],
+  "connections": {
+    "Register Participant": {
+      "main": [
+        [
+          {
+            "node": "Parse Participant Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Participant Data": {
+      "main": [
+        [
+          {
+            "node": "Save Participant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scheduled Matching Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get All Participants",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get All Participants": {
+      "main": [
+        [
+          {
+            "node": "Match Participants",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Match Participants": {
+      "main": [
+        [
+          {
+            "node": "Schedule Video Calls",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Video Calls": {
+      "main": [
+        [
+          {
+            "node": "Save Scheduled Calls",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Scheduled Calls": {
+      "main": [
+        [
+          {
+            "node": "Email Participant A",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Email Participant B",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "id": "automated-virtual-event-networking-assistant"
+}
