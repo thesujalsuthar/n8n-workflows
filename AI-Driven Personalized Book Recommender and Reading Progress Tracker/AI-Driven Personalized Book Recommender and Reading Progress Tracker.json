@@ -1,0 +1,256 @@
+{
+  "workflow": {
+    "name": "AI-Powered Personalized Book Recommendation and Reading Tracker",
+    "description": "A workflow that gathers user preferences, fetches personalized book recommendations from multiple APIs, logs reading progress, and sends weekly reading summaries via email or messenger.",
+    "steps": [
+      {
+        "id": "collect_user_preferences",
+        "type": "user_input",
+        "description": "Collect user preferences including genres, authors, favorite books, reading goals, and preferred communication channels.",
+        "inputs": [
+          {
+            "name": "preferred_genres",
+            "type": "list",
+            "description": "User's favorite book genres"
+          },
+          {
+            "name": "favorite_authors",
+            "type": "list",
+            "description": "User's favorite authors"
+          },
+          {
+            "name": "favorite_books",
+            "type": "list",
+            "description": "User's favorite books"
+          },
+          {
+            "name": "reading_goals",
+            "type": "object",
+            "properties": {
+              "books_per_month": {
+                "type": "integer",
+                "description": "Number of books to read per month"
+              },
+              "daily_reading_minutes": {
+                "type": "integer",
+                "description": "Daily reading target in minutes"
+              }
+            }
+          },
+          {
+            "name": "communication_channels",
+            "type": "list",
+            "description": "Preferred channels for weekly summaries, e.g., email, telegram, whatsapp"
+          },
+          {
+            "name": "contact_info",
+            "type": "object",
+            "description": "Contact details corresponding to preferred channels",
+            "properties": {
+              "email": {
+                "type": "string",
+                "format": "email"
+              },
+              "telegram_id": {
+                "type": "string"
+              },
+              "whatsapp_number": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": "fetch_recommendations",
+        "type": "api_calls",
+        "description": "Fetch personalized book recommendations based on user preferences from various APIs (Google Books API, Open Library API, Goodreads API).",
+        "action": "parallel",
+        "calls": [
+          {
+            "api": "google_books_api",
+            "endpoint": "https://www.googleapis.com/books/v1/volumes",
+            "parameters": {
+              "q": "genres, authors, keywords derived from user input",
+              "maxResults": 10,
+              "printType": "books"
+            },
+            "response_mapping": {
+              "books": "items"
+            }
+          },
+          {
+            "api": "open_library_api",
+            "endpoint": "https://openlibrary.org/search.json",
+            "parameters": {
+              "q": "user preferences keywords",
+              "limit": 10
+            },
+            "response_mapping": {
+              "books": "docs"
+            }
+          },
+          {
+            "api": "goodreads_api",
+            "endpoint": "https://www.goodreads.com/book/recommendations",
+            "parameters": {
+              "genres": "user preferred genres",
+              "authors": "user favorite authors",
+              "count": 10
+            },
+            "response_mapping": {
+              "books": "recommendations"
+            }
+          }
+        ],
+        "output": "aggregated_recommendations"
+      },
+      {
+        "id": "aggregate_and_filter_recommendations",
+        "type": "data_processing",
+        "description": "Combine and deduplicate recommendations from all sources and rank them based on relevance and popularity.",
+        "input": "aggregated_recommendations",
+        "output": "filtered_ranked_recommendations"
+      },
+      {
+        "id": "present_recommendations_to_user",
+        "type": "user_output",
+        "description": "Show top recommended books with details and allow user to add books to their reading list.",
+        "input": "filtered_ranked_recommendations",
+        "outputs": [
+          {
+            "name": "user_selected_books",
+            "type": "list",
+            "description": "Books selected by user to add to their reading list"
+          }
+        ]
+      },
+      {
+        "id": "log_reading_progress",
+        "type": "user_input",
+        "description": "Allow user to log daily/weekly reading progress including book title, pages read, time spent, and notes.",
+        "inputs": [
+          {
+            "name": "book_title",
+            "type": "string"
+          },
+          {
+            "name": "pages_read",
+            "type": "integer"
+          },
+          {
+            "name": "time_spent_minutes",
+            "type": "integer"
+          },
+          {
+            "name": "notes",
+            "type": "string",
+            "optional": true
+          },
+          {
+            "name": "date",
+            "type": "string",
+            "format": "date",
+            "default": "today"
+          }
+        ],
+        "output": "updated_reading_log"
+      },
+      {
+        "id": "store_reading_log",
+        "type": "database_store",
+        "description": "Save updated reading progress entries to the database.",
+        "input": "updated_reading_log"
+      },
+      {
+        "id": "generate_weekly_summary",
+        "type": "scheduled_task",
+        "description": "Generate weekly reading summary including books read, progress vs goals, reading time, and notes.",
+        "schedule": {
+          "frequency": "weekly",
+          "day_of_week": "sunday",
+          "time": "18:00"
+        },
+        "actions": [
+          {
+            "type": "database_query",
+            "query": "fetch_user_reading_data_for_past_week"
+          },
+          {
+            "type": "data_processing",
+            "description": "Aggregate data into summary statistics and key highlights.",
+            "output": "weekly_summary_report"
+          }
+        ]
+      },
+      {
+        "id": "send_weekly_summary",
+        "type": "notification",
+        "description": "Send weekly summary via user's preferred communication channels.",
+        "input": "weekly_summary_report",
+        "recipients": "user contact_info",
+        "channels": "communication_channels",
+        "actions": [
+          {
+            "channel": "email",
+            "action": "send_email",
+            "parameters": {
+              "to": "email",
+              "subject": "Your Weekly Reading Summary",
+              "body": "weekly_summary_report"
+            }
+          },
+          {
+            "channel": "telegram",
+            "action": "send_telegram_message",
+            "parameters": {
+              "chat_id": "telegram_id",
+              "message": "weekly_summary_report"
+            }
+          },
+          {
+            "channel": "whatsapp",
+            "action": "send_whatsapp_message",
+            "parameters": {
+              "phone_number": "whatsapp_number",
+              "message": "weekly_summary_report"
+            }
+          }
+        ]
+      }
+    ],
+    "data_models": {
+      "book": {
+        "title": "string",
+        "author": "string",
+        "genre": "string",
+        "cover_image_url": "string",
+        "description": "string",
+        "source_api": "string",
+        "unique_id": "string"
+      },
+      "reading_log_entry": {
+        "book_title": "string",
+        "date": "string (ISO 8601)",
+        "pages_read": "integer",
+        "time_spent_minutes": "integer",
+        "notes": "string"
+      },
+      "user_preferences": {
+        "preferred_genres": "list of strings",
+        "favorite_authors": "list of strings",
+        "favorite_books": "list of strings",
+        "reading_goals": {
+          "books_per_month": "integer",
+          "daily_reading_minutes": "integer"
+        },
+        "communication_channels": "list of strings",
+        "contact_info": {
+          "email": "string",
+          "telegram_id": "string",
+          "whatsapp_number": "string"
+        }
+      }
+    }
+  }
+}
