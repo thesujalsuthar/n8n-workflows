@@ -1,0 +1,182 @@
+{
+  "name": "AI-Powered Personalized Fitness and Wellness Plan Generator",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "fitness_data.json",
+        "options": {}
+      },
+      "id": "1",
+      "name": "Read Fitness Data",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={{JSON.stringify({\n  model: 'gpt-4',\n  messages: [\n    { role: 'system', content: 'You are a fitness and wellness AI assistant specialized in creating personalized workout, nutrition, and mindfulness plans based on user input and fitness data.'},\n    { role: 'user', content: `User Profile: ${$json[\"userInput\"]}\n\nFitness Data: ${Buffer.from($binary.data, 'base64').toString()}\n\nGenerate a detailed, customized fitness and wellness plan including workouts, nutrition, and mindfulness recommendations.` }\n  ],\n  temperature: 0.7\n}) }}"
+      },
+      "id": "2",
+      "name": "AI Plan Generator",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        800,
+        300
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "1",
+          "name": "OpenAI API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "userInput",
+              "value": ""
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "3",
+      "name": "User Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        250,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const aiResponse = $json[\"choices\"][0][\"message\"][\"content\"];\nreturn [{ json: { personalizedPlan: aiResponse.trim() } }];"
+      },
+      "id": "4",
+      "name": "Extract AI Plan",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "file",
+        "fileName": "personalized_fitness_plan.txt",
+        "binaryPropertyName": "planFile"
+      },
+      "id": "5",
+      "name": "Create Plan File",
+      "type": "n8n-nodes-base.writeBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "fitnessbot@example.com",
+        "toEmail": "={{$json[\"userEmail\"]}}",
+        "subject": "Your Personalized Fitness and Wellness Plan",
+        "text": "Hello,\n\nPlease find attached your customized fitness and wellness plan generated based on your inputs and fitness data.\n\nStay healthy and motivated!\n\nBest regards,\nFitness AI Bot",
+        "attachmentsUi": {
+          "parameter": [
+            {
+              "binaryProperty": "planFile",
+              "fileName": "personalized_fitness_plan.txt",
+              "mimeType": "text/plain"
+            }
+          ]
+        }
+      },
+      "id": "6",
+      "name": "Send Plan Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1700,
+        300
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "2",
+          "name": "SMTP Email"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "User Input": {
+      "main": [
+        [
+          {
+            "node": "Read Fitness Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Fitness Data": {
+      "main": [
+        [
+          {
+            "node": "AI Plan Generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Plan Generator": {
+      "main": [
+        [
+          {
+            "node": "Extract AI Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract AI Plan": {
+      "main": [
+        [
+          {
+            "node": "Create Plan File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Plan File": {
+      "main": [
+        [
+          {
+            "node": "Send Plan Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "10"
+}
