@@ -1,0 +1,151 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "httpRequestMethod": "GET",
+        "url": "https://api.jobmarketdata.com/v1/trends?categories=all",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Fetch Job Market Trends",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const trendsData = items[0].json;\n\n// Assume trendsData is an array of job titles with trend scores\n// Filter top trending jobs\nconst topTrends = trendsData.trends\n  .filter(trend => trend.score >= 75)\n  .map(trend => ({\n    title: trend.title,\n    score: trend.score\n  }));\n\nreturn [{ json: { topJobTrends: topTrends } }];"
+      },
+      "name": "Analyze Trends Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "prompt": "User Skills: {{$json[\"skills\"]}}\nUser Interests: {{$json[\"interests\"]}}\nCurrent Top Job Trends: {{$json[\"topJobTrends\"]}}\n\nBased on user's skills and interests, and the current job market trends, generate personalized career path recommendations in a short bullet list."
+      },
+      "name": "Generate Career Recommendations",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "1"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "skills",
+              "value": "Software Development, Data Analysis"
+            },
+            {
+              "name": "interests",
+              "value": "Artificial Intelligence, Cloud Computing"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set User Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        50,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [\n  {\n    json: {\n      skills: $items(\"Set User Input\")[0].json.skills.split(\", \"),\n      interests: $items(\"Set User Input\")[0].json.interests.split(\", \"),\n      topJobTrends: $items(\"Analyze Trends Data\")[0].json.topJobTrends\n    }\n  }\n];"
+      },
+      "name": "Combine All Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        625,
+        300
+      ]
+    },
+    {
+      "parameters": {},
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [
+        0,
+        200
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Set User Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set User Input": {
+      "main": [
+        [
+          {
+            "node": "Fetch Job Market Trends",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Job Market Trends": {
+      "main": [
+        [
+          {
+            "node": "Analyze Trends Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Trends Data": {
+      "main": [
+        [
+          {
+            "node": "Combine All Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine All Data": {
+      "main": [
+        [
+          {
+            "node": "Generate Career Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
