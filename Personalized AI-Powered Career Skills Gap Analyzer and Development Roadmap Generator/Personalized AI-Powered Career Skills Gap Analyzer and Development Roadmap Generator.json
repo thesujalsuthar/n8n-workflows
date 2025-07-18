@@ -1,0 +1,246 @@
+{
+  "name": "Personalized AI-Powered Career Skills Gap Analyzer and Development Roadmap Generator",
+  "nodes": [
+    {
+      "parameters": {
+        "mode": "passThrough",
+        "typeVersion": 1
+      },
+      "id": "UserInput",
+      "name": "User Input",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nExpected Input JSON format:\n{\n  \"currentSkills\": [\"skill1\", \"skill2\", ...],\n  \"desiredJobRole\": \"string\"\n}\n*/\n\nconst input = items[0].json;\nreturn [{ json: { currentSkills: input.currentSkills || [], desiredJobRole: input.desiredJobRole || \"\" } }];"
+      },
+      "id": "ParseUserInput",
+      "name": "Parse User Input",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.jobmarkettrends.example.com/job-roles/{{ $json[\"desiredJobRole\"] }}",
+        "options": {},
+        "queryParametersUi": {
+          "parameter": []
+        },
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_JOB_MARKET_TRENDS_API_KEY"
+            }
+          ]
+        },
+        "responseFormat": "json",
+        "jsonParameters": true
+      },
+      "id": "GetJobMarketTrends",
+      "name": "Get Job Market Trends",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        650,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.skillsdb.example.com/skills/job/{{ $json[\"desiredJobRole\"] }}",
+        "options": {},
+        "queryParametersUi": {
+          "parameter": []
+        },
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "x-api-key",
+              "value": "YOUR_SKILLS_DB_API_KEY"
+            }
+          ]
+        },
+        "responseFormat": "json"
+      },
+      "id": "GetRequiredSkills",
+      "name": "Get Required Skills",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        650,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const currentSkills = items[0].json.currentSkills;\nconst requiredSkills = items[1].json.skills || [];\n\nconst gapSkills = requiredSkills.filter(skill => !currentSkills.includes(skill));\n\nreturn [{ json: { currentSkills, requiredSkills, gapSkills, desiredJobRole: items[0].json.desiredJobRole } }];"
+      },
+      "id": "AnalyzeSkillGaps",
+      "name": "Analyze Skill Gaps",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.onlinelearningplatforms.example.com/courses",
+        "options": {},
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "skills",
+              "value": "={{$json[\"gapSkills\"].join(\",\")}}"
+            },
+            {
+              "name": "limit",
+              "value": "5"
+            }
+          ]
+        },
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_LEARNING_PLATFORM_API_KEY"
+            }
+          ]
+        },
+        "responseFormat": "json"
+      },
+      "id": "GetCourses",
+      "name": "Get Courses",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        1050,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const gapSkills = items[0].json.gapSkills || [];\nconst courses = items[1].json.courses || [];\nconst jobRole = items[0].json.desiredJobRole;\n\nconst roadmap = gapSkills.map(skill => {\n  const relatedCourses = courses.filter(c => c.skills.includes(skill)).slice(0, 3);\n  return {\n    skill: skill,\n    recommendedCourses: relatedCourses\n  };\n});\n\nreturn [{ json: { desiredJobRole: jobRole, gapSkills, roadmap } }];"
+      },
+      "id": "GenerateRoadmap",
+      "name": "Generate Roadmap",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "chatId": "={{$json[\"userChatId\"] || \"default_chat_id\"}}",
+        "text": "={{\"Your personalized skills gap analysis and development roadmap for the role '\" + $json[\"desiredJobRole\"] + \"':\\n\" + JSON.stringify($json[\"roadmap\"], null, 2)}}"
+      },
+      "id": "SendResult",
+      "name": "Send Result",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "User Input": {
+      "main": [
+        [
+          {
+            "node": "Parse User Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse User Input": {
+      "main": [
+        [
+          {
+            "node": "Get Job Market Trends",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Required Skills",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Job Market Trends": {
+      "main": [
+        [
+          {
+            "node": "Analyze Skill Gaps",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Required Skills": {
+      "main": [
+        [
+          {
+            "node": "Analyze Skill Gaps",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Analyze Skill Gaps": {
+      "main": [
+        [
+          {
+            "node": "Get Courses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Courses": {
+      "main": [
+        [
+          {
+            "node": "Generate Roadmap",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Generate Roadmap": {
+      "main": [
+        [
+          {
+            "node": "Send Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
