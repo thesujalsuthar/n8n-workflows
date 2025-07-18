@@ -1,0 +1,252 @@
+{
+  "name": "Auto-Publishing AI-Generated Social Media Content Calendar with Engagement Analytics",
+  "nodes": [
+    {
+      "parameters": {
+        "functionCode": "const trendingTopics = [\n  'AI advancements',\n  'Climate change',\n  'Remote work tips',\n  'Cryptocurrency updates',\n  'Healthy lifestyle',\n  'Tech product launches',\n  'Travel inspiration',\n  'Financial planning',\n  'Education technology',\n  'Mental health awareness'\n];\n\n// Select top 3 trending topics randomly for demonstration\nconst selectedTopics = trendingTopics.sort(() => 0.5 - Math.random()).slice(0, 3);\n\nreturn selectedTopics.map(topic => ({ json: { topic } }));"
+      },
+      "name": "Generate Trending Topics",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "prompt": "Generate 3 creative and engaging social media post ideas based on the topic: {{$json[\"topic\"]}}. Provide the output as an array of text posts.",
+        "options": {
+          "max_tokens": 300,
+          "temperature": 0.7
+        }
+      },
+      "name": "Generate Social Media Post Ideas",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const postsText = items[0].json.choices[0].message.content;\n\n// Assuming the AI returned a JSON array of strings, parse it\ntry {\n  const posts = JSON.parse(postsText);\n  return posts.map(post => ({ json: { post } }));\n} catch {\n  // Fallback: split by line breaks if parsing fails\n  const posts = postsText.split('\\n').filter(t => t.trim() !== '');\n  return posts.map(post => ({ json: { post } }));\n}"
+      },
+      "name": "Parse Post Ideas",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const platforms = ['twitter', 'facebook', 'instagram'];\nconst scheduleStart = new Date();\nscheduleStart.setHours(9, 0, 0, 0); // Start scheduling from 9 AM today\n\nreturn items.flatMap((item, index) => {\n  const result = [];\n  platforms.forEach((platform, platformIndex) => {\n    // Schedule posts spaced by 1 hour increments per platform per post\n    const scheduledDate = new Date(scheduleStart.getTime() + (index * platforms.length + platformIndex) * 60 * 60 * 1000);\n    result.push({\n      json: {\n        post: item.json.post,\n        platform: platform,\n        scheduledTime: scheduledDate.toISOString()\n      }\n    });\n  });\n  return result;\n});"
+      },
+      "name": "Create Post Schedule",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "post",
+        "resource": "socialMediaPost",
+        "platform": "={{$json[\"platform\"]}}",
+        "content": "={{$json[\"post\"]}}",
+        "scheduledAt": "={{$json[\"scheduledTime\"]}}"
+      },
+      "name": "Schedule Social Media Post",
+      "type": "n8n-nodes-base.socialMedia",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "waitTil": "1h"
+        }
+      },
+      "name": "Wait For Engagement",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        1800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAnalytics",
+        "resource": "socialMediaPostAnalytics",
+        "platform": "={{$json[\"platform\"]}}",
+        "postContent": "={{$json[\"post\"]}}",
+        "since": "={{$json[\"scheduledTime\"]}}",
+        "until": "={{new Date(new Date($json[\"scheduledTime\"]).getTime() + 3600000).toISOString()}}"
+      },
+      "name": "Get Engagement Analytics",
+      "type": "n8n-nodes-base.socialMediaAnalytics",
+      "typeVersion": 1,
+      "position": [
+        2100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "items[0].json.engagementScore = \n  (items[0].json.likes ? items[0].json.likes : 0) +\n  (items[0].json.comments ? items[0].json.comments : 0) * 2 +\n  (items[0].json.shares ? items[0].json.shares : 0) * 3;\n\nreturn items;"
+      },
+      "name": "Calculate Engagement Score",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        2400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "append",
+        "sheetId": "YOUR_GOOGLE_SHEET_ID",
+        "range": "Engagement!A1",
+        "options": {
+          "valueInputMode": "USER_ENTERED"
+        },
+        "values": "={{[[\n  $json[\"post\"],\n  $json[\"platform\"],\n  $json[\"scheduledTime\"],\n  $json[\"likes\"] || 0,\n  $json[\"comments\"] || 0,\n  $json[\"shares\"] || 0,\n  $json[\"engagementScore\"]\n]]}}"
+      },
+      "name": "Log Analytics to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [
+        2700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return items;"
+      },
+      "name": "End",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        3000,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Generate Trending Topics": {
+      "main": [
+        [
+          {
+            "node": "Generate Social Media Post Ideas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Social Media Post Ideas": {
+      "main": [
+        [
+          {
+            "node": "Parse Post Ideas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Post Ideas": {
+      "main": [
+        [
+          {
+            "node": "Create Post Schedule",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Post Schedule": {
+      "main": [
+        [
+          {
+            "node": "Schedule Social Media Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Social Media Post": {
+      "main": [
+        [
+          {
+            "node": "Wait For Engagement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait For Engagement": {
+      "main": [
+        [
+          {
+            "node": "Get Engagement Analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Engagement Analytics": {
+      "main": [
+        [
+          {
+            "node": "Calculate Engagement Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Engagement Score": {
+      "main": [
+        [
+          {
+            "node": "Log Analytics to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Analytics to Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "End",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "auto-publish-ai-social-calendar-engagement"
+}
