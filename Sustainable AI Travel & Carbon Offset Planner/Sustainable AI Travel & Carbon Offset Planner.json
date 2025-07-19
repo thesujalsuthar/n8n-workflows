@@ -1,0 +1,159 @@
+{
+  "name": "AI-Powered Personalized Sustainable Travel Planner and Carbon Offset Tracker",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "planTrip",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "name": "HTTP Request Trigger",
+      "type": "n8n-nodes-base.httpTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "sendMessage",
+        "resource": "chat.completions",
+        "model": "gpt-4",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an AI assistant helping users plan eco-friendly travel itineraries."
+          },
+          {
+            "role": "user",
+            "content": "User travel preferences: {{ $json.preferences }}. Suggest sustainable travel options, eco-friendly accommodations, and low-impact activities. Provide estimated carbon footprint for each segment."
+          }
+        ]
+      },
+      "name": "AI Travel Planner",
+      "type": "n8n-nodes-base.openAiChat",
+      "typeVersion": 1,
+      "position": [
+        550,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const travelPlan = JSON.parse(items[0].json.choices[0].message.content);\n\n// Calculate total carbon footprint\nlet totalCarbon = 0;\nif (Array.isArray(travelPlan.segments)) {\n  travelPlan.segments.forEach(segment => {\n    totalCarbon += segment.carbon_kg || 0;\n  });\n}\n\nreturn [{ json: { travelPlan, totalCarbon } }];"
+      },
+      "name": "Parse & Calculate Carbon Footprint",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        775,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "sendMessage",
+        "resource": "chat.completions",
+        "model": "gpt-4",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an AI assistant recommending impactful carbon offset projects based on carbon footprint."
+          },
+          {
+            "role": "user",
+            "content": "The user's total carbon footprint is {{ $json.totalCarbon }} kg CO2. Recommend carbon offset options with project details and estimated costs."
+          }
+        ]
+      },
+      "name": "Carbon Offset Recommender",
+      "type": "n8n-nodes-base.openAiChat",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{\n  json: {\n    summary: {\n      itinerary: $json.travelPlan,\n      totalCarbonKg: $json.totalCarbon,\n      carbonOffsetOptions: $json['choices'][0]?.message?.content ? JSON.parse($json['choices'][0].message.content) : {}\n    }\n  }\n}];"
+      },
+      "name": "Format Final Output",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1225,
+        300
+      ]
+    },
+    {
+      "parameters": {},
+      "name": "HTTP Response",
+      "type": "n8n-nodes-base.httpResponse",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "HTTP Request Trigger": {
+      "main": [
+        [
+          {
+            "node": "AI Travel Planner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Travel Planner": {
+      "main": [
+        [
+          {
+            "node": "Parse & Calculate Carbon Footprint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse & Calculate Carbon Footprint": {
+      "main": [
+        [
+          {
+            "node": "Carbon Offset Recommender",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Carbon Offset Recommender": {
+      "main": [
+        [
+          {
+            "node": "Format Final Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Final Output": {
+      "main": [
+        [
+          {
+            "node": "HTTP Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
