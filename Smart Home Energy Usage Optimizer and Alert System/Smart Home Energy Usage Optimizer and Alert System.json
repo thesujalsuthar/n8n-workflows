@@ -1,0 +1,247 @@
+{
+  "name": "Smart Home Energy Usage Optimizer and Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "device": "SmartHomeEnergyAPI",
+        "resource": "energyData",
+        "operation": "getRealtime",
+        "returnAll": true,
+        "options": {}
+      },
+      "name": "Get Real-time Energy Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const energyData = items[0].json.data;\nconst thresholdMultiplier = 1.5;\n\n// Example: previous average usage stored in the workflow static data or from previous run\nconst previousAverage = 500; // in watts or appropriate unit, replace with dynamic storage retrieval if needed\n\nlet currentUsage = energyData.currentUsage;\n\n// Detect unusual consumption if current usage is greater than thresholdMultiplier * previous average\nconst unusualConsumption = currentUsage > (thresholdMultiplier * previousAverage);\n\nreturn [{ json: { currentUsage, unusualConsumption, timestamp: energyData.timestamp }}];"
+      },
+      "name": "Analyze Consumption Patterns",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "device": "WeatherAPI",
+        "resource": "weather",
+        "operation": "getForecast",
+        "location": "=1.2345,6.7890",
+        "returnAll": true
+      },
+      "name": "Get Weather Forecast",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const forecast = items[0].json.forecast;\n\n// Basic example: if forecast temperature is above 25°C, suggest reducing AC usage\nlet optimizationTips = [];\nif (forecast.temperatureMax > 25) {\n  optimizationTips.push('Consider reducing air conditioning usage during peak hours to save energy.');\n} else if (forecast.temperatureMin < 10) {\n  optimizationTips.push('Optimize heating schedule to reduce energy consumption.');\n} else {\n  optimizationTips.push('Energy usage looks typical based on weather.');\n}\n\nreturn [{ json: { optimizationTips } }];"
+      },
+      "name": "Generate Optimization Tips",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "device": "UtilityRateAPI",
+        "resource": "rates",
+        "operation": "getCurrentRates",
+        "returnAll": true
+      },
+      "name": "Get Utility Rates",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const rates = items[0].json.rates;\n\nlet messages = [];\n\n// Example: High rate alert if rate is above a threshold\nconst highRateThreshold = 0.20; // $0.20 per kWh\n  \nif (rates.currentRate > highRateThreshold) {\n  messages.push('Electricity rates are currently high. Consider reducing usage during peak hours.');\n} else {\n  messages.push('Electricity rates are normal.');\n}\n\nreturn [{ json: { rateMessages: messages } }];"
+      },
+      "name": "Analyze Utility Rate Changes",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json[\"unusualConsumption\"]}}",
+              "operation": "isTrue"
+            }
+          ]
+        }
+      },
+      "name": "Check Unusual Consumption",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "alerts@smarthome.com",
+        "toEmail": "user@example.com",
+        "subject": "Alert: Unusual Energy Consumption Detected",
+        "text": "=Unusual energy consumption detected at {{$json[\"timestamp\"]}}. Current usage is {{$json[\"currentUsage\"]}} watts. Please review your devices.",
+        "html": "=<p>Unusual energy consumption detected at <strong>{{$json[\"timestamp\"]}}</strong>.</p><p>Current usage is <strong>{{$json[\"currentUsage\"]}}</strong> watts.</p><p>Please review your devices to optimize energy usage.</p>"
+      },
+      "name": "Send Alert Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.map(item => {\n  return {\n    json: {\n      message: \"Optimization Suggestions:\",\n      tips: item.json.optimizationTips,\n      rateAdvice: item.json.rateMessages\n    }\n  };\n});"
+      },
+      "name": "Compile Suggestions",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        700,
+        600
+      ]
+    },
+    {
+      "parameters": {},
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [
+        50,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Get Real-time Energy Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Weather Forecast",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Utility Rates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Real-time Energy Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze Consumption Patterns",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Consumption Patterns": {
+      "main": [
+        [
+          {
+            "node": "Check Unusual Consumption",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Unusual Consumption": {
+      "main": [
+        [
+          {
+            "node": "Send Alert Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Get Weather Forecast": {
+      "main": [
+        [
+          {
+            "node": "Generate Optimization Tips",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Utility Rates": {
+      "main": [
+        [
+          {
+            "node": "Analyze Utility Rate Changes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Optimization Tips": {
+      "main": [
+        []
+      ]
+    },
+    "Analyze Utility Rate Changes": {
+      "main": [
+        []
+      ]
+    },
+    "Send Alert Email": {
+      "main": [
+        []
+      ]
+    },
+    "Compile Suggestions": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
