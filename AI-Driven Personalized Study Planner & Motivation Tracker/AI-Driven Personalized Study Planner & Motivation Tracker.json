@@ -1,0 +1,237 @@
+{
+  "name": "AI-Powered Personalized Study Plan Generator and Progress Tracker",
+  "nodes": [
+    {
+      "parameters": {
+        "prompt": "You are an educational assistant that creates a personalized study plan. A student provides their subjects, exam dates, and study preferences (daily available hours, preferred study times, and study methods). Generate a customized study schedule that balances subjects over time leading up to exams, includes spaced repetition principles, and motivational messages.\n\nInput:\nSubjects with exam dates and importance level,\nStudy preferences\n\nOutput:\nA detailed day-wise study plan for the upcoming period with time blocks and motivational tips.",
+        "model": "gpt-4",
+        "maxTokens": 1000,
+        "temperature": 0.7,
+        "topP": 1,
+        "frequencyPenalty": 0,
+        "presencePenalty": 0,
+        "stop": []
+      },
+      "name": "Generate Study Plan",
+      "type": "n8n-nodes-base.openai",
+      "typeVersion": 1,
+      "position": [
+        580,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "wait",
+        "waitTime": 60000
+      },
+      "name": "Wait 1 Minute",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        880,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const studyPlan = items[0].json.studyPlan;\nconst progress = items[0].json.progress || {};\nconst today = new Date().toISOString().slice(0, 10);\n\n// Initialize progress if empty\nif (Object.keys(progress).length === 0) {\n  // Parse studyPlan to initialize progress by dates\n  const lines = studyPlan.split('\\n');\n  const progressObj = {};\n  for (const line of lines) {\n    // Expect lines like 'YYYY-MM-DD: Subject - topic details'\n    const matched = line.match(/^(\\d{4}-\\d{2}-\\d{2}):\\s*(.*)$/);\n    if (matched) {\n      const date = matched[1];\n      const task = matched[2];\n      if (!progressObj[date]) progressObj[date] = { tasks: [], completed: [] };\n      progressObj[date].tasks.push(task);\n    }\n  }\n  return [{ json: { progress: progressObj, today } }];\n}\n\nreturn [{ json: { progress, today } }];"
+      },
+      "name": "Initialize Progress",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1180,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const progress = items[0].json.progress;\nconst today = items[0].json.today;\n\nif (!progress[today]) {\n  return [{ json: { message: `No study tasks scheduled for today (${today}). Enjoy your day off!` } }];\n}\n\nconst todayTasks = progress[today].tasks;\n\n// Here we simulate task completion randomly for demo purposes\nconst completed = todayTasks.map(task => ({ task, done: false }));\n\nreturn [{ json: { today, tasks: todayTasks, completed } }];"
+      },
+      "name": "Get Today's Tasks",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "chatId": "={{$json[\"chatId\"]}}",
+        "text": "={{$json[\"motivationalMessage\"]}}"
+      },
+      "name": "Send Motivational Reminder",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1980,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const tasks = items[0].json.tasks || [];\nconst completed = items[0].json.completed || [];\nconst unfinishedTasks = completed.filter(t => !t.done).map(t => t.task);\n\nlet motivationalMessage = '';\n\nif (unfinishedTasks.length === 0) {\n  motivationalMessage = 'Great job! You have completed all your tasks for today. Keep up the excellent work! 🚀';\n} else {\n  motivationalMessage = `Today you have these study tasks pending:\\n${unfinishedTasks.map((t, i) => `${i+1}. ${t}`).join('\\n')}\\nYou can do it! Stay focused and keep pushing forward! 💪`;\n}\n\nreturn [{ json: { motivationalMessage, chatId: items[0].json.chatId || \"@user" } }];"
+      },
+      "name": "Create Motivational Message",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1780,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return items;"
+      },
+      "name": "Start",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        280,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "application": "googleSheets",
+        "operation": "append",
+        "sheetId": "={{$json[\"sheetId\"]}}",
+        "range": "StudyProgress!A:C",
+        "fields": {
+          "values": [
+            "={{new Date().toISOString().slice(0,10)}}",
+            "={{$json[\"task\"]}}",
+            "={{$json[\"status\"]}}"
+          ]
+        }
+      },
+      "name": "Log Progress to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [
+        1680,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "trigger",
+        "triggerTimes": {
+          "item": [
+            {
+              "hours": 7,
+              "minutes": 0
+            },
+            {
+              "hours": 19,
+              "minutes": 0
+            }
+          ]
+        }
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.time",
+      "typeVersion": 1,
+      "position": [
+        80,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "submitStudyData",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "name": "Webhook for Inputs",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        280,
+        120
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook for Inputs": {
+      "main": [
+        [
+          {
+            "node": "Generate Study Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Study Plan": {
+      "main": [
+        [
+          {
+            "node": "Initialize Progress",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Initialize Progress": {
+      "main": [
+        [
+          {
+            "node": "Get Today's Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Today's Tasks": {
+      "main": [
+        [
+          {
+            "node": "Create Motivational Message",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log Progress to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Motivational Message": {
+      "main": [
+        [
+          {
+            "node": "Send Motivational Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Today's Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
