@@ -1,0 +1,365 @@
+{
+  "name": "AI-Driven Personal Finance and Budget Optimization Assistant",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "record-expense",
+        "options": {},
+        "responseMode": "onReceived",
+        "responseData": "={{ { success: true, message: 'Expense recorded successfully' } }}"
+      },
+      "name": "HTTP Request - Record Expense",
+      "type": "n8n-nodes-base.httpTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const expense = {\n  id: new Date().getTime(),\n  amount: items[0].json.amount,\n  category: null,\n  description: items[0].json.description || '',\n  date: items[0].json.date || new Date().toISOString(),\n  userId: items[0].json.userId\n};\n\nif (!expense.amount || !expense.userId) {\n  throw new Error('Amount and userId are required');\n}\n\nreturn [{ json: expense }];"
+      },
+      "name": "Validate & Format Expense",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "collection": "expenses",
+        "filters": {
+          "id": "={{ $json.id }}"
+        },
+        "options": {},
+        "dataToUpdate": "={{ $json }}",
+        "upsert": true
+      },
+      "name": "Save Expense to Database",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        750,
+        250
+      ],
+      "credentials": {
+        "mongoDb": "MongoDB Credentials"
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "get-expenses",
+        "options": {},
+        "responseMode": "onReceived",
+        "responseData": "={{ items.map(item => item.json) }}"
+      },
+      "name": "HTTP Request - Get Expenses",
+      "type": "n8n-nodes-base.httpTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "find",
+        "collection": "expenses",
+        "filters": {
+          "userId": "={{ $json.userId || $query.userId }}"
+        },
+        "options": {
+          "limit": 1000,
+          "sort": [
+            [
+              "date",
+              "desc"
+            ]
+          ]
+        }
+      },
+      "name": "Fetch User Expenses",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        500,
+        450
+      ],
+      "credentials": {
+        "mongoDb": "MongoDB Credentials"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "function categorize(amount) {\n  if (amount < 20) return 'Small Purchase';\n  if (amount < 100) return 'Moderate Spend';\n  if (amount < 500) return 'Large Expense';\n  return 'Major Investment';\n}\n\nfor (const item of items) {\n  const category = categorize(item.json.amount);\n  item.json.category = category;\n}\n\nreturn items;"
+      },
+      "name": "Categorize Expenses",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        700,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const categorizedExpenses = items.map(item => ({\n  amount: item.json.amount,\n  category: item.json.category\n}));\n\nconst categorySums = {};\nfor (const expense of categorizedExpenses) {\n  if (!categorySums[expense.category]) {\n    categorySums[expense.category] = 0;\n  }\n  categorySums[expense.category] += expense.amount;\n}\n\nreturn [{ json: { categorySums } }];"
+      },
+      "name": "Summarize Spending by Category",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "temperature": 0.7,
+        "top_p": 1,
+        "frequency_penalty": 0,
+        "presence_penalty": 0,
+        "stop": [],
+        "prompt": "You are an AI personal finance assistant. Given the user's spending categorized by amount and category:\n\n{{ $json.categorySums | json }}\n\nProvide a summary of spending habits, budgeting tips tailored to these categories, and personalized advice on optimizing savings strategies. Output as a JSON object with fields: summary, budgetingTips, savingsStrategy."
+      },
+      "name": "AI Finance Insight",
+      "type": "n8n-nodes-base.openAI",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        450
+      ],
+      "credentials": {
+        "openAIApi": "OpenAI API Key"
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "finance-advice",
+        "options": {},
+        "responseMode": "onReceived",
+        "responseData": "={{ $json }}"
+      },
+      "name": "HTTP Request - Get Finance Advice",
+      "type": "n8n-nodes-base.httpTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        650
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "find",
+        "collection": "expenses",
+        "filters": {
+          "userId": "={{ $json.userId || $query.userId }}"
+        },
+        "options": {
+          "limit": 1000
+        }
+      },
+      "name": "Fetch Expenses For Advice",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        500,
+        650
+      ],
+      "credentials": {
+        "mongoDb": "MongoDB Credentials"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "function categorize(amount) {\n  if (amount < 20) return 'Small Purchase';\n  if (amount < 100) return 'Moderate Spend';\n  if (amount < 500) return 'Large Expense';\n  return 'Major Investment';\n}\n\nfor (const item of items) {\n  const category = categorize(item.json.amount);\n  item.json.category = category;\n}\n\nreturn items;"
+      },
+      "name": "Categorize for Advice",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        700,
+        650
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const categorySums = {};\nfor (const item of items) {\n  const cat = item.json.category;\n  if (!categorySums[cat]) categorySums[cat] = 0;\n  categorySums[cat] += item.json.amount;\n}\nreturn [{ json: { categorySums } }];"
+      },
+      "name": "Summarize for Advice",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        650
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const prompt = `You are a personal finance AI assistant.\nGiven the following categorized spending data, provide detailed budgeting tips and a savings optimization strategy:\n${JSON.stringify($json.categorySums, null, 2)}\nProvide your response as a JSON with keys: budgetingTips, savingsStrategy.`;\n\nreturn [{ json: { prompt } }];"
+      },
+      "name": "Build AI Prompt",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        650
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "temperature": 0.7,
+        "top_p": 1,
+        "frequency_penalty": 0,
+        "presence_penalty": 0,
+        "stop": [],
+        "prompt": "={{ $json.prompt }}"
+      },
+      "name": "OpenAI Budgeting & Savings Advice",
+      "type": "n8n-nodes-base.openAI",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        650
+      ],
+      "credentials": {
+        "openAIApi": "OpenAI API Key"
+      }
+    }
+  ],
+  "connections": {
+    "HTTP Request - Record Expense": {
+      "main": [
+        [
+          {
+            "node": "Validate & Format Expense",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate & Format Expense": {
+      "main": [
+        [
+          {
+            "node": "Save Expense to Database",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - Get Expenses": {
+      "main": [
+        [
+          {
+            "node": "Fetch User Expenses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch User Expenses": {
+      "main": [
+        [
+          {
+            "node": "Categorize Expenses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Categorize Expenses": {
+      "main": [
+        [
+          {
+            "node": "Summarize Spending by Category",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize Spending by Category": {
+      "main": [
+        [
+          {
+            "node": "AI Finance Insight",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - Get Finance Advice": {
+      "main": [
+        [
+          {
+            "node": "Fetch Expenses For Advice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Expenses For Advice": {
+      "main": [
+        [
+          {
+            "node": "Categorize for Advice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Categorize for Advice": {
+      "main": [
+        [
+          {
+            "node": "Summarize for Advice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize for Advice": {
+      "main": [
+        [
+          {
+            "node": "Build AI Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build AI Prompt": {
+      "main": [
+        [
+          {
+            "node": "OpenAI Budgeting & Savings Advice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
