@@ -1,0 +1,191 @@
+{
+  "name": "Automated Mental Wellness Check-in and Resource Recommendation System",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 9,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Cron",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "wellness@yourdomain.com",
+        "toEmail": "={{$json[\"email\"]}}",
+        "subject": "Daily Mental Health Check-In",
+        "text": "Hi {{$json[\"name\"]}},\n\nWe hope you're doing well. Please take a moment to answer this quick mental health questionnaire by replying to this email or clicking on the link below:\n\n1. How are you feeling today on a scale from 1 (very bad) to 10 (very good)?\n2. Any specific stressors or concerns you want to share?\n\nYour responses will help us provide personalized support.\n\nTake care,\nMental Wellness Team"
+      },
+      "name": "Send Check-In Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ],
+      "credentials": {
+        "smtp": "SMTP Credentials"
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "resource": "email",
+        "filters": {
+          "subject": "Re: Daily Mental Health Check-In"
+        }
+      },
+      "name": "Fetch Responses",
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ],
+      "credentials": {
+        "imap": "IMAP Credentials"
+      }
+    },
+    {
+      "parameters": {
+        "mode": "body",
+        "options": {}
+      },
+      "name": "Extract Email Body",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ],
+      "expression": {
+        "value": "={{$json[\"text\"]}}"
+      }
+    },
+    {
+      "parameters": {
+        "resource": "sentiment",
+        "operation": "analyze",
+        "text": "={{$json[\"text\"]}}"
+      },
+      "name": "Sentiment Analysis",
+      "type": "n8n-nodes-base.textAnalysis",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const score = $json.sentiment.score;\nlet recommendation = \"Here are some general mental wellness resources you might find helpful:\n- Meditation apps like Calm or Headspace\n- Journaling daily to track your feelings\n- Connecting with friends or family for support\";\n\nif (score < -0.3) {\n  recommendation = \"It seems you're going through a tough time. Consider reaching out to a mental health professional or using crisis support services. Here are some resources:\n- National Suicide Prevention Lifeline: 1-800-273-8255\n- BetterHelp for online counseling\n- Local therapist directories\";\n} else if (score >= -0.3 && score <= 0.3) {\n  recommendation = \"Thanks for checking in. You might benefit from mindfulness exercises or light physical activities to improve your mood.\n- Try guided meditation\n- Take a short walk each day\n- Practice gratitude journaling\";\n} else if (score > 0.3) {\n  recommendation = \"Great! It sounds like you're feeling positive. Keep up the good work with your mental wellness routines.\n- Maintain regular self-care\n- Share your positive habits with others\n- Continue mindfulness practices\";\n}\n\nreturn [{ json: { recommendation } }];"
+      },
+      "name": "Generate Recommendation",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "wellness@yourdomain.com",
+        "toEmail": "={{$json[\"email\"]}}",
+        "subject": "Your Personalized Mental Wellness Recommendations",
+        "text": "Hi {{$json[\"name\"]}},\n\nBased on your recent check-in, here are some personalized recommendations:\n\n{{$json[\"recommendation\"]}}\n\nRemember, if you ever need immediate help, don't hesitate to reach out to a professional.\n\nTake care,\nMental Wellness Team"
+      },
+      "name": "Send Recommendations",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1750,
+        300
+      ],
+      "credentials": {
+        "smtp": "SMTP Credentials"
+      }
+    }
+  ],
+  "connections": {
+    "Cron": {
+      "main": [
+        [
+          {
+            "node": "Send Check-In Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Check-In Email": {
+      "main": [
+        [
+          {
+            "node": "Fetch Responses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Responses": {
+      "main": [
+        [
+          {
+            "node": "Extract Email Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Email Body": {
+      "main": [
+        [
+          {
+            "node": "Sentiment Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sentiment Analysis": {
+      "main": [
+        [
+          {
+            "node": "Generate Recommendation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Recommendation": {
+      "main": [
+        [
+          {
+            "node": "Send Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {}
+}
