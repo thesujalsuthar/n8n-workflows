@@ -1,0 +1,185 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "submit-sleep-data",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "name": "Receive Sleep Data",
+      "type": "n8n-nodes-base.httpTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const sleepData = $json;\nreturn [{ json: { sleepData } }];"
+      },
+      "name": "Parse Sleep Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "text",
+        "operation": "chat",
+        "model": "gpt-4",
+        "temperature": 0.7,
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an AI sleep specialist. Analyze the user sleep data provided and generate personalized sleep hygiene recommendations, including bedtime optimization and smart alarm integration tips."
+          },
+          {
+            "role": "user",
+            "content": "User sleep data:\n{{ $json.sleepData | JSON.stringify(null, 2) }}"
+          }
+        ]
+      },
+      "name": "AI Analyze Sleep Data",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const recommendationText = $json.choices[0].message.content;\n\n// Attempt to extract structured recommendations if present\nlet recommendations;\ntry {\n  recommendations = JSON.parse(recommendationText);\n} catch (e) {\n  recommendations = { rawText: recommendationText };\n}\n\nreturn [{ json: { recommendations } }];"
+      },
+      "name": "Parse AI Recommendations",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "document",
+        "operation": "create",
+        "additionalFields": {
+          "text": "={{ $json.recommendations.rawText || JSON.stringify($json.recommendations, null, 2) }}",
+          "title": "Sleep Improvement Plan - {{ new Date().toISOString().split('T')[0] }}",
+          "type": "note"
+        }
+      },
+      "name": "Store Recommendations",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ],
+      "credentials": {
+        "notionApi": "Notion API Credential"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const rec = $json.recommendations;\n\n// Example: extract recommended bedtime and alarm time if available\nconst bedtimeMatch = rec.rawText ? rec.rawText.match(/recommended bedtime: (\\d{1,2}:\\d{2} (AM|PM))/i) : null;\nconst alarmMatch = rec.rawText ? rec.rawText.match(/smart alarm time: (\\d{1,2}:\\d{2} (AM|PM))/i) : null;\n\nreturn [{ json: {\n  bedtime: bedtimeMatch ? bedtimeMatch[1] : null,\n  alarmTime: alarmMatch ? alarmMatch[1] : null\n} }];"
+      },
+      "name": "Extract Bedtime & Alarm Time",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{'https://api.smartalarm.example.com/v1/setAlarm'}}",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={\"alarmTime\": $json.alarmTime, \"userId\": $json.userId || 'defaultUserId'}"
+      },
+      "name": "Set Smart Alarm",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": "Smart Alarm API Key"
+      }
+    }
+  ],
+  "connections": {
+    "Receive Sleep Data": {
+      "main": [
+        [
+          {
+            "node": "Parse Sleep Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Sleep Data": {
+      "main": [
+        [
+          {
+            "node": "AI Analyze Sleep Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Analyze Sleep Data": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Store Recommendations",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Extract Bedtime & Alarm Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Bedtime & Alarm Time": {
+      "main": [
+        [
+          {
+            "node": "Set Smart Alarm",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
