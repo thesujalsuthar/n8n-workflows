@@ -1,0 +1,151 @@
+{
+  "name": "Smart Home Water Usage Monitor and Leak Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.smarthome/devices/water-usage",
+        "responseFormat": "json",
+        "options": {
+          "headers": {
+            "Authorization": "Bearer YOUR_API_TOKEN"
+          }
+        }
+      },
+      "name": "Fetch Water Usage Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const usageData = items[0].json.data;\n\n// Example format: [{timestamp: '...', consumption: 12.5}, ...]\n\n// Calculate average consumption over the last 7 days\nconst oneDay = 24 * 60 * 60 * 1000;\nconst now = Date.now();\nconst weekAgo = now - 7 * oneDay;\n\nconst weekData = usageData.filter(entry => new Date(entry.timestamp).getTime() >= weekAgo);\n\nif (weekData.length === 0) {\n  return [{ json: { alert: false, message: 'No data for last 7 days.' } }];\n}\n\nlet sum = 0;\nfor (const entry of weekData) {\n  sum += entry.consumption;\n}\n\nconst avgConsumption = sum / weekData.length;\n\n// Check latest consumption\nconst latestEntry = usageData.reduce((prev, current) => new Date(prev.timestamp) > new Date(current.timestamp) ? prev : current);\n\n// Define threshold multiplier for leak detection\nconst thresholdMultiplier = 2.5;\n\nconst isLeak = latestEntry.consumption > (avgConsumption * thresholdMultiplier);\n\nreturn [{\n  json: {\n    alert: isLeak,\n    avgConsumption,\n    latestConsumption: latestEntry.consumption,\n    timestamp: latestEntry.timestamp,\n    message: isLeak ? `Possible leak detected! Consumption ${latestEntry.consumption} exceeds average ${avgConsumption.toFixed(2)} by more than ${thresholdMultiplier}x.` : 'Consumption normal.'\n  }\n}];"
+      },
+      "name": "Analyze Water Usage for Leak",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        550,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "alerts@smarthome.com",
+        "toEmail": "={{$json[\"userEmail\"] || \"homeowner@example.com\"}}",
+        "subject": "Water Leak Alert: Smart Home Monitor",
+        "text": "={{$json[\"message\"]}}"
+      },
+      "name": "Send Email Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        220
+      ],
+      "disabled": false
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "to": "={{$json[\"userPhone\"] || \"+1234567890\"}}",
+        "message": "={{$json[\"message\"]}}"
+      },
+      "name": "Send SMS Alert",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        380
+      ],
+      "credentials": {
+        "twilioApi": {
+          "id": "YOUR_TWILIO_CREDENTIAL_ID",
+          "name": "Twilio API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "path": "water-usage-logs.json",
+        "dataPropertyName": "data",
+        "options": {}
+      },
+      "name": "Log Water Usage Data",
+      "type": "n8n-nodes-base.writeBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        750,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 9,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        50,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Water Usage Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Water Usage Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze Water Usage for Leak",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Water Usage for Leak": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send SMS Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log Water Usage Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
