@@ -1,0 +1,171 @@
+{
+  "name": "AI-Powered Local Volunteer Event Finder and Organizer",
+  "nodes": [
+    {
+      "parameters": {
+        "functionCode": "const userInterests = $json.interests;\nconst userAvailability = $json.availability;\n// Mock nearby events database\nconst events = [\n  { id: 1, title: \"Park Clean-up\", tags: [\"environment\", \"outdoor\"], date: \"2024-07-05T09:00:00Z\" },\n  { id: 2, title: \"Food Bank Helper\", tags: [\"food\", \"community\"], date: \"2024-07-06T14:00:00Z\" },\n  { id: 3, title: \"Animal Shelter Assistant\", tags: [\"animals\", \"care\"], date: \"2024-07-07T11:00:00Z\" },\n  { id: 4, title: \"Senior Center Visit\", tags: [\"community\", \"social\"], date: \"2024-07-08T15:00:00Z\" },\n  { id: 5, title: \"Tree Planting\", tags: [\"environment\", \"outdoor\"], date: \"2024-07-09T10:00:00Z\" }\n];\n\nfunction isEventMatching(event, interests, availability) {\n  const interestMatch = event.tags.some(tag => interests.includes(tag));\n  const eventDate = new Date(event.date);\n  const available = availability.some(slot => {\n    const start = new Date(slot.start);\n    const end = new Date(slot.end);\n    return eventDate >= start && eventDate <= end;\n  });\n  return interestMatch && available;\n}\n\nconst matchedEvents = events.filter(event => isEventMatching(event, userInterests, userAvailability));\nreturn [{ matchedEvents }];"
+      },
+      "name": "Find Matching Volunteer Events",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "generic",
+        "url": "https://api.emailservice.fake/send",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={\n  \"to\": $json.email,\n  \"subject\": \"Reminder: Upcoming Volunteer Event\",\n  \"text\": `Hello ${$json.name},\\n\\nThis is a reminder for your upcoming volunteering event: ${$json.eventTitle} on ${$json.eventDate}.\\nThank you for your time!\\n\\nBest regards,\\nVolunteer Organizer Bot`\n}"
+      },
+      "name": "Send Reminder Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        800,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Simulate user sign-up for an event\nconst eventId = $json.eventId;\nconst user = $json.user;\n\n// Store sign-ups in-memory (would be replaced by DB in real use case)\nif (!global.signups) {\n  global.signups = [];\n}\nglobal.signups.push({ eventId, user });\n\nreturn [{ status: \"signed up\", eventId, user }];"
+      },
+      "name": "User Sign-up for Event",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        550,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const signups = global.signups || [];\nreturn [{ json: { signups } }];"
+      },
+      "name": "List All Sign-ups",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: { message: \"Workflow started. Please provide 'interests' (array of tags), 'availability' (array of {start,end} ISO strings), and 'email' + 'name' fields.\" } }];"
+      },
+      "name": "Initialize Input",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const matchedEvents = $node[\"Find Matching Volunteer Events\"].json.matchedEvents;\nif(matchedEvents.length === 0) {\n  return [{ json: { message: \"No matching volunteering events found based on your interests and availability.\" } }];\n}\n\n// Send available events back\nreturn [{ json: { availableEvents: matchedEvents } }];"
+      },
+      "name": "Output Matched Events",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        400,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// After event passed, send follow-up thank you\nreturn [{\n  json: {\n    subject: \"Thank you for volunteering!\",\n    text: `Dear ${$json.name},\\n\\nThank you for participating in the event '${$json.eventTitle}'. Your help made a difference!\\n\\nLooking forward to seeing you again.`,\n    to: $json.email\n  }\n}];"
+      },
+      "name": "Generate Follow-Up Email",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "generic",
+        "url": "https://api.emailservice.fake/send",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={\n  \"to\": $json.to,\n  \"subject\": $json.subject,\n  \"text\": $json.text\n}"
+      },
+      "name": "Send Follow-Up Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "Initialize Input": {
+      "main": [
+        [
+          {
+            "node": "Find Matching Volunteer Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Matching Volunteer Events": {
+      "main": [
+        [
+          {
+            "node": "Output Matched Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Output Matched Events": {
+      "main": [
+        [
+          {
+            "node": "User Sign-up for Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "User Sign-up for Event": {
+      "main": [
+        [
+          {
+            "node": "Send Reminder Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Follow-Up Email": {
+      "main": [
+        [
+          {
+            "node": "Send Follow-Up Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
