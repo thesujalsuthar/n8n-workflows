@@ -1,0 +1,129 @@
+{
+  "name": "AI-Driven Mental Health Support Chatbot Integration",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "chat",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ],
+      "webhookId": "ai-mental-health-chat-webhook"
+    },
+    {
+      "parameters": {
+        "text": "={{$json[\"body\"][\"message\"]}}",
+        "options": {}
+      },
+      "name": "Sentiment Analysis",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ],
+      "credentials": {
+        "openAiApi": "OpenAI API"
+      },
+      "parameters": {
+        "resource": "text",
+        "operation": "completion",
+        "model": "gpt-4o-mini",
+        "prompt": "Analyze the sentiment of the following message. Respond ONLY with one word describing the sentiment: Positive, Neutral, Negative.\n\nMessage: {{$json[\"body\"][\"message\"]}}",
+        "maxTokens": 5,
+        "temperature": 0,
+        "topP": 1,
+        "frequencyPenalty": 0,
+        "presencePenalty": 0
+      }
+    },
+    {
+      "parameters": {
+        "text": "={{$json[\"body\"][\"message\"]}}\nSentiment: {{$node[\"Sentiment Analysis\"].json[\"choices\"][0][\"text\"]}} \n\nBased on the sentiment, suggest a concise, empathetic personalized coping strategy or mental health resource with a gentle tone. Return only the suggestion as plain text.",
+        "options": {}
+      },
+      "name": "Generate Coping Strategy",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ],
+      "credentials": {
+        "openAiApi": "OpenAI API"
+      },
+      "parameters": {
+        "resource": "text",
+        "operation": "completion",
+        "model": "gpt-4o-mini",
+        "maxTokens": 150,
+        "temperature": 0.7,
+        "topP": 1,
+        "frequencyPenalty": 0,
+        "presencePenalty": 0,
+        "prompt": "={{$node[\"Generate Coping Strategy\"].parameters.text}}"
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{$json[\"body\"][\"replyUrl\"]}}",
+        "options": {
+          "bodyContentType": "json"
+        },
+        "bodyParametersJson": "={\"reply\": $json[\"choices\"][0][\"text\"]}"
+      },
+      "name": "Send Reply",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Sentiment Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sentiment Analysis": {
+      "main": [
+        [
+          {
+            "node": "Generate Coping Strategy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Coping Strategy": {
+      "main": [
+        [
+          {
+            "node": "Send Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
