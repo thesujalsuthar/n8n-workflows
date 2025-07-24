@@ -1,0 +1,189 @@
+{
+  "name": "AI-Driven Real-Time Language Translator and Multilingual Meeting Assistant",
+  "nodes": [
+    {
+      "parameters": {
+        "events": [
+          "data"
+        ],
+        "mode": "continuous",
+        "language": "en-US"
+      },
+      "name": "Speech To Text",
+      "type": "n8n-nodes-base.speechToText",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "text",
+        "text": "={{$node[\"Speech To Text\"].json[\"transcript\"] || $json[\"text\"]}}",
+        "targetLanguages": [
+          "es",
+          "fr",
+          "de",
+          "zh",
+          "ja"
+        ],
+        "sourceLanguage": "en"
+      },
+      "name": "Translate Text",
+      "type": "n8n-nodes-base.googleTranslate",
+      "typeVersion": 1,
+      "position": [
+        550,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "options": {},
+        "model": "gpt-4o-mini",
+        "prompt": "Summarize the following meeting dialogue in each target language separately:\n\n\"{{$node[\"Translate Text\"].json[\"translations\"]}}\""
+      },
+      "name": "Multilingual Summary",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        850,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "options": {},
+        "model": "gpt-4o-mini",
+        "prompt": "Extract action items from the following meeting dialogue:\n\n\"{{$node[\"Speech To Text\"].json[\"transcript\"] || $json[\"text\"]}}\"\n\nReturn a list of action items."
+      },
+      "name": "Action Item Extraction",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        850,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "websocket",
+        "websocketBinaryType": "arraybuffer",
+        "path": "/live-captions"
+      },
+      "name": "Live Captions WebSocket",
+      "type": "n8n-nodes-base.websocketTrigger",
+      "typeVersion": 1,
+      "position": [
+        50,
+        300
+      ]
+    },
+    {
+      "parameters": {},
+      "name": "Format Captions",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        400,
+        150
+      ],
+      "notesInFlow": true,
+      "notes": "Formats live captions combining original and translated text for display."
+    },
+    {
+      "parameters": {
+        "mode": "websocket",
+        "websocketBinaryType": "arraybuffer",
+        "path": "/translated-captions"
+      },
+      "name": "Translated Captions WebSocket",
+      "type": "n8n-nodes-base.websocket",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        300
+      ]
+    },
+    {
+      "parameters": {},
+      "name": "Aggregate Translations",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        700,
+        300
+      ],
+      "notesInFlow": true,
+      "notes": "Aggregates multiple translated strings into a single object for broadcasting."
+    }
+  ],
+  "connections": {
+    "Live Captions WebSocket": {
+      "main": [
+        [
+          {
+            "node": "Speech To Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Speech To Text": {
+      "main": [
+        [
+          {
+            "node": "Translate Text",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Action Item Extraction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Translate Text": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Translations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Translations": {
+      "main": [
+        [
+          {
+            "node": "Multilingual Summary",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Format Captions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Captions": {
+      "main": [
+        [
+          {
+            "node": "Translated Captions WebSocket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
