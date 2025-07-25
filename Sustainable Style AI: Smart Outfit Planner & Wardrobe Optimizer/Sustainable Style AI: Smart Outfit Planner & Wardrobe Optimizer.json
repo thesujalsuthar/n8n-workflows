@@ -1,0 +1,180 @@
+{
+  "name": "AI-Driven Sustainable Fashion Outfit Planner and Wardrobe Optimizer",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.weatherapi.com/v1/current.json",
+        "options": {},
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "key",
+              "value": "={{$credentials.weatherApi.key}}"
+            },
+            {
+              "name": "q",
+              "value": "={{$json.location}}"
+            }
+          ]
+        }
+      },
+      "name": "Get Weather Data",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        300,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "event",
+        "operation": "getAll",
+        "returnAll": true,
+        "filters": {}
+      },
+      "name": "Get Calendar Events",
+      "type": "googleCalendar",
+      "typeVersion": 1,
+      "position": [
+        300,
+        100
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "1",
+          "name": "Google Calendar Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.sustainablefashiontrends.com/v1/trends/current",
+        "options": {},
+        "queryParametersUi": {
+          "parameter": []
+        }
+      },
+      "name": "Get Latest Sustainable Fashion Trends",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        300,
+        500
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "2",
+          "name": "FashionTrends API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const weather = items[0].json.current;\nconst events = items[1].json;\nconst trends = items[2].json.trends;\n\n// Extract today's occasion based on current date\nconst today = new Date().toISOString().substring(0, 10);\nconst todayEvents = events.filter(event => event.start.dateTime && event.start.dateTime.startsWith(today));\nconst occasion = todayEvents.length > 0 ? todayEvents[0].summary : \"Casual\";\n\n// Simple outfit suggestion logic based on weather and occasion\nlet outfitSuggestions = [];\n\nif (weather.temp_c < 10) {\n  outfitSuggestions.push(\"Warm jacket, scarf, and sustainable boots.\");\n} else if (weather.temp_c >= 10 && weather.temp_c < 20) {\n  outfitSuggestions.push(\"Light jacket and eco-friendly sneakers.\");\n} else {\n  outfitSuggestions.push(\"Breathable cotton t-shirt and shorts.\");\n}\n\nif (occasion.toLowerCase().includes(\"formal\")) {\n  outfitSuggestions.push(\"Add a recycled fabric formal blazer.\");\n} else if (occasion.toLowerCase().includes(\"party\")) {\n  outfitSuggestions.push(\"Stylish eco-friendly party dress or shirt.\");\n}\n\n// Integrate fashion trends\noutfitSuggestions.push(\"Incorporate these trending sustainable colors and materials: \" + trends.join(\", \"));\n\nreturn [{ json: {\n  occasion: occasion,\n  weather: weather,\n  outfitSuggestions: outfitSuggestions\n} }];"
+      },
+      "name": "Generate Outfit Suggestions",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: {\n  tips: [\n    \"Donate unused clothes to reduce waste.\",\n    \"Opt for clothes made from organic or recycled materials.\",\n    \"Repair and upcycle old garments instead of discarding.\",\n    \"Choose versatile pieces that can be mixed and matched.\",\n    \"Support brands with transparent and ethical supply chains.\"\n  ]\n} }];"
+      },
+      "name": "Provide Sustainability Tips",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        600,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "message": "={{\"Today's Occasion: \" + $json.occasion + \"\\nWeather: \" + $json.weather.condition.text + \", \" + $json.weather.temp_c + \"°C\\n\\nOutfit Suggestions:\\n- \" + $json.outfitSuggestions.join(\"\\n- \") + \"\\n\\nWardrobe Optimization & Sustainability Tips:\\n- \" + items[1].json.tips.join(\"\\n- \")}}",
+        "to": "={{$json.userEmail}}"
+      },
+      "name": "Send Outfit & Tips Email",
+      "type": "smtp",
+      "typeVersion": 1,
+      "position": [
+        900,
+        400
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "3",
+          "name": "SMTP Email Account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Get Weather Data": {
+      "main": [
+        [
+          {
+            "node": "Generate Outfit Suggestions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Calendar Events": {
+      "main": [
+        [
+          {
+            "node": "Generate Outfit Suggestions",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Get Latest Sustainable Fashion Trends": {
+      "main": [
+        [
+          {
+            "node": "Generate Outfit Suggestions",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Generate Outfit Suggestions": {
+      "main": [
+        [
+          {
+            "node": "Provide Sustainability Tips",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Provide Sustainability Tips": {
+      "main": [
+        [
+          {
+            "node": "Send Outfit & Tips Email",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
