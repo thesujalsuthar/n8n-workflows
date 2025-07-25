@@ -1,0 +1,184 @@
+{
+  "name": "Real-time Air Quality Monitoring and Health Advisory System",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.openaq.org/v2/latest?city={{ $json[\"city\"] }}",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Fetch AQI OpenAQ",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.airvisual.com/v2/city?city={{ $json[\"city\"] }}&state={{ $json[\"state\"] }}&country={{ $json[\"country\"] }}&key={{ $credentials.airvisualApi.apiKey }}",
+        "responseFormat": "json"
+      },
+      "name": "Fetch AQI AirVisual",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nCombine and normalize AQI data from multiple sources.\nInput: Items with raw data from OpenAQ and AirVisual APIs.\nOutput: Single standardized AQI object.\n*/\n\nconst openaqData = $items(\"Fetch AQI OpenAQ\")[0].json;\nconst airvisualData = $items(\"Fetch AQI AirVisual\")[0].json;\n\n// Example normalization logic\nconst openaqMeasurements = openaqData.results?.[0]?.measurements || [];\nconst pm25OpenAQ = openaqMeasurements.find(m => m.parameter === 'pm25')?.value || null;\n\nconst airVisualAQI = airvisualData.data?.current?.pollution?.aqius || null;\n\n// Simple average if both available\nlet combinedAQI = null;\nif(pm25OpenAQ !== null && airVisualAQI !== null) {\n  combinedAQI = Math.round((pm25OpenAQ + airVisualAQI) / 2);\n} else if(pm25OpenAQ !== null) {\n  combinedAQI = pm25OpenAQ;\n} else if(airVisualAQI !== null) {\n  combinedAQI = airVisualAQI;\n}\n\nreturn [{ json: { combinedAQI } }];"
+      },
+      "name": "Normalize AQI Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        375
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nHealth advisory logic based on combined AQI and user health profile.\nInput: combinedAQI and user profile data.\nOutput: health advisory message.\n*/\nconst aqi = $json.combinedAQI;\nconst profile = $json.userProfile;\n\n// Example health profile fields: age, asthma, cardiovascular, outdoorActivityIntensity\n\nlet advisory = 'Air quality is good. No specific precautions needed.';\n\nif (aqi === null) {\n  advisory = 'Unable to determine air quality at this time.';\n} else if (aqi <= 50) {\n  advisory = 'Air quality is good. Enjoy your day!';\n} else if (aqi <= 100) {\n  advisory = 'Air quality is moderate. Sensitive individuals should consider limiting outdoor exertion.';\n} else if (aqi <= 150) {\n  advisory = 'Unhealthy for sensitive groups. If you have asthma or heart conditions, reduce outdoor activities.';\n} else if (aqi <= 200) {\n  advisory = 'Unhealthy air quality. Everyone should limit prolonged outdoor exertion.';\n} else if (aqi <= 300) {\n  advisory = 'Very unhealthy air quality. Consider staying indoors and using air purifiers.';\n} else {\n  advisory = 'Hazardous air quality. Avoid all outdoor activities.';\n}\n\n// Modify advisory based on user health profile\nif (profile) {\n  if (profile.asthma) {\n    advisory += ' As you have asthma, please keep medication handy and avoid exposure.';\n  }\n  if (profile.cardiovascular) {\n    advisory += ' Cardiovascular conditions may worsen; please take extra precautions.';\n  }\n  if (profile.age && profile.age > 65) {\n    advisory += ' Elderly individuals should be especially cautious.';\n  }\n  if (profile.outdoorActivityIntensity && profile.outdoorActivityIntensity === 'high' && aqi > 100) {\n    advisory += ' Consider reducing intense outdoor activities.';\n  }\n}\n\nreturn [{ json: { advisory } }];"
+      },
+      "name": "Generate Health Advisory",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        375
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nMock user data retrieval.\nIn production, replace this with DB/API call to get users and profiles.\nOutput: list of user data items with city, state, country, and health profile.\n*/\nreturn [\n  {\n    json: {\n      id: \"user1\",\n      name: \"Alice\",\n      city: \"Los Angeles\",\n      state: \"California\",\n      country: \"USA\",\n      userProfile: {\n        age: 30,\n        asthma: true,\n        cardiovascular: false,\n        outdoorActivityIntensity: \"high\"\n      }\n    }\n  },\n  {\n    json: {\n      id: \"user2\",\n      name: \"Bob\",\n      city: \"Los Angeles\",\n      state: \"California\",\n      country: \"USA\",\n      userProfile: {\n        age: 70,\n        asthma: false,\n        cardiovascular: true,\n        outdoorActivityIntensity: \"low\"\n      }\n    }\n  }\n];"
+      },
+      "name": "Get Users",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        50,
+        375
+      ]
+    },
+    {
+      "parameters": {
+        "recipientEmail": "={{ $json.email || $json.emailAddress || \"\" }}",
+        "message": "={{ $json.advisory }}",
+        "subject": "Air Quality Health Advisory",
+        "additionalFields": {}
+      },
+      "name": "Send Advisory Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        375
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "1",
+          "name": "SMTP Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nMerge user data and AQI data for each user to process personalized advisory.\nFor each user, set the AQI input fields.\n*/\n\nconst user = $json;\n\nreturn [{\n  json: {\n    city: user.city,\n    state: user.state,\n    country: user.country,\n    userProfile: user.userProfile,\n    email: user.email || (user.id + '@example.com') // placeholder email\n  }\n}];"
+      },
+      "name": "Prepare User Location Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        150,
+        375
+      ]
+    }
+  ],
+  "connections": {
+    "Get Users": {
+      "main": [
+        [
+          {
+            "node": "Prepare User Location Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare User Location Data": {
+      "main": [
+        [
+          {
+            "node": "Fetch AQI OpenAQ",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch AQI AirVisual",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch AQI OpenAQ": {
+      "main": [
+        []
+      ]
+    },
+    "Fetch AQI AirVisual": {
+      "main": [
+        []
+      ]
+    },
+    "Normalize AQI Data": {
+      "main": [
+        [
+          {
+            "node": "Generate Health Advisory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch AQI OpenAQ": {
+      "main": [
+        [
+          {
+            "node": "Normalize AQI Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch AQI AirVisual": {
+      "main": [
+        [
+          {
+            "node": "Normalize AQI Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Generate Health Advisory": {
+      "main": [
+        [
+          {
+            "node": "Send Advisory Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
