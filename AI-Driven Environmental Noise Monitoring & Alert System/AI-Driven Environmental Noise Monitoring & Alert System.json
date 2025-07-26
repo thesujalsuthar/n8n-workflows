@@ -1,0 +1,204 @@
+{
+  "name": "AI-Powered Environmental Noise Pollution Monitor & Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.openaq.org/v2/latest",
+        "queryParameters": [
+          {
+            "name": "coordinates",
+            "value": "={{$json[\"latitude\"] + \",\" + $json[\"longitude\"]}}"
+          },
+          {
+            "name": "radius",
+            "value": "10000"
+          },
+          {
+            "name": "parameters[]",
+            "value": "noise"
+          }
+        ]
+      },
+      "name": "Fetch Noise Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {},
+      "name": "Set Default Locations",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        50,
+        300
+      ],
+      "notesInFlow": true,
+      "notes": "Define user locations with latitude, longitude, safe noise threshold (dB). Modify or expand as needed.",
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "locationName",
+              "value": "Central Park NYC"
+            },
+            {
+              "name": "latitude",
+              "value": "40.785091"
+            },
+            {
+              "name": "longitude",
+              "value": "-73.968285"
+            },
+            {
+              "name": "safeNoiseThreshold",
+              "value": "65"
+            }
+          ],
+          "json": []
+        },
+        "options": {}
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const measurements = $json.results || [];\nlet maxNoise = null;\nfor (const measurement of measurements) {\n  for (const parameter of measurement.measurements) {\n    if (parameter.parameter === 'noise' || parameter.parameter === 'noise-level') {\n      const value = parseFloat(parameter.value);\n      if (!isNaN(value)) {\n        if (maxNoise === null || value > maxNoise) {\n          maxNoise = value;\n        }\n      }\n    }\n  }\n}\nreturn [{ json: {\n  locationName: $json.locationName,\n  latitude: $json.latitude,\n  longitude: $json.longitude,\n  safeThreshold: parseFloat($json.safeNoiseThreshold),\n  noiseLevel: maxNoise\n}}];"
+      },
+      "name": "Analyze Noise Level",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "if ($json.noiseLevel === null) {\n  return [];\n}\nreturn $json.noiseLevel > $json.safeThreshold ? [items[0]] : [];"
+      },
+      "name": "Check Threshold Exceed",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "no-reply@envnoisealert.com",
+        "toEmail": "={{$json.userEmail}}",
+        "subject": "Noise Pollution Alert for {{$json.locationName}}",
+        "text": "Alert: Noise level at {{$json.locationName}} is {{$json.noiseLevel}} dB, which exceeds your safe threshold of {{$json.safeThreshold}} dB."
+      },
+      "name": "Send Email Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        850,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "phoneNumber": "={{$json.userPhone}}",
+        "textMessage": "Alert: Noise level at {{$json.locationName}} is {{$json.noiseLevel}} dB, exceeding safe threshold of {{$json.safeThreshold}} dB."
+      },
+      "name": "Send SMS Alert",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        850,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [\n  {\n    json: {\n      locationName: 'Central Park NYC',\n      latitude: 40.785091,\n      longitude: -73.968285,\n      safeNoiseThreshold: 65,\n      userEmail: 'user@example.com',\n      userPhone: '+1234567890'\n    }\n  }\n];"
+      },
+      "name": "Initialize User Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        50,
+        150
+      ]
+    }
+  ],
+  "connections": {
+    "Initialize User Data": {
+      "main": [
+        [
+          {
+            "node": "Fetch Noise Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Set Default Locations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Noise Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze Noise Level",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Default Locations": {
+      "main": [
+        [
+          {
+            "node": "Fetch Noise Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Noise Level": {
+      "main": [
+        [
+          {
+            "node": "Check Threshold Exceed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Threshold Exceed": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send SMS Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
