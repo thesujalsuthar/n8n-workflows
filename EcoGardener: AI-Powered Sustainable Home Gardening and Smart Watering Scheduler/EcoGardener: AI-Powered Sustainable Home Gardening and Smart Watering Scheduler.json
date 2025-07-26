@@ -1,0 +1,131 @@
+{
+  "name": "AI-Driven Sustainable Home Gardening Advisor and Smart Watering Scheduler",
+  "nodes": [
+    {
+      "parameters": {
+        "resource": "weather",
+        "operation": "getCurrent",
+        "location": "={{$json[\"userLocation\"]}}",
+        "options": {}
+      },
+      "name": "Fetch Current Weather",
+      "type": "n8n-nodes-base.openWeatherMap",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "deviceId": "soil-moisture-sensor-001",
+        "resource": "sensorData"
+      },
+      "name": "Get Soil Moisture Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        450
+      ],
+      "notes": "Assumes soil moisture sensor API returns moisture level in payload"
+    },
+    {
+      "parameters": {
+        "functionCode": "const weather = $items(\"Fetch Current Weather\")[0].json;\nconst moistureSensor = $items(\"Get Soil Moisture Data\")[0].json;\n\n// Define moisture threshold for watering\nconst moistureThreshold = 40; // Example threshold in %\n\n// Extract relevant weather data\nconst precipitation = weather.weather && weather.weather[0] ? weather.weather[0].main.toLowerCase() : \"clear\";\nconst tempCelsius = weather.main ? weather.main.temp - 273.15 : 20; // Kelvin to Celsius fallback 20\n\n// Determine if watering is needed\nlet needsWatering = false;\nif (moistureSensor.moisture < moistureThreshold && precipitation !== \"rain\") {\n  needsWatering = true;\n}\n\nreturn [{ json: { needsWatering, moistureLevel: moistureSensor.moisture, precipitation, temperatureCelsius: tempCelsius } }];"
+      },
+      "name": "Assess Watering Needs",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        375
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "prompt": "You are an expert sustainable home gardening advisor. Based on the user's plants and garden data provided (json input), the current weather conditions, and soil moisture levels, generate personalized eco-friendly plant care tips and an optimized smart watering schedule. Prioritize water conservation, plant health, and sustainability. Return the advice and schedule as JSON.",
+        "options": {},
+        "temperature": 0.7,
+        "maxTokens": 500
+      },
+      "name": "Generate AI Gardening Advice & Schedule",
+      "type": "n8n-nodes-base.openai",
+      "typeVersion": 1,
+      "position": [
+        750,
+        375
+      ],
+      "credentials": {
+        "openAIApi": "OPENAI_API_KEY"
+      }
+    },
+    {
+      "parameters": {
+        "channel": "garden-watering",
+        "text": "={{$json[\"advice\"]}}\nWatering Schedule: {{$json[\"wateringSchedule\"]}}",
+        "options": {}
+      },
+      "name": "Notify User",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        375
+      ],
+      "credentials": {
+        "telegramApi": "TELEGRAM_BOT_API"
+      }
+    }
+  ],
+  "connections": {
+    "Fetch Current Weather": {
+      "main": [
+        [
+          {
+            "node": "Assess Watering Needs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Soil Moisture Data": {
+      "main": [
+        [
+          {
+            "node": "Assess Watering Needs",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Assess Watering Needs": {
+      "main": [
+        [
+          {
+            "node": "Generate AI Gardening Advice & Schedule",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate AI Gardening Advice & Schedule": {
+      "main": [
+        [
+          {
+            "node": "Notify User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
