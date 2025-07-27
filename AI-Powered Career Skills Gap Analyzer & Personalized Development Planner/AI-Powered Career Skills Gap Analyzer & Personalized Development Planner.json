@@ -1,0 +1,104 @@
+{
+  "name": "AI-Driven Personalized Career Skills Gap Analyzer and Development Roadmap Generator",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "analyze-career-skills",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "completion",
+        "operation": "create",
+        "model": "gpt-4",
+        "temperature": 0.7,
+        "topP": 1,
+        "frequencyPenalty": 0,
+        "presencePenalty": 0,
+        "maxTokens": 1000,
+        "stop": [],
+        "prompt": "You are a career coach AI. A user has provided their current career title, skills, experiences, and target career goals. Your task is to:\n\n1. Identify skills gaps by comparing the user's current profile with industry standard/ideal skills for the target goal.\n2. Generate a tailored development roadmap outlining key skills to learn, milestones to hit, and recommended learning resources per skill.\n\nInput (JSON): {{ $json[\"body\"] }}\n\nOutput JSON format:\n{\n  \"skillsGap\": [\n    {\n      \"skill\": \"string\",\n      \"currentLevel\": \"string\",\n      \"targetLevel\": \"string\",\n      \"gapDescription\": \"string\"\n    }\n  ],\n  \"developmentRoadmap\": [\n    {\n      \"skill\": \"string\",\n      \"milestones\": [\"string\"],\n      \"resources\": [\n        {\n          \"title\": \"string\",\n          \"type\": \"e.g. course, book, article\",\n          \"url\": \"string\"\n        }\n      ]\n    }\n  ]\n}\n\nPlease return ONLY the JSON response without any additional text."
+      },
+      "name": "AI Skill Gap Analysis",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        600,
+        300
+      ],
+      "credentials": {
+        "openAIApi": "OpenAI API Key"
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "respond",
+        "message": "={{ $json[\"json\"] }}"
+      },
+      "name": "Respond to User",
+      "type": "n8n-nodes-base.httpResponse",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{\n  json: JSON.parse(items[0].json.text || '{}')\n}];"
+      },
+      "name": "Parse AI Response JSON",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "AI Skill Gap Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Skill Gap Analysis": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response JSON": {
+      "main": [
+        [
+          {
+            "node": "Respond to User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
