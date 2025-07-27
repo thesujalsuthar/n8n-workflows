@@ -1,0 +1,186 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 20,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "database": "finance_db",
+        "query": "SELECT * FROM expenses WHERE date >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH);"
+      },
+      "name": "Get Recent Expenses",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ],
+      "credentials": {
+        "mySql": "MySQL Finance DB"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const categorizedExpenses = items[0].json.data.map(expense => {\n  let category = 'Other';\n  const desc = expense.description.toLowerCase();\n\n  if (/grocery|supermarket|market/.test(desc)) {\n    category = 'Groceries';\n  } else if (/restaurant|dining|cafe|coffee/.test(desc)) {\n    category = 'Dining';\n  } else if (/uber|lyft|taxi|transport|bus|train/.test(desc)) {\n    category = 'Transport';\n  } else if (/rent|mortgage/.test(desc)) {\n    category = 'Housing';\n  } else if (/subscription|netflix|spotify|service/.test(desc)) {\n    category = 'Subscriptions';\n  } else if (/utility|electric|water|gas/.test(desc)) {\n    category = 'Utilities';\n  }\n\n  return {\n    ...expense,\n    category\n  };\n});\n\nreturn categorizedExpenses.map(expense => ({ json: expense }));"
+      },
+      "name": "Categorize Expenses",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "sumByCategory",
+        "field": "amount",
+        "groupByField": "category"
+      },
+      "name": "Aggregate Expenses by Category",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "detectLanguage",
+        "options": {}
+      },
+      "name": "Detect Language",
+      "type": "n8n-nodes-base.googleTranslate",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        170
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "chat",
+        "operation": "chatCompletion",
+        "model": "gpt-4",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are a personal finance assistant that helps optimize budgets, analyze spending, and provide actionable personalized financial advice."
+          },
+          {
+            "role": "user",
+            "content": "Here is the user's categorized monthly expenses data: {{$json}}. Please generate a personalized budget plan and provide tailored financial tips to optimize their spending."
+          }
+        ],
+        "options": {
+          "temperature": 0.7
+        }
+      },
+      "name": "Generate Budget Plan & Tips",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ],
+      "credentials": {
+        "openAIApi": "OpenAI Personal Finance API Key"
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "chatId": "={{$json[\"userChatId\"] || 'user_default_chat_id'}}",
+        "text": "={{$json[\"choices\"][0][\"message\"][\"content\"]}}"
+      },
+      "name": "Send Financial Tips",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        300
+      ],
+      "credentials": {
+        "telegramApi": "Telegram Bot API"
+      }
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Recent Expenses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Recent Expenses": {
+      "main": [
+        [
+          {
+            "node": "Categorize Expenses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Categorize Expenses": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Expenses by Category",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Expenses by Category": {
+      "main": [
+        [
+          {
+            "node": "Generate Budget Plan & Tips",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Budget Plan & Tips": {
+      "main": [
+        [
+          {
+            "node": "Send Financial Tips",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
