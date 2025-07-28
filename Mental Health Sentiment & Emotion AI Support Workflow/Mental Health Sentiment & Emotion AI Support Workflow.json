@@ -1,0 +1,267 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "event": "message",
+        "pollingInterval": 3000,
+        "channel": "all",
+        "options": {}
+      },
+      "name": "Chat Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ],
+      "webhookId": "your-chat-webhook-id"
+    },
+    {
+      "parameters": {
+        "operation": "startRecording",
+        "deviceId": "",
+        "encoding": "wav",
+        "duration": 10000
+      },
+      "name": "Voice Input Trigger",
+      "type": "n8n-nodes-base.trigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "text",
+        "sourceData": "={{$json[\"message\"] || ''}}",
+        "model": "gpt-4o-mini",
+        "temperature": 0.7,
+        "max_tokens": 500,
+        "options": {}
+      },
+      "name": "AI Sentiment & Emotion Analysis",
+      "type": "n8n-nodes-base.openai",
+      "typeVersion": 2,
+      "position": [
+        600,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const analysis = $json[\"choices\"][0][\"message\"][\"content\"];\n// Expected response format from AI:\n// {\n//   \"sentiment\": \"positive|neutral|negative\",\n//   \"emotions\": [\"anxiety\", \"sadness\", \"anger\", ...],\n//   \"recommendationType\": \"self_help|resource|professional_help\",\n//   \"recommendations\": [\"Take deep breaths\", \"Read article on mindfulness\", \"Contact counselor\"],\n//   \"confidence\": 0.9\n// }\n\ntry {\n  const data = JSON.parse(analysis);\n  return [{ json: data }];\n} catch (error) {\n  return [{ json: { error: \"Parsing AI response failed\", raw: analysis }}];\n}"
+      },
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json[\"sentiment\"]}}",
+              "operation": "equal",
+              "value2": "negative"
+            }
+          ]
+        }
+      },
+      "name": "Check Negative Sentiment",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json[\"recommendationType\"]}}",
+              "operation": "equal",
+              "value2": "professional_help"
+            }
+          ]
+        }
+      },
+      "name": "Check Professional Help Recommended",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "toEmail": "={{$json[\"userEmail\"] || $json[\"email\"]}}",
+        "subject": "Personalized Mental Health Support Recommendations",
+        "text": "Hi,\n\nBased on your recent message, we've analyzed your emotional state and have some personalized recommendations for you:\n\n{{$json[\"recommendations\"].join('\\n- ')}}\n\nIf you feel this is urgent or you need additional help, please consider reaching out to a professional.\n\nTake care."
+      },
+      "name": "Send Email - Professional Help",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "toEmail": "={{$json[\"userEmail\"] || $json[\"email\"]}}",
+        "subject": "Personalized Coping Strategies & Resources",
+        "text": "Hello,\n\nWe noticed your recent message and want to offer some personalized coping strategies and resources that might help:\n\n{{$json[\"recommendations\"].map(r => '- ' + r).join('\\n')}}\n\nWe're here for you."
+      },
+      "name": "Send Email - Self Help/Resource",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "to": "={{$json[\"userChatId\"] || $json[\"chatId\"]}}",
+        "message": "Hi! We've analyzed your message and have some suggestions for you:\n\n{{$json[\"recommendations\"].map(r => '- ' + r).join('\\n')}}\n\nRemember, you can always reach out if you need help."
+      },
+      "name": "Send Chat Message - General",
+      "type": "n8n-nodes-base.chatMessage",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "to": "={{$json[\"userChatId\"] || $json[\"chatId\"]}}",
+        "message": "Based on your current emotional state, we recommend considering professional help. Here are some resources:\n\n{{$json[\"recommendations\"].map(r => '- ' + r).join('\\n')}}\n\nWe're here to support you."
+      },
+      "name": "Send Chat Message - Professional Help",
+      "type": "n8n-nodes-base.chatMessage",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "if ($items(\"Check Negative Sentiment\")[0].json === true) {\n  return $items(\"Check Professional Help Recommended\");\n}\nreturn $items(\"Parse AI Response\");"
+      },
+      "name": "Set Message Routing",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        250
+      ]
+    }
+  ],
+  "connections": {
+    "Chat Trigger": {
+      "main": [
+        [
+          {
+            "node": "AI Sentiment & Emotion Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Voice Input Trigger": {
+      "main": [
+        [
+          {
+            "node": "AI Sentiment & Emotion Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Sentiment & Emotion Analysis": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Check Negative Sentiment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Negative Sentiment": {
+      "main": [
+        [
+          {
+            "node": "Check Professional Help Recommended",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Email - Self Help/Resource",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Chat Message - General",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Professional Help Recommended": {
+      "main": [
+        [
+          {
+            "node": "Send Email - Professional Help",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Chat Message - Professional Help",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Email - Self Help/Resource",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Chat Message - General",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
