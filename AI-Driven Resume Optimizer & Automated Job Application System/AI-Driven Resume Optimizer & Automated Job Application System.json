@@ -1,0 +1,224 @@
+{
+  "name": "AI-Powered Smart Resume Analyzer and Job Application Optimizer",
+  "nodes": [
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "readBinaryData",
+        "binaryPropertyName": "resumeFile"
+      },
+      "id": "1",
+      "name": "Read Resume File",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "readBinaryData",
+        "binaryPropertyName": "jobDescriptionFile"
+      },
+      "id": "2",
+      "name": "Read Job Description File",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        250,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "temperature": 0.3,
+        "top_p": 1,
+        "frequency_penalty": 0,
+        "presence_penalty": 0,
+        "text": "Analyze the following resume and job description. Provide detailed feedback about the resume's strengths and weaknesses relative to the job description. Suggest specific improvements to optimize for this job, including keywords, skills, and formatting tips.\\n\\nResume Text:\\n{{ $json[\"resumeText\"] }}\\n\\nJob Description Text:\\n{{ $json[\"jobDescriptionText\"] }}"
+      },
+      "id": "3",
+      "name": "AI Analyze Resume vs Job Description",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 2,
+      "position": [
+        700,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "merge",
+        "mode": "mergeByIndex",
+        "propertyName": "data",
+        "propertyValue": ""
+      },
+      "id": "4",
+      "name": "Merge Resume and JobDescription Text",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 1,
+      "position": [
+        500,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const resumeBuffer = $items(\"Read Resume File\")[0].binary[\"resumeFile\"].data;\nconst jobDescBuffer = $items(\"Read Job Description File\")[0].binary[\"jobDescriptionFile\"].data;\n\n// Decode buffers to text assuming UTF-8\nconst resumeText = Buffer.from(resumeBuffer, 'base64').toString('utf-8');\nconst jobDescriptionText = Buffer.from(jobDescBuffer, 'base64').toString('utf-8');\n\nreturn [{ json: { resumeText, jobDescriptionText } }];"
+      },
+      "id": "5",
+      "name": "Extract Text from Files",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        400,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "user@example.com",
+        "toEmail": "recipient@example.com",
+        "subject": "Optimized Job Application Based on Your Resume and Job Description",
+        "text": "Hello,\n\nBased on your resume and the job description you provided, here is the AI-powered feedback and improvements:\n\n{{ $json[\"choices\"][0].message.content }}\n\nBest regards,\nAI-Powered Job Application Optimizer",
+        "attachments": [],
+        "options": {}
+      },
+      "id": "6",
+      "name": "Send Application Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        550
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "url": "={{$json[\"jobPortalUrl\"]}}",
+        "method": "POST",
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "applicantName",
+              "value": "={{$json[\"applicantName\"]}}"
+            },
+            {
+              "name": "applicantEmail",
+              "value": "={{$json[\"applicantEmail\"]}}"
+            },
+            {
+              "name": "resumeText",
+              "value": "={{$json[\"resumeText\"]}}"
+            },
+            {
+              "name": "coverLetter",
+              "value": "={{$json[\"coverLetter\"]}}"
+            }
+          ]
+        },
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "responseFormat": "json",
+        "jsonParameters": true,
+        "bodyJson": {}
+      },
+      "id": "7",
+      "name": "Submit Job Application",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const aiContent = $json[\"choices\"] && $json[\"choices\"].length > 0 ? $json[\"choices\"][0].message.content : \"No feedback available.\";\nconst coverLetter = `Dear Hiring Manager,\\n\\nBased on the job description and my resume, I am excited to apply for this position. I have tailored my skills and experiences accordingly:\\n\\n${aiContent}\\n\\nThank you for considering my application.\\n\\nSincerely,\\n${$json[\"applicantName\"] || \"Applicant\"}`;\n\nreturn [{ json: { coverLetter } }];"
+      },
+      "id": "8",
+      "name": "Generate Cover Letter",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        600
+      ]
+    }
+  ],
+  "connections": {
+    "Read Resume File": {
+      "main": [
+        [
+          {
+            "node": "Extract Text from Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Job Description File": {
+      "main": [
+        [
+          {
+            "node": "Extract Text from Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Text from Files": {
+      "main": [
+        [
+          {
+            "node": "AI Analyze Resume vs Job Description",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate Cover Letter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Analyze Resume vs Job Description": {
+      "main": [
+        [
+          {
+            "node": "Send Application Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Cover Letter": {
+      "main": [
+        [
+          {
+            "node": "Submit Job Application",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
