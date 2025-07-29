@@ -1,0 +1,100 @@
+{
+  "name": "AI-Powered Sustainable Packaging Recommendation System",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": []
+        }
+      },
+      "name": "Cron Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "options": {},
+        "properties": [
+          {
+            "displayName": "Product Type",
+            "name": "productType",
+            "type": "string",
+            "default": ""
+          },
+          {
+            "displayName": "Quantity",
+            "name": "quantity",
+            "type": "number",
+            "default": 1
+          }
+        ]
+      },
+      "name": "Ask for Product Details",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const productType = $json[\"productType\"] || \"general\";\n// Placeholder packaging materials data\nconst packagingMaterials = [\n  {\n    material: \"Recycled Cardboard\",\n    suitability: [\"electronics\", \"clothing\", \"food\", \"general\"],\n    environmentalImpactScore: 2,\n    costPerUnit: 0.5\n  },\n  {\n    material: \"Biodegradable Plastic\",\n    suitability: [\"food\", \"cosmetics\"],\n    environmentalImpactScore: 3,\n    costPerUnit: 0.8\n  },\n  {\n    material: \"Mushroom Packaging\",\n    suitability: [\"electronics\", \"cosmetics\"],\n    environmentalImpactScore: 1,\n    costPerUnit: 1.2\n  },\n  {\n    material: \"Glass\",\n    suitability: [\"cosmetics\", \"food\"],\n    environmentalImpactScore: 4,\n    costPerUnit: 1.5\n  },\n  {\n    material: \"Aluminum\",\n    suitability: [\"electronics\"],\n    environmentalImpactScore: 3,\n    costPerUnit: 1.0\n  }\n];\n\n// Filter materials suitable for the product type\nconst suitableMaterials = packagingMaterials.filter(mat => mat.suitability.includes(productType.toLowerCase()));\n\n// Sort by lowest environmental impact and cost-effectiveness (simple weighted formula)\nconst rankedMaterials = suitableMaterials.sort((a, b) => {\n  const scoreA = a.environmentalImpactScore * 0.7 + a.costPerUnit * 0.3;\n  const scoreB = b.environmentalImpactScore * 0.7 + b.costPerUnit * 0.3;\n  return scoreA - scoreB;\n});\n\nreturn rankedMaterials.slice(0, 3).map(item => ({ json: item }));"
+      },
+      "name": "Recommend Packaging Materials",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        600,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "email",
+        "operation": "send",
+        "toEmail": "={{$json[\"recipientEmail\"] || \"business@example.com\"}}",
+        "subject": "Sustainable Packaging Recommendations",
+        "text": "={{\n  `Dear Customer,\n\nBased on your product type (${ $json[\"productType\"] }), we recommend the following sustainable packaging materials:\n\n` + \n  items.map((item, idx) => `${idx + 1}. ${item.json.material} (Env. Impact Score: ${item.json.environmentalImpactScore}, Cost per unit: $${item.json.costPerUnit})`).join('\\n') +\n  `\n\nThese options aim to reduce your packaging waste and carbon footprint.\n\nBest regards,\nYour Sustainability Team`\n}}"
+      },
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        900,
+        250
+      ],
+      "credentials": {
+        "smtp": "SMTP Credentials"
+      }
+    }
+  ],
+  "connections": {
+    "Ask for Product Details": {
+      "main": [
+        [
+          {
+            "node": "Recommend Packaging Materials",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recommend Packaging Materials": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
