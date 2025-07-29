@@ -1,0 +1,211 @@
+{
+  "name": "AI-Powered Personalized Mental Health Sentiment & Emotion Analysis and Support System",
+  "nodes": [
+    {
+      "parameters": {
+        "webhookPath": "user-input",
+        "httpMethod": "POST",
+        "responseMode": "onReceived",
+        "responseData": "allEntries",
+        "options": {}
+      },
+      "name": "User Input Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an empathetic mental health assistant. Analyze the user's input text for sentiment (positive, neutral, negative) and emotions (such as sad, anxious, happy, angry, stressed, etc.). Provide an empathetic response, suggest 2-3 coping strategies based on the detected emotions and sentiment, and recommend whether a follow-up check-in is needed. Return a JSON object with keys: sentiment, emotions (array), empatheticResponse, copingStrategies (array), and followUpNeeded (boolean)."
+          },
+          {
+            "role": "user",
+            "content": "{{$json[\"body\"][\"message\"]}}"
+          }
+        ],
+        "options": {
+          "temperature": 0.7,
+          "maxTokens": 500
+        }
+      },
+      "name": "Analyze Sentiment and Emotions",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 2,
+      "position": [
+        600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "sentiment",
+              "value": "={{JSON.parse($json[\"choices\"][0][\"message\"][\"content\"]).sentiment}}"
+            },
+            {
+              "name": "emotions",
+              "value": "={{JSON.stringify(JSON.parse($json[\"choices\"][0][\"message\"][\"content\"]).emotions)}}"
+            },
+            {
+              "name": "empatheticResponse",
+              "value": "={{JSON.parse($json[\"choices\"][0][\"message\"][\"content\"]).empatheticResponse}}"
+            },
+            {
+              "name": "copingStrategies",
+              "value": "={{JSON.stringify(JSON.parse($json[\"choices\"][0][\"message\"][\"content\"]).copingStrategies)}}"
+            },
+            {
+              "name": "followUpNeeded",
+              "value": "={{JSON.parse($json[\"choices\"][0][\"message\"][\"content\"]).followUpNeeded}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "channel": "{{$json[\"body\"][\"channel\"] || \"email\"}}",
+        "to": "={{$json[\"body\"][\"email\"] || $json[\"body\"][\"userEmail\"]}}",
+        "subject": "Mental Health Support: Your Recent Check-in",
+        "text": "={{$json[\"empatheticResponse\"] + \"\n\nSuggested Coping Strategies:\n- \" + JSON.parse($json[\"copingStrategies\"]).join(\"\\n- \") + (JSON.parse($json[\"followUpNeeded\"]) ? \"\\n\nWe will schedule a follow-up check-in soon to see how you are doing.\" : \"\")}}"
+      },
+      "name": "Send Empathetic Response Notification",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "condition": "={{$json[\"followUpNeeded\"] === true}}"
+      },
+      "name": "Check If Follow-up Needed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "calendarId": "primary",
+        "summary": "Follow-up Mental Health Check-in",
+        "description": "Scheduled follow-up check-in based on your prior input and emotional state. Please be reminded to focus on your well-being.",
+        "start": "={{new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString()}}",
+        "end": "={{new Date(Date.now() + 3 * 24 * 60 * 60 * 1000 + 30 * 60000).toISOString()}}",
+        "attendees": [
+          {
+            "email": "={{$json[\"body\"][\"email\"] || $json[\"body\"][\"userEmail\"]}}"
+          }
+        ]
+      },
+      "name": "Schedule Follow-up Check-in",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "text": "Hi, this is a gentle reminder for your upcoming mental health follow-up check-in scheduled in 3 days. Take care!",
+        "to": "={{$json[\"body\"][\"phone\"] || null}}",
+        "options": {}
+      },
+      "name": "Send SMS Reminder",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "User Input Webhook": {
+      "main": [
+        [
+          {
+            "node": "Analyze Sentiment and Emotions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Sentiment and Emotions": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Send Empathetic Response Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Check If Follow-up Needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If Follow-up Needed": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Schedule Follow-up Check-in",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Follow-up Check-in": {
+      "main": [
+        [
+          {
+            "node": "Send SMS Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
