@@ -1,0 +1,185 @@
+{
+  "name": "AI-Powered Home Air Quality Monitor and Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "topic": "home/air-quality",
+        "options": {},
+        "qos": 1
+      },
+      "name": "MQTT Trigger - Air Quality Sensor",
+      "type": "n8n-nodes-base.mqttTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const sensorData = JSON.parse(items[0].json.payload);\n\nreturn [{\n  json: {\n    temperature: sensorData.temperature,\n    humidity: sensorData.humidity,\n    pm2_5: sensorData.pm2_5,\n    co2: sensorData.co2,\n    voc: sensorData.voc\n  }\n}];"
+      },
+      "name": "Parse Sensor Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        470,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-3.5-turbo",
+        "resource": "chatCompletion",
+        "options": {},
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an air quality analyst AI. Analyze the following sensor data to detect any pollutants or harmful indoor air conditions. Provide a JSON output with keys: \"alert\" (true or false), \"message\" (string explaining the reason), and \"recommendation\" (suggested actions). Sensor data: temperature, humidity, pm2_5, co2, voc."
+          },
+          {
+            "role": "user",
+            "content": "Temperature: {{$json[\"temperature\"]}}, Humidity: {{$json[\"humidity\"]}}, PM2.5: {{$json[\"pm2_5\"]}}, CO2: {{$json[\"co2\"]}}, VOC: {{$json[\"voc\"]}}"
+          }
+        ]
+      },
+      "name": "AI Analysis - Air Quality Check",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        690,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const analysis = JSON.parse(items[0].json.choices[0].message.content);\n\nreturn [{\n  json: {\n    alert: analysis.alert,\n    message: analysis.message,\n    recommendation: analysis.recommendation\n  }\n}];"
+      },
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        910,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json[\"alert\"]}}",
+              "operation": "equal",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "Check Alert",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1130,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "email",
+        "operation": "send",
+        "toEmail": "user@example.com",
+        "subject": "Home Air Quality Alert",
+        "text": "Alert: {{$json[\"message\"]}}\nRecommendation: {{$json[\"recommendation\"]}}"
+      },
+      "name": "Send Email Notification",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1330,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "device",
+        "operation": "sendCommand",
+        "deviceId": "air_purifier_01",
+        "command": "turn_on",
+        "options": {}
+      },
+      "name": "Activate Air Purifier",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1330,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "MQTT Trigger - Air Quality Sensor": {
+      "main": [
+        [
+          {
+            "node": "Parse Sensor Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Sensor Data": {
+      "main": [
+        [
+          {
+            "node": "AI Analysis - Air Quality Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Analysis - Air Quality Check": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Check Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Alert": {
+      "main": [
+        [
+          {
+            "node": "Send Email Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Activate Air Purifier",
+            "type": "main",
+            "index": 1
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
