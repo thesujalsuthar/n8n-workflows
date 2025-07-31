@@ -1,0 +1,227 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "user-preferences",
+        "responseBody": "={{ { success: true, message: 'Preferences received', preferences: $json } }}",
+        "options": {}
+      },
+      "name": "Receive User Preferences",
+      "type": "n8n-nodes-base.httpTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ],
+      "webhookId": "receive-preferences-webhook"
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n Parse incoming user preferences and prepare input for AI styling recommendation\n Expected input: {\n   stylePreferences: string[],\n   preferredColors: string[],\n   occasions: string[],\n   climate: string,\n   size: string,\n   budget: number\n }\n*/\n\nreturn items.map(item => {\n  const prefs = item.json;\n  return {\n    json: {\n      prompt: `Provide a personalized sustainable outfit recommendation for a user who prefers styles: ${prefs.stylePreferences.join(\", \")}. Occasions: ${prefs.occasions.join(\", \")}. Preferred colors: ${prefs.preferredColors.join(\", \")}. Climate: ${prefs.climate}. Size: ${prefs.size}. Budget: $${prefs.budget}. Include eco-friendly tips and highlight sustainable materials.`\n    }\n  };\n});"
+      },
+      "name": "Prepare AI Prompt",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "requestMethod": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "jsonParameters": true,
+        "options": {},
+        "headerParametersJson": "[{\"name\":\"Authorization\",\"value\":\"Bearer {{ $credentials.openAI.apiKey }}\"},{\"name\":\"Content-Type\",\"value\":\"application/json\"}]",
+        "bodyParametersJson": "{\"model\":\"gpt-4\",\"messages\":[{\"role\":\"user\",\"content\":\"{{$json.prompt}}\"}],\"max_tokens\":500,\"temperature\":0.7}"
+      },
+      "name": "Get AI Styling Recommendation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ],
+      "credentials": {
+        "openAI": {
+          "id": "1",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "/* Parse AI response and extract the recommendation text */\nreturn items.map(item => {\n  const choices = item.json.choices;\n  const recommendation = choices && choices.length > 0 ? choices[0].message.content : 'No recommendation received';\n  return {\n    json: {\n      recommendation\n    }\n  };\n});"
+      },
+      "name": "Parse AI Recommendation",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        950,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/* Prepare search query for sustainable fashion products based on AI recommendation and user preferences */\nreturn items.map(item => {\n  const rec = item.json.recommendation;\n  const prefs = $items('Receive User Preferences')[0].json;\n  return {\n    json: {\n      searchQuery: `sustainable fashion, style: ${prefs.stylePreferences.join(\", \")}, colors: ${prefs.preferredColors.join(\", \")}, size: ${prefs.size}`\n    }\n  };\n});"
+      },
+      "name": "Prepare Product Search Query",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.sustainablefashiondb.com/v1/products",
+        "options": {},
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "q",
+              "value": "={{ $json.searchQuery }}"
+            },
+            {
+              "name": "available",
+              "value": "true"
+            },
+            {
+              "name": "eco_friendly",
+              "value": "true"
+            }
+          ]
+        },
+        "headerParametersJson": "[{\"name\":\"Authorization\",\"value\":\"Bearer {{ $credentials.sustainableFashionDB.apiKey }}\"}]",
+        "jsonParameters": true,
+        "responseFormat": "json",
+        "requestMethod": "GET"
+      },
+      "name": "Fetch Sustainable Products",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        300
+      ],
+      "credentials": {
+        "sustainableFashionDB": {
+          "id": "1",
+          "name": "Sustainable Fashion DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "/* Combine AI recommendation & sustainable products for final output */\nreturn items.map(item => {\n  const products = item.json.products || [];\n  const recommendation = $items('Parse AI Recommendation')[0].json.recommendation || '';\n\n  return {\n    json: {\n      outfitRecommendation: recommendation,\n      ecoFriendlyProducts: products\n    }\n  };\n});"
+      },
+      "name": "Combine Recommendations and Products",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1550,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpStatusCode": 200,
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "name": "Respond to User",
+      "type": "n8n-nodes-base.httpResponse",
+      "typeVersion": 1,
+      "position": [
+        1750,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Receive User Preferences": {
+      "main": [
+        [
+          {
+            "node": "Prepare AI Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare AI Prompt": {
+      "main": [
+        [
+          {
+            "node": "Get AI Styling Recommendation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get AI Styling Recommendation": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Recommendation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Recommendation": {
+      "main": [
+        [
+          {
+            "node": "Prepare Product Search Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Product Search Query": {
+      "main": [
+        [
+          {
+            "node": "Fetch Sustainable Products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Sustainable Products": {
+      "main": [
+        [
+          {
+            "node": "Combine Recommendations and Products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine Recommendations and Products": {
+      "main": [
+        [
+          {
+            "node": "Respond to User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "id": "ai-powered-sustainable-fashion-outfit-recommender"
+}
