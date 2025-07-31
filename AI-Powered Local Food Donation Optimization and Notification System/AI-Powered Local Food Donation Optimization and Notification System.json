@@ -1,0 +1,293 @@
+{
+  "name": "AI-Driven Local Food Waste Reduction and Donation Coordination System",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "register-donation",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "name": "Receive Donation Data",
+      "type": "n8n-nodes-base.httpTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "table": "donations",
+        "columns": [
+          "donorType",
+          "donorName",
+          "foodDescription",
+          "quantity",
+          "expirationDate",
+          "pickupLocation",
+          "contactInfo",
+          "timestamp"
+        ],
+        "values": "={{[$json[\"donorType\"], $json[\"donorName\"], $json[\"foodDescription\"], $json[\"quantity\"], $json[\"expirationDate\"], $json[\"pickupLocation\"], $json[\"contactInfo\"], $now]} }"
+      },
+      "name": "Store Donation",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ],
+      "credentials": {
+        "postgres": "LocalPostgresDB"
+      }
+    },
+    {
+      "parameters": {
+        "url": "http://ai-optimization-service.local/optimize",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={\n  \"donationId\": $json.id,\n  \"foodDescription\": $json.foodDescription,\n  \"quantity\": $json.quantity,\n  \"expirationDate\": $json.expirationDate,\n  \"pickupLocation\": $json.pickupLocation\n}"
+      },
+      "name": "AI Optimize Allocation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "table": "allocations",
+        "columns": [
+          "donationId",
+          "destinationType",
+          "destinationName",
+          "contactInfo",
+          "allocatedQuantity",
+          "pickupTime"
+        ],
+        "values": "={[$json[\"donationId\"], $json[\"destinationType\"], $json[\"destinationName\"], $json[\"contactInfo\"], $json[\"allocatedQuantity\"], $json[\"pickupTime\"]]}"
+      },
+      "name": "Save Allocation",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ],
+      "credentials": {
+        "postgres": "LocalPostgresDB"
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "no-reply@localfoodwaste.org",
+        "toEmail": "={{$json[\"contactInfo\"]}}",
+        "subject": "New Food Donation Allocation Notification",
+        "text": "Dear {{$json[\"destinationName\"]}},\n\nYou have been allocated a food donation:\n\nItem: {{$json[\"foodDescription\"] || 'Food item'}}\nQuantity: {{$json[\"allocatedQuantity\"]}}\nPickup location: {{$json[\"pickupLocation\"]}}\nPickup time: {{$json[\"pickupTime\"]}}\n\nPlease contact donor at: {{$json[\"donorContact\"] || 'N/A'}}\n\nThank you for your collaboration in reducing food waste!\n\nBest regards,\nLocal Food Waste Reduction Team"
+      },
+      "name": "Send Notification Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ],
+      "credentials": {
+        "smtp": "LocalSMTP"
+      }
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "table": "donations",
+        "returnAll": true,
+        "filter": {
+          "conditions": [
+            {
+              "field": "expirationDate",
+              "operation": "lessEqual",
+              "value": "={{ $now.plus({ hours: 24 }).toISOString() }}"
+            }
+          ]
+        }
+      },
+      "name": "Get Donations About to Expire",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        250,
+        600
+      ],
+      "credentials": {
+        "postgres": "LocalPostgresDB"
+      }
+    },
+    {
+      "parameters": {
+        "url": "http://ai-optimization-service.local/optimize-batch",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={\n  \"donations\": $items(\"Get Donations About to Expire\")\n}"
+      },
+      "name": "Batch AI Optimization",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        450,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "table": "allocations",
+        "columns": [
+          "donationId",
+          "destinationType",
+          "destinationName",
+          "contactInfo",
+          "allocatedQuantity",
+          "pickupTime"
+        ],
+        "values": "={{ $json.allocations.map(a => [a.donationId, a.destinationType, a.destinationName, a.contactInfo, a.allocatedQuantity, a.pickupTime]) }}"
+      },
+      "name": "Save Batch Allocations",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        650,
+        600
+      ],
+      "credentials": {
+        "postgres": "LocalPostgresDB"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return $items(\"Save Batch Allocations\").map(allocationNode => {\n  return {\n    json: {\n      contactInfo: allocationNode.json.contactInfo,\n      destinationName: allocationNode.json.destinationName,\n      foodDescription: allocationNode.json.foodDescription || 'Food item',\n      allocatedQuantity: allocationNode.json.allocatedQuantity,\n      pickupLocation: allocationNode.json.pickupLocation || 'Pickup location TBD',\n      pickupTime: allocationNode.json.pickupTime,\n      donorContact: allocationNode.json.donorContact\n    }\n  };\n});"
+      },
+      "name": "Prepare Notification Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "no-reply@localfoodwaste.org",
+        "toEmail": "={{$json.contactInfo}}",
+        "subject": "Upcoming Food Donation Allocation",
+        "text": "Hello {{$json.destinationName}},\n\nNew food donation available:\n\nItem: {{$json.foodDescription}}\nQuantity: {{$json.allocatedQuantity}}\nPickup Location: {{$json.pickupLocation}}\nPickup Time: {{$json.pickupTime}}\n\nPlease contact donor at: {{$json.donorContact || 'N/A'}}\n\nThanks for helping reduce local food waste!"
+      },
+      "name": "Send Batch Notification",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        600
+      ],
+      "credentials": {
+        "smtp": "LocalSMTP"
+      }
+    }
+  ],
+  "connections": {
+    "Receive Donation Data": {
+      "main": [
+        [
+          {
+            "node": "Store Donation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Donation": {
+      "main": [
+        [
+          {
+            "node": "AI Optimize Allocation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Optimize Allocation": {
+      "main": [
+        [
+          {
+            "node": "Save Allocation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Allocation": {
+      "main": [
+        [
+          {
+            "node": "Send Notification Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Donations About to Expire": {
+      "main": [
+        [
+          {
+            "node": "Batch AI Optimization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Batch AI Optimization": {
+      "main": [
+        [
+          {
+            "node": "Save Batch Allocations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Batch Allocations": {
+      "main": [
+        [
+          {
+            "node": "Prepare Notification Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Notification Data": {
+      "main": [
+        [
+          {
+            "node": "Send Batch Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
