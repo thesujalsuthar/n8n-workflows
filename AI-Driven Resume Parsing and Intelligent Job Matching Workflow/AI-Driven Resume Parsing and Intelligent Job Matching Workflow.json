@@ -1,0 +1,131 @@
+{
+  "workflow": {
+    "name": "AI-Powered Automated Resume Parsing and Job Matching",
+    "description": "A workflow that automates the extraction of candidate information from resumes and matches candidates to suitable job openings using AI.",
+    "steps": [
+      {
+        "step": 1,
+        "name": "Resume Upload",
+        "description": "Candidates upload their resumes in various formats (PDF, DOCX, TXT).",
+        "input": {
+          "resume_file": "file"
+        },
+        "output": {
+          "uploaded_resume": "file"
+        }
+      },
+      {
+        "step": 2,
+        "name": "Resume Parsing",
+        "description": "Use AI-powered parsing to extract structured data such as personal details, skills, experience, education, and certifications.",
+        "input": {
+          "uploaded_resume": "file"
+        },
+        "process": "AI Model for resume parsing (NLP/ML based)",
+        "output": {
+          "parsed_resume": {
+            "personal_details": {
+              "name": "string",
+              "email": "string",
+              "phone": "string",
+              "address": "string"
+            },
+            "skills": [
+              "string"
+            ],
+            "work_experience": [
+              {
+                "job_title": "string",
+                "company": "string",
+                "start_date": "date",
+                "end_date": "date",
+                "description": "string"
+              }
+            ],
+            "education": [
+              {
+                "degree": "string",
+                "institution": "string",
+                "start_date": "date",
+                "end_date": "date"
+              }
+            ],
+            "certifications": [
+              "string"
+            ]
+          }
+        }
+      },
+      {
+        "step": 3,
+        "name": "Job Database Access",
+        "description": "Retrieve current job openings including job descriptions, required skills, qualifications, and locations.",
+        "input": null,
+        "output": {
+          "job_listings": [
+            {
+              "job_id": "string",
+              "title": "string",
+              "description": "string",
+              "required_skills": [
+                "string"
+              ],
+              "qualifications": [
+                "string"
+              ],
+              "location": "string",
+              "employment_type": "string"
+            }
+          ]
+        }
+      },
+      {
+        "step": 4,
+        "name": "Candidate-Job Matching",
+        "description": "Match the parsed candidate profile against job listings using AI models to find the best fit based on skills, experience, and preferences.",
+        "input": {
+          "parsed_resume": "object",
+          "job_listings": "array"
+        },
+        "process": "AI Matching Algorithm (similarity scoring, ranking)",
+        "output": {
+          "matched_jobs": [
+            {
+              "job_id": "string",
+              "match_score": "float",
+              "relevance_details": {
+                "skills_match_percentage": "float",
+                "experience_match": "boolean",
+                "location_preference_match": "boolean"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "step": 5,
+        "name": "Results Presentation",
+        "description": "Present matched job recommendations to the candidate with the ability to view details and apply.",
+        "input": {
+          "matched_jobs": "array"
+        },
+        "output": {
+          "recommendation_list": [
+            {
+              "job_id": "string",
+              "title": "string",
+              "match_score": "float",
+              "apply_link": "string"
+            }
+          ]
+        }
+      }
+    ],
+    "technology_stack": [
+      "AI/ML models for NLP and resume parsing",
+      "Databases for job listings",
+      "Web or mobile front-end for resume upload and displaying matches",
+      "APIs for integration between components"
+    ]
+  }
+}
