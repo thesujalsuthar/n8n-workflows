@@ -1,0 +1,290 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "deviceId": "your-soil-moisture-sensor-id",
+        "options": {}
+      },
+      "name": "Soil Moisture Sensor",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        200,
+        100
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "your-smart-sensor-api-credentials-id"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "deviceId": "your-light-sensor-id",
+        "options": {}
+      },
+      "name": "Light Sensor",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        200,
+        250
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "your-smart-sensor-api-credentials-id"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "deviceId": "your-temperature-sensor-id",
+        "options": {}
+      },
+      "name": "Temperature Sensor",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        200,
+        400
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "your-smart-sensor-api-credentials-id"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "values": {
+          "number": [
+            {
+              "name": "soilMoisture",
+              "value": "={{$json[\"soilMoisture\"]}}"
+            },
+            {
+              "name": "lightLevel",
+              "value": "={{$json[\"lightLevel\"]}}"
+            },
+            {
+              "name": "temperature",
+              "value": "={{$json[\"temperature\"]}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Aggregate Sensor Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        450,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const soilMoisture = items[0].json.soilMoisture;\nconst lightLevel = items[0].json.lightLevel;\nconst temperature = items[0].json.temperature;\n\nconst alerts = [];\nconst reminders = [];\n\n// Thresholds (example values, adjust accordingly)\nconst soilMoistureThreshold = 30; // below 30% triggers watering reminder\nconst lightLevelThresholdLow = 200; // below 200 lux triggers low light alert\nconst lightLevelThresholdHigh = 10000; // above 10000 lux triggers too much light alert\nconst temperatureThresholdLow = 15; // below 15°C - cold alert\nconst temperatureThresholdHigh = 30; // above 30°C - heat alert\n\nif (soilMoisture < soilMoistureThreshold) {\n  reminders.push('Water your plant. Soil moisture is low (' + soilMoisture + '%).');\n}\n\nif (lightLevel < lightLevelThresholdLow) {\n  alerts.push('Low light alert! Current light level: ' + lightLevel + ' lux.');\n} else if (lightLevel > lightLevelThresholdHigh) {\n  alerts.push('Too much light alert! Current light level: ' + lightLevel + ' lux.');\n}\n\nif (temperature < temperatureThresholdLow) {\n  alerts.push('Temperature too low! Current temperature: ' + temperature + '°C.');\n} else if (temperature > temperatureThresholdHigh) {\n  alerts.push('Temperature too high! Current temperature: ' + temperature + '°C.');\n}\n\nreturn [{json: {alerts, reminders}}];"
+      },
+      "name": "Evaluate Plant Conditions",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        700,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "text": "={{ $json.reminders.length > 0 ? $json.reminders.join('\\n') : undefined }}"
+      },
+      "name": "Prepare Reminders Message",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        950,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "text": "={{ $json.alerts.length > 0 ? $json.alerts.join('\\n') : undefined }}"
+      },
+      "name": "Prepare Alerts Message",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        950,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "channel": "your-channel-or-user-id",
+        "text": "={{$node[\"Prepare Reminders Message\"].json.text}}"
+      },
+      "name": "Send Care Reminders",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        180
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "your-slack-credentials-id"
+        }
+      },
+      "continueOnFail": true,
+      "disabled": false,
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "channel": "your-channel-or-user-id",
+        "text": "={{$node[\"Prepare Alerts Message\"].json.text}}"
+      },
+      "name": "Send Environment Alerts",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        320
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "your-slack-credentials-id"
+        }
+      },
+      "continueOnFail": true,
+      "disabled": false,
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "interval": 15,
+        "unit": "minutes",
+        "workflowId": null
+      },
+      "name": "Trigger Every 15 Minutes",
+      "type": "n8n-nodes-base.interval",
+      "typeVersion": 1,
+      "position": [
+        50,
+        250
+      ]
+    }
+  ],
+  "connections": {
+    "Trigger Every 15 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Soil Moisture Sensor",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Light Sensor",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Temperature Sensor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Soil Moisture Sensor": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Sensor Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Light Sensor": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Sensor Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Temperature Sensor": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Sensor Data",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Aggregate Sensor Data": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Plant Conditions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Plant Conditions": {
+      "main": [
+        [
+          {
+            "node": "Prepare Reminders Message",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Alerts Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Reminders Message": {
+      "main": [
+        [
+          {
+            "node": "Send Care Reminders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Alerts Message": {
+      "main": [
+        [
+          {
+            "node": "Send Environment Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "id": "1"
+}
