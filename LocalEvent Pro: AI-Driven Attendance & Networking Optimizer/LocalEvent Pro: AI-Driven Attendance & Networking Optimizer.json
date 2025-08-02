@@ -1,0 +1,154 @@
+{
+  "name": "AI-Powered Local Event Attendance Optimizer and Networking Facilitator",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.eventservice.com/v1/events",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "location",
+              "value": "={{$json[\"userLocation\"]}}"
+            },
+            {
+              "name": "category",
+              "value": "={{$json[\"professionalInterests\"]}}"
+            },
+            {
+              "name": "dateRange",
+              "value": "={{$json[\"preferredDateRange\"]}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Fetch Local Events",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/* Optimizes event attendance schedule based on location proximity and timing */\n\nconst events = items[0].json.events;\nconst userLocation = $json.userLocation;\n\nfunction calculateDistance(loc1, loc2) {\n  // Haversine formula\n  const toRad = (x) => (x * Math.PI) / 180;\n  const R = 6371; // km\n  const dLat = toRad(loc2.lat - loc1.lat);\n  const dLon = toRad(loc2.lng - loc1.lng);\n  const a =\n    Math.sin(dLat / 2) * Math.sin(dLat / 2) +\n    Math.cos(toRad(loc1.lat)) * Math.cos(toRad(loc2.lat)) *\n    Math.sin(dLon / 2) * Math.sin(dLon / 2);\n  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));\n  return R * c;\n}\n\n// Sort events by start time\nconst sortedEvents = events.sort((a, b) => new Date(a.start) - new Date(b.start));\n\n// Simple greedy algorithm for attendance optimization\nconst optimizedSchedule = [];\nlet lastEventEnd = null;\n\nfor (const event of sortedEvents) {\n  const eventLocation = { lat: event.location.latitude, lng: event.location.longitude };\n  const distanceFromUser = calculateDistance(userLocation, eventLocation);\n\n  if (!lastEventEnd || new Date(event.start) >= lastEventEnd) {\n    optimizedSchedule.push({ ...event, distanceFromUser });\n    lastEventEnd = new Date(event.end);\n  }\n}\n\nreturn optimizedSchedule.map(event => ({ json: event }));"
+      },
+      "name": "Optimize Event Schedule",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "temperature": 0.7,
+        "maxTokens": 1024,
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an AI assistant that suggests relevant networking connections for events based on attendee professional interests and profiles."
+          },
+          {
+            "role": "user",
+            "content": "Given the event details and the user professional interests, suggest the top 5 relevant attendees to connect with. Include name, role, company, and reasons for recommendation."
+          },
+          {
+            "role": "assistant",
+            "content": "Analyzing events and users to find best matches..."
+          },
+          {
+            "role": "user",
+            "content": "Events: {{$json[\"events\"]}}\nUser Interests: {{$json[\"professionalInterests\"]}}"
+          }
+        ]
+      },
+      "name": "Suggest Networking Attendees",
+      "type": "n8n-nodes-base.openai",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/* Combine optimized schedule with networking suggestions into final output */\n\nconst optimizedEvents = items[0].json;\nconst networkingSuggestions = items[1].json.choices[0].message.content;\n\nreturn [{\n  json: {\n    optimizedSchedule: optimizedEvents,\n    networkingSuggestions: JSON.parse(networkingSuggestions)\n  }\n}];"
+      },
+      "name": "Compile Final Output",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/* Simulate retrieval of user data from previous node or credential storage */\n\nreturn [{\n  json: {\n    userLocation: { lat: 40.7128, lng: -74.006 },\n    professionalInterests: \"technology, software development, AI\",\n    preferredDateRange: \"2024-06-01_to_2024-06-30\"\n  }\n}];"
+      },
+      "name": "User Profile Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "User Profile Data": {
+      "main": [
+        [
+          {
+            "node": "Fetch Local Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Local Events": {
+      "main": [
+        [
+          {
+            "node": "Optimize Event Schedule",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Suggest Networking Attendees",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Optimize Event Schedule": {
+      "main": [
+        [
+          {
+            "node": "Compile Final Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Suggest Networking Attendees": {
+      "main": [
+        [
+          {
+            "node": "Compile Final Output",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  }
+}
