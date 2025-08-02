@@ -1,0 +1,256 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 8,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.fashiondata.example.com/v1/wardrobe",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$credentials.fashionApi.apiKey}}"
+            }
+          ]
+        },
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "userId",
+              "value": "={{ $json[\"userId\"] || $json[\"user\"]?.id || \"defaultUserId\" }}"
+            }
+          ]
+        },
+        "responseFormat": "json"
+      },
+      "name": "Get User Wardrobe",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        550,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": "Fashion API Key"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const wardrobeItems = items[0].json.data || [];\n\n// Filter items by sustainability score threshold (e.g., >= 7 out of 10)\nconst ecoFriendlyItems = wardrobeItems.filter(item => item.sustainabilityScore >= 7);\n\nreturn ecoFriendlyItems.map(item => ({ json: item }));"
+      },
+      "name": "Filter Eco-Friendly Wardrobe Items",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.sustainabilitydb.org/v1/materials",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "x-api-key",
+              "value": "={{$credentials.sustainabilityDb.apiKey}}"
+            }
+          ]
+        },
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "materialIds",
+              "value": "={{$items.map(i => i.json.materialId).join(\",\")}}"
+            }
+          ]
+        },
+        "responseFormat": "json"
+      },
+      "name": "Get Material Sustainability Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": "Sustainability DB Key"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const materialsData = items[0].json.data || [];\nconst items = $items;\n\n// Map materials data by id\nconst materialsMap = {};\nmaterialsData.forEach(material => {\n  materialsMap[material.id] = material;\n});\n\n// Attach detailed sustainability info to wardrobe items\nconst updatedItems = items.map((item, index) => {\n  if(index === 0) return null;\n  const matId = item.json.materialId;\n  const materialInfo = materialsMap[matId] || {};\n  return {\n    json: {\n      ...item.json,\n      materialSustainability: materialInfo\n    }\n  };\n}).filter(i => i !== null);\n\nreturn updatedItems;"
+      },
+      "name": "Attach Material Sustainability Info",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nGenerate outfit recommendations based on eco-friendly wardrobe items,\nsustainability data and user preferences. This example prioritizes: \n- Minimizing environmental impact\n- Diversity in outfit types\n- Usage history (to maximize reuse)\n*/\n\nconst wardrobe = items.map(i => i.json);\n\n// Sample user preferences - could be fetched from user profile\nconst preferences = {\n  preferredStyles: ['casual', 'office', 'sport'],\n  climate: 'temperate'\n};\n\n// Filter items eligible for outfit\nconst eligibleItems = wardrobe.filter(item => item.materialSustainability.impactRating <= 3);\n\n// Group by type\nconst groupedByType = eligibleItems.reduce((acc, item) => {\n  if (!acc[item.type]) acc[item.type] = [];\n  acc[item.type].push(item);\n  return acc;\n}, {});\n\n// Simple outfit construction: pick one from top categories\nconst outfits = [];\n\n// Types to compose an outfit with (example)\nconst outfitTypes = ['top', 'bottom', 'outerwear', 'footwear', 'accessory'];\n\nfor (let i = 0; i < 3; i++) {  \n  const outfit = {};\n  for (const type of outfitTypes) {\n    const itemsOfType = groupedByType[type] || [];\n    if (itemsOfType.length === 0) continue;\n    const selectedIndex = i % itemsOfType.length;\n    outfit[type] = itemsOfType[selectedIndex];\n  }\n  outfits.push(outfit);\n}\n\nreturn outfits.map(outfit => ({ json: outfit }));"
+      },
+      "name": "Generate Outfit Recommendations",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.fashiondata.example.com/v1/usage/track",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$credentials.fashionApi.apiKey}}"
+            }
+          ]
+        },
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "userId",
+              "value": "={{ $json[\"userId\"] || $json[\"user\"]?.id || \"defaultUserId\" }}"
+            },
+            {
+              "name": "outfit",
+              "value": "={{ JSON.stringify($json) }}"
+            }
+          ]
+        },
+        "responseFormat": "json",
+        "options": {
+          "bodyContentType": "json"
+        }
+      },
+      "name": "Track Outfit Usage",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        1850,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": "Fashion API Key"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nFormat recommendations for output\n*/\nreturn items.map(item => ({\n  json: {\n    recommendations: item.json\n  }\n}))"
+      },
+      "name": "Format Output",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        2100,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get User Wardrobe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get User Wardrobe": {
+      "main": [
+        [
+          {
+            "node": "Filter Eco-Friendly Wardrobe Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Eco-Friendly Wardrobe Items": {
+      "main": [
+        [
+          {
+            "node": "Get Material Sustainability Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Material Sustainability Data": {
+      "main": [
+        [
+          {
+            "node": "Attach Material Sustainability Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach Material Sustainability Info": {
+      "main": [
+        [
+          {
+            "node": "Generate Outfit Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Outfit Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Track Outfit Usage",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Format Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
