@@ -1,0 +1,134 @@
+{
+  "name": "AI-Driven Personalized Mental Fitness and Cognitive Exercise Planner",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "user",
+        "operation": "get",
+        "id": "={{$json[\"userId\"]}}"
+      },
+      "name": "Get User Profile",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nThis function generates personalized cognitive exercises based on user's profile,\npreferences, and past performance. In a real scenario, this could call an AI service.\n*/\n\nconst user = items[0].json;\n\n// Simple example exercise generator\nconst exercises = [\n  {\n    type: 'Memory',\n    task: 'Remember the sequence: 3, 1, 4, 1, 5',\n    duration: 5\n  },\n  {\n    type: 'Attention',\n    task: 'Find all the letter \"A\" in the following text...',\n    duration: 7\n  },\n  {\n    type: 'Language',\n    task: 'Form as many words as you can from the letters in \"Cognitive\".',\n    duration: 10\n  },\n  {\n    type: 'Problem Solving',\n    task: 'Solve: If twice a number minus 4 equals 10, what is the number?',\n    duration: 7\n  },\n  {\n    type: 'Flexibility',\n    task: 'Switch between naming animals and fruits for 2 minutes.',\n    duration: 8\n  }\n];\n\n// For demo, pick 3 random exercises\nfunction pickRandom(arr, n) {\n  let result = new Array(n),\n      len = arr.length,\n      taken = new Array(len);\n  if (n > len) n = len;\n  while (n--) {\n    let x = Math.floor(Math.random() * len);\n    result[n] = arr[x in taken ? taken[x] : x];\n    taken[x] = --len in taken ? taken[len] : len;\n  }\n  return result;\n}\n\nconst personalizedExercises = pickRandom(exercises, 3);\n\nreturn [{ json: { personalizedExercises } }];"
+      },
+      "name": "Generate Personalized Exercises",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "append",
+        "sheetId": "YOUR_SHEET_ID_HERE",
+        "dataPropertyUi": {
+          "dataPropertyValues": [
+            {
+              "key": "Date",
+              "value": "={{new Date().toISOString().split('T')[0]}}"
+            },
+            {
+              "key": "UserId",
+              "value": "={{$json[\"userId\"]}}"
+            },
+            {
+              "key": "Exercises",
+              "value": "={{JSON.stringify($json[\"personalizedExercises\"])}}"
+            }
+          ]
+        }
+      },
+      "name": "Log Exercises to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": "Google Sheets OAuth2"
+      }
+    },
+    {
+      "parameters": {
+        "toEmail": "={{$json[\"email\"]}}",
+        "subject": "Your Personalized Cognitive Exercises for Today",
+        "message": "Hello {{$json[\"name\"]}},\n\nHere are your personalized brain exercises for today:\n\n{{$json[\"personalizedExercises\"].map(ex => `- (${ex.type}) ${ex.task} (approx. ${ex.duration} mins)`).join('\\n')}}\n\nKeep up the great work to improve your cognitive health!\n\nBest,\nMental Fitness Team"
+      },
+      "name": "Send Exercise Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        950,
+        300
+      ],
+      "credentials": {
+        "smtp": "Your SMTP Credentials"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return items;\n"
+      },
+      "name": "Start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Get User Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get User Profile": {
+      "main": [
+        [
+          {
+            "node": "Generate Personalized Exercises",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Personalized Exercises": {
+      "main": [
+        [
+          {
+            "node": "Log Exercises to Google Sheets",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Exercise Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
