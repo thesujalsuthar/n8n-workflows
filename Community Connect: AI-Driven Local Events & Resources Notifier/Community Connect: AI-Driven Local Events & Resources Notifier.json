@@ -1,0 +1,339 @@
+{
+  "name": "AI-Powered Local Community Resource Finder and Event Notifier",
+  "nodes": [
+    {
+      "parameters": {
+        "functionCode": "const { location, interests } = JSON.parse(items[0].json.input);\nreturn [{ json: { location, interests } }];"
+      },
+      "name": "Extract User Input",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.positionstack.com/v1/forward",
+        "method": "GET",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "access_key",
+              "value": "YOUR_POSITIONSTACK_API_KEY"
+            },
+            {
+              "name": "query",
+              "value": "={{$json[\"location\"]}}"
+            },
+            {
+              "name": "limit",
+              "value": "1"
+            }
+          ]
+        },
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Geocode Location",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const data = $json.data[0];\nif (!data) {\n  throw new Error('Location not found');\n}\nreturn [{\n  json: {\n    latitude: data.latitude,\n    longitude: data.longitude,\n    interests: $items(\"Extract User Input\")[0].json.interests\n  }\n}];"
+      },
+      "name": "Parse Geocode Result",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://www.eventbriteapi.com/v3/events/search/",
+        "method": "GET",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "token",
+              "value": "YOUR_EVENTBRITE_API_KEY"
+            },
+            {
+              "name": "location.latitude",
+              "value": "={{$json[\"latitude\"]}}"
+            },
+            {
+              "name": "location.longitude",
+              "value": "={{$json[\"longitude\"]}}"
+            },
+            {
+              "name": "q",
+              "value": "={{$json[\"interests\"].join(',')}}"
+            },
+            {
+              "name": "expand",
+              "value": "venue"
+            },
+            {
+              "name": "sort_by",
+              "value": "date"
+            },
+            {
+              "name": "start_date.range_start",
+              "value": "={{(new Date()).toISOString()}}"
+            }
+          ]
+        },
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Search Events",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        850,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const events = $json.events.map(event => ({\n  id: event.id,\n  name: event.name.text,\n  start: event.start.local,\n  venue: event.venue ? event.venue.address.localized_address_display : 'N/A',\n  url: event.url\n}));\nreturn [{ json: { events } }];"
+      },
+      "name": "Parse Eventbrite Events",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const location = $json;\n// Mock community resources data - this could be replaced with a real API call\nconst sampleResources = [\n  { name: 'Local Food Bank', category: 'Food', address: '123 Elm St', phone: '555-1234' },\n  { name: 'Neighborhood Library', category: 'Education', address: '456 Maple Ave', phone: '555-5678' },\n  { name: 'Community Health Clinic', category: 'Health', address: '789 Oak Rd', phone: '555-8765' }\n];\n\n// Filter resources based on interests\nconst interests = $items(\"Extract User Input\")[0].json.interests;\nconst filteredResources = sampleResources.filter(resource =>\n  interests.some(interest => resource.category.toLowerCase().includes(interest.toLowerCase()))\n);\n\nreturn [{ json: { filteredResources } }];"
+      },
+      "name": "Filter Community Resources",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const events = $items(\"Parse Eventbrite Events\")[0].json.events;\nconst resources = $items(\"Filter Community Resources\")[0].json.filteredResources;\n\nlet message = 'Here are some upcoming community events based on your interests:\\n';\nif (events.length === 0) {\n  message += 'No upcoming events found.\\n';\n} else {\n  events.forEach(event => {\n    message += `- ${event.name} on ${new Date(event.start).toLocaleDateString()} at ${event.venue}\\n  More info: ${event.url}\\n`;\n  });\n}\n\nmessage += '\\nLocal Community Resources:\\n';\nif (resources.length === 0) {\n  message += 'No relevant community resources found.\\n';\n} else {\n  resources.forEach(resource => {\n    message += `- ${resource.name} (${resource.category})\\n  Address: ${resource.address}\\n  Phone: ${resource.phone}\\n`;\n  });\n}\n\nreturn [{ json: { notificationMessage: message } }];"
+      },
+      "name": "Prepare Notification Message",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "no-reply@communityfinder.app",
+        "toEmail": "={{$json[\"userEmail\"]}}",
+        "subject": "Your Local Community Events and Resources",
+        "text": "={{$json[\"notificationMessage\"]}}"
+      },
+      "name": "Send Email Notification",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{\n  json: {\n    userEmail: $json.userEmail || \"user@example.com\",\n    input: {\n      location: $json.location || \"New York, NY\",\n      interests: $json.interests || [\"health\", \"education\"]\n    }\n  }\n}];"
+      },
+      "name": "Start - Hardcoded Input",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        50,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const msg = `Reminder: You have upcoming community events and volunteer opportunities matching your interests! Check your email for details.`;\nreturn [{ json: { message: msg, email: $json.userEmail || \"user@example.com\" } }];"
+      },
+      "name": "Prepare Reminder Message",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "to": "={{$json[\"email\"]}}",
+        "message": "={{$json[\"message\"]}}"
+      },
+      "name": "Send Reminder Notification",
+      "type": "n8n-nodes-base.pushbullet",
+      "typeVersion": 1,
+      "position": [
+        1650,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "triggerTimesUi": {
+          "triggerTimes": [
+            {
+              "hour": 9,
+              "minute": 0
+            }
+          ]
+        },
+        "triggerLimit": 0
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        450
+      ]
+    }
+  ],
+  "connections": {
+    "Start - Hardcoded Input": {
+      "main": [
+        [
+          {
+            "node": "Extract User Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract User Input": {
+      "main": [
+        [
+          {
+            "node": "Geocode Location",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Geocode Location": {
+      "main": [
+        [
+          {
+            "node": "Parse Geocode Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Geocode Result": {
+      "main": [
+        [
+          {
+            "node": "Search Events",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Filter Community Resources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Events": {
+      "main": [
+        [
+          {
+            "node": "Parse Eventbrite Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Eventbrite Events": {
+      "main": [
+        [
+          {
+            "node": "Prepare Notification Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Community Resources": {
+      "main": [
+        [
+          {
+            "node": "Prepare Notification Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Notification Message": {
+      "main": [
+        [
+          {
+            "node": "Send Email Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Daily Trigger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Prepare Reminder Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Reminder Message": {
+      "main": [
+        [
+          {
+            "node": "Send Reminder Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {}
+}
