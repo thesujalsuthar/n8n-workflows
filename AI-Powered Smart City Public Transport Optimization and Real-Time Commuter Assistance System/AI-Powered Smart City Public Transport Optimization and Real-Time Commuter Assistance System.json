@@ -1,0 +1,246 @@
+{
+  "name": "AI-Powered Smart City Public Transport Optimization and Real-Time Commuter Assistance System",
+  "nodes": [
+    {
+      "parameters": {
+        "resource": "GET",
+        "url": "https://api.publictransport.example.com/realtime/routes",
+        "queryParametersUi": {
+          "parameter": []
+        },
+        "options": {}
+      },
+      "name": "Fetch Public Transport Real-Time Data",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        200,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "GET",
+        "url": "https://api.traffic.example.com/v1/current_conditions",
+        "queryParametersUi": {
+          "parameter": []
+        },
+        "options": {}
+      },
+      "name": "Fetch Traffic Conditions",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "GET",
+        "url": "https://api.commuterpreferences.example.com/v1/preferences",
+        "authentication": {
+          "type": "headerAuth",
+          "headerAuth": {
+            "name": "Authorization",
+            "value": "Bearer {{ $credentials.commuterPrefApiToken }}"
+          }
+        }
+      },
+      "name": "Fetch Commuter Preferences",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        200,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const publicTransportData = items[0].json;\nconst trafficData = items[1].json;\nconst commuterPrefs = items[2].json;\n\n// Simple merge example, real implementation would run complex optimization algorithms\n// Example: prioritize routes with less traffic and commuter preferred modes\n\nfunction optimizeRoutes(transportData, trafficData, preferences) {\n  const optimizedRoutes = transportData.routes.map(route => {\n    const trafficInfo = trafficData.conditions.find(cond => cond.routeId === route.id) || {};\n    const preferredMode = preferences.mode || 'bus';\n\n    const delay = trafficInfo.delayMinutes || 0;\n    const routeScore = (route.mode === preferredMode ? 10 : 5) - delay;\n\n    return {\n      routeId: route.id,\n      mode: route.mode,\n      estimatedDelay: delay,\n      score: routeScore,\n      stops: route.stops\n    };\n  });\n\n  // Sort routes by score descending\n  optimizedRoutes.sort((a,b) => b.score - a.score);\n  return optimizedRoutes;\n}\n\nconst optimizedRoutes = optimizeRoutes(publicTransportData, trafficData, commuterPrefs);\n\nreturn [{ json: { optimizedRoutes } }];"
+      },
+      "name": "Optimize Routes and Predict Delays",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const optimizedRoutes = items[0].json.optimizedRoutes;\nconst preferences = items[1].json;\n\nfunction createPersonalizedSuggestions(routes, prefs) {\n  const suggestions = routes.slice(0,3).map(route => {\n    let alert = '';\n    if (route.estimatedDelay > 5) {\n      alert = `⚠️ Delay expected: ${route.estimatedDelay} min`;\n    }\n    return {\n      routeId: route.routeId,\n      mode: route.mode,\n      message: `Recommended route by ${route.mode}`,\n      alert\n    };\n  });\n  return suggestions;\n}\n\nconst suggestions = createPersonalizedSuggestions(optimizedRoutes, preferences);\n\nreturn [{ json: { suggestions } }];"
+      },
+      "name": "Generate Personalized Travel Suggestions and Alerts",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "GET",
+        "url": "https://api.github.com/repos/yourorg/yourrepo/contents/",
+        "options": {},
+        "authentication": "oAuth2"
+      },
+      "name": "Check Existing GitHub Repository Content",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        100,
+        700
+      ],
+      "credentials": {
+        "oAuth2": {
+          "id": "1",
+          "name": "GitHub OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const files = items[0].json;\nconst workflowName = 'AI-Powered Smart City Public Transport Optimization and Real-Time Commuter Assistance System';\n\nconst exists = files.some(file => file.name.toLowerCase().includes(workflowName.toLowerCase()));\n\nif (exists) {\n  throw new Error('Workflow with this topic already exists in the repository. Aborting to prevent duplicates.');\n}\n\nreturn items;"
+      },
+      "name": "Validate Workflow Uniqueness",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        350,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "path": "/workflows/ai_smart_city_transport_optimization.json",
+        "content": "={{ $json }}",
+        "branch": "main",
+        "commitMessage": "Add AI-Powered Smart City Public Transport Optimization workflow",
+        "author": {
+          "name": "n8n Bot",
+          "email": "n8n-bot@example.com"
+        }
+      },
+      "name": "Save Workflow to GitHub",
+      "type": "github",
+      "typeVersion": 1,
+      "position": [
+        600,
+        700
+      ],
+      "credentials": {
+        "githubApi": {
+          "id": "2",
+          "name": "GitHub API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "message": "Your personalized travel suggestions and alerts are ready.",
+        "additionalFields": {}
+      },
+      "name": "Send Notification",
+      "type": "telegram",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "3",
+          "name": "Telegram API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Fetch Public Transport Real-Time Data": {
+      "main": [
+        [
+          {
+            "node": "Optimize Routes and Predict Delays",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Traffic Conditions": {
+      "main": [
+        [
+          {
+            "node": "Optimize Routes and Predict Delays",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch Commuter Preferences": {
+      "main": [
+        [
+          {
+            "node": "Optimize Routes and Predict Delays",
+            "type": "main",
+            "index": 2
+          },
+          {
+            "node": "Generate Personalized Travel Suggestions and Alerts",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Optimize Routes and Predict Delays": {
+      "main": [
+        [
+          {
+            "node": "Generate Personalized Travel Suggestions and Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Personalized Travel Suggestions and Alerts": {
+      "main": [
+        [
+          {
+            "node": "Send Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Existing GitHub Repository Content": {
+      "main": [
+        [
+          {
+            "node": "Validate Workflow Uniqueness",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Workflow Uniqueness": {
+      "main": [
+        [
+          {
+            "node": "Save Workflow to GitHub",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
