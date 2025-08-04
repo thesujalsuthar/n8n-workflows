@@ -1,0 +1,230 @@
+{
+  "name": "AI-Powered Daily Digest of Personalized Health and Wellness Tips",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://nutrition-api.example.com/daily-tips",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Fetch Nutrition Tips",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://exercise-api.example.com/daily-tips",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Fetch Exercise Tips",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://mentalhealth-rss.example.com/feed",
+        "responseFormat": "xml",
+        "options": {}
+      },
+      "name": "Fetch Mental Health RSS",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://generalwellness-api.example.com/daily-tips",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Fetch General Wellness Tips",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "propertyName": "rssContent",
+        "propertyValue": "={{$json[\"body\"]}}"
+      },
+      "name": "Set Mental Health XML Content",
+      "type": "set",
+      "typeVersion": 1,
+      "position": [
+        450,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "xmlToJson",
+        "value": "={{$json[\"rssContent\"]}}"
+      },
+      "name": "Parse Mental Health RSS XML",
+      "type": "xmlToJson",
+      "typeVersion": 1,
+      "position": [
+        650,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "append",
+        "values": {
+          "string": [
+            "={{$node[\"Fetch Nutrition Tips\"].json[\"tips\"]}}",
+            "{{$node[\"Fetch Exercise Tips\"].json[\"tips\"]}}",
+            "={{$node[\"Parse Mental Health RSS XML\"].json[\"rss\"]?.channel?.item || []}}",
+            "{{$node[\"Fetch General Wellness Tips\"].json[\"tips\"]}}"
+          ]
+        }
+      },
+      "name": "Aggregate All Tips",
+      "type": "merge",
+      "typeVersion": 1,
+      "position": [
+        850,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "prompt": "You are an expert health and wellness assistant. Given the user's profile: {{$json[\"userProfile\"]}}, and the aggregated tips: {{$json[\"allTips\"]}}, curate and summarize a personalized daily digest of health and wellness tips tailored for the user. The digest should be concise, actionable, and engaging.",
+        "temperature": 0.7,
+        "maxTokens": 800
+      },
+      "name": "AI Curate & Summarize Tips",
+      "type": "openai",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "no-reply@healthdigest.ai",
+        "toEmail": "={{$json[\"userProfile\"].email}}",
+        "subject": "Your AI-Powered Daily Health & Wellness Digest",
+        "text": "={{$node[\"AI Curate & Summarize Tips\"].json[\"choices\"][0][\"message\"][\"content\"]}}"
+      },
+      "name": "Send Digest Email",
+      "type": "emailSend",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        450
+      ]
+    }
+  ],
+  "connections": {
+    "Fetch Mental Health RSS": {
+      "main": [
+        [
+          {
+            "node": "Set Mental Health XML Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Mental Health XML Content": {
+      "main": [
+        [
+          {
+            "node": "Parse Mental Health RSS XML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Nutrition Tips": {
+      "main": [
+        [
+          {
+            "node": "Aggregate All Tips",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Exercise Tips": {
+      "main": [
+        [
+          {
+            "node": "Aggregate All Tips",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Parse Mental Health RSS XML": {
+      "main": [
+        [
+          {
+            "node": "Aggregate All Tips",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Fetch General Wellness Tips": {
+      "main": [
+        [
+          {
+            "node": "Aggregate All Tips",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Aggregate All Tips": {
+      "main": [
+        [
+          {
+            "node": "AI Curate & Summarize Tips",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Curate & Summarize Tips": {
+      "main": [
+        [
+          {
+            "node": "Send Digest Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "tags": []
+}
