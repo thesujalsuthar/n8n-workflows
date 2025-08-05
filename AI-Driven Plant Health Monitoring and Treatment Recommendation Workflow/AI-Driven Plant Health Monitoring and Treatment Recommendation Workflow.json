@@ -1,0 +1,224 @@
+{
+  "name": "AI-Powered Plant Disease Detection and Treatment Recommendation System",
+  "nodes": [
+    {
+      "parameters": {
+        "binaryData": true,
+        "options": {},
+        "webhookPath": "upload-plant-image",
+        "httpMethod": "POST"
+      },
+      "name": "Webhook - Image Upload",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "genericAuth",
+        "url": "https://api.example-plant-disease.ai/v1/detect",
+        "method": "POST",
+        "responseFormat": "json",
+        "jsonParameters": true,
+        "options": {
+          "bodyContentType": "form-data"
+        },
+        "bodyParametersJson": "={\n  \"image\": {\n    \"data\": $binaryData[\"image\"].data,\n    \"mimeType\": $binaryData[\"image\"].mimeType\n  }\n}"
+      },
+      "name": "Disease Detection API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        520,
+        300
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "1"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const diseaseData = items[0].json.disease;\n// Example mapping, expand with more diseases and treatments\nconst treatmentMap = {\n  \"Powdery Mildew\": {\n    \"treatment\": \"Apply sulfur-based fungicide weekly and ensure proper air circulation.\",\n    \"severity\": \"moderate\"\n  },\n  \"Leaf Spot\": {\n    \"treatment\": \"Remove affected leaves and use copper fungicide.\",\n    \"severity\": \"mild\"\n  },\n  \"Blight\": {\n    \"treatment\": \"Remove infected plants and apply appropriate bactericide.\",\n    \"severity\": \"severe\"\n  },\n  \"Healthy\": {\n    \"treatment\": \"No treatment needed. Plant is healthy.\",\n    \"severity\": \"none\"\n  }\n};\n\nconst diseaseName = diseaseData.name || \"Healthy\";\nconst treatmentInfo = treatmentMap[diseaseName] || {\n  treatment: \"Consult an expert for diagnosis.\",\n  severity: \"unknown\"\n};\n\nitems[0].json.treatmentRecommendation = treatmentInfo.treatment;\nitems[0].json.diseaseSeverity = treatmentInfo.severity;\nitems[0].json.diseaseName = diseaseName;\nreturn items;"
+      },
+      "name": "Generate Treatment Recommendation",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        760,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": "plant_health_data",
+        "table": "history",
+        "columns": [
+          "timestamp",
+          "disease_name",
+          "severity",
+          "treatment",
+          "image_reference",
+          "raw_result"
+        ],
+        "values": "={{\n  Date.now(),\n  $json[\"diseaseName\"],\n  $json[\"diseaseSeverity\"],\n  $json[\"treatmentRecommendation\"],\n  $binaryData['image'] ? $binaryData['image'].fileName || 'uploaded_image' : 'uploaded_image',\n  JSON.stringify($json.disease)\n}}"
+      },
+      "name": "Store Historical Data",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toEmail": "={{$json[\"userEmail\"] || \"user@example.com\"}}",
+        "subject": "Plant Disease Detection Alert: {{$json[\"diseaseName\"]}} Detected",
+        "text": "Dear user,\n\nOur AI system has detected the following plant disease from your uploaded picture:\n\nDisease: {{$json[\"diseaseName\"]}}\nSeverity: {{$json[\"diseaseSeverity\"]}}\nTreatment Recommendation:\n{{$json[\"treatmentRecommendation\"]}}\n\nPlease take necessary steps as advised.\n\nBest regards,\nPlant Health AI System"
+      },
+      "name": "Send Email Notification",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1240,
+        300
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "3"
+        }
+      },
+      "typeOptions": {
+        "waitUntilSent": true
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "returnAll": true,
+        "schema": "plant_health_data",
+        "table": "history",
+        "options": {}
+      },
+      "name": "Fetch Historical Data",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        520,
+        600
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const history = items[0].json;\n// Prepare trend analysis data structure, example counts by disease\nconst counts = {};\n\nfor (const record of history) {\n  const disease = record.disease_name || 'Unknown';\n  counts[disease] = (counts[disease] || 0) + 1;\n}\n\nreturn [{ json: { trendAnalysis: counts } }];"
+      },
+      "name": "Analyze Trends",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        760,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "to": "={{$json[\"userEmail\"] || \"user@example.com\"}}",
+        "message": "Here is the latest plant health trend analysis based on your uploads:\n\n{{$json[\"trendAnalysis\"] | json}}",
+        "notificationPriority": "high"
+      },
+      "name": "Send Trend Notification",
+      "type": "n8n-nodes-base.pushBullet",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        600
+      ],
+      "credentials": {
+        "pushbulletApi": {
+          "id": "4"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook - Image Upload": {
+      "main": [
+        [
+          {
+            "node": "Disease Detection API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Disease Detection API": {
+      "main": [
+        [
+          {
+            "node": "Generate Treatment Recommendation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Treatment Recommendation": {
+      "main": [
+        [
+          {
+            "node": "Store Historical Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Email Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Historical Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze Trends",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Trends": {
+      "main": [
+        [
+          {
+            "node": "Send Trend Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
