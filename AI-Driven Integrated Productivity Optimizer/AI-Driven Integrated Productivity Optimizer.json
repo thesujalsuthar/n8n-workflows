@@ -1,0 +1,204 @@
+{
+  "name": "AI-Powered Personal Productivity and Focus Enhancer",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "calendarId": "primary",
+        "options": {},
+        "returnAll": true
+      },
+      "name": "Google Calendar",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "",
+          "name": "Google Calendar API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getTasks",
+        "filterBy": "all",
+        "returnAll": true,
+        "taskListId": "primary"
+      },
+      "name": "Todoist",
+      "type": "n8n-nodes-base.todoist",
+      "typeVersion": 1,
+      "position": [
+        250,
+        450
+      ],
+      "credentials": {
+        "todoistApi": {
+          "id": "",
+          "name": "Todoist API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "events": [
+          {
+            "to": "string",
+            "from": "string",
+            "zoom": 30,
+            "eventId": "string",
+            "calendarId": "string"
+          }
+        ]
+      },
+      "name": "Trello",
+      "type": "n8n-nodes-base.trello",
+      "typeVersion": 1,
+      "position": [
+        250,
+        600
+      ],
+      "credentials": {
+        "trelloApi": {
+          "id": "",
+          "name": "Trello API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "text",
+        "operation": "chat",
+        "model": "gpt-4",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an assistant that analyzes user calendar events, tasks, and focus patterns to provide personalized productivity tips, task prioritization, break reminders, and focus music recommendations."
+          },
+          {
+            "role": "user",
+            "content": "Analyze the following calendar events and tasks, then generate: 1) a prioritized to-do list 2) personalized productivity tips 3) scheduled break reminders 4) ambient focus music recommendations.\n\nCalendar Events: {{$json[\"googleCalendar\"]}}\nTasks: {{$json[\"todoist\"]}}\nTrello Cards: {{$json[\"trello\"]}}"
+          }
+        ],
+        "options": {}
+      },
+      "name": "AI Analysis and Recommendations",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        600,
+        450
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "text": "{{$node[\"AI Analysis and Recommendations\"].json.choices[0].message.content}}",
+        "chatId": "user-chat-id-placeholder"
+      },
+      "name": "Send Recommendations",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        900,
+        450
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram Bot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "track",
+        "operation": "create",
+        "trackData": {
+          "properties": {
+            "calendarData": "={{$json[\"googleCalendar\"]}}",
+            "taskData": "={{$json[\"todoist\"]}}",
+            "trelloData": "={{$json[\"trello\"]}}",
+            "analysisResult": "={{$node[\"AI Analysis and Recommendations\"].json.choices[0].message.content}}"
+          }
+        }
+      },
+      "name": "Log Analysis",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        900,
+        600
+      ],
+      "credentials": {
+        "mongoDb": {
+          "id": "",
+          "name": "MongoDB Account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Google Calendar": {
+      "main": [
+        [
+          {
+            "node": "AI Analysis and Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Todoist": {
+      "main": [
+        [
+          {
+            "node": "AI Analysis and Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trello": {
+      "main": [
+        [
+          {
+            "node": "AI Analysis and Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Analysis and Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Send Recommendations",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
