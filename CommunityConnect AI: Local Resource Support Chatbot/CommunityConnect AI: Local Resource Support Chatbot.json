@@ -1,0 +1,214 @@
+{
+  "name": "AI-Powered Local Community Support Chatbot and Resource Matcher",
+  "nodes": [
+    {
+      "parameters": {
+        "functionCode": "return [{ json: { sessionId: $json[\"sessionId\"] || $items(\"Trigger\").length ? $items(\"Trigger\")[0].json.sessionId : undefined, userMessage: $json[\"message\"] || $items(\"Trigger\").length ? $items(\"Trigger\")[0].json.message : undefined} }];"
+      },
+      "name": "Initialize Session and Message",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [300, 200]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "prompt": "You are an AI assistant specialized in understanding user inquiries about local community resources such as food banks, shelters, health clinics, and social services. Based on the user's message and provided location, extract their needs (such as food assistance, shelter, health care) and location details (city, zip code, or coordinates) and respond with a JSON object containing \"needs\" (an array of resource categories they are seeking) and \"location\" (the user's intended location for support).\n\nUser Message: {{ $json[\"userMessage\"] }}\n\nRespond ONLY with a JSON string with the format:\n{\n  \"needs\": [\"need1\", \"need2\"],\n  \"location\": \"location string\"\n}",
+        "options": {}
+      },
+      "name": "NLP - Extract Needs and Location",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [600, 200]
+    },
+    {
+      "parameters": {
+        "functionCode": "const aiResponse = JSON.parse(items[0].json.choices[0].message.content);\nreturn [{ json: { needs: aiResponse.needs || [], location: aiResponse.location || \"\" } }];"
+      },
+      "name": "Parse AI Needs and Location",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "functionCode": "const needs = $json[\"needs\"];\nconst location = $json[\"location\"];\n\n// Prepare an array to hold all resource fetch promises\n\nconst resourceCalls = [];\n\n// For demo, assume we have REST endpoints for each resource type that accept location and return resources\n\nif (needs.includes(\"food assistance\")) {\n  resourceCalls.push({ type: \"food_banks\", url: `https://api.localresources.org/foodbanks?location=${encodeURIComponent(location)}` });\n}\n\nif (needs.includes(\"shelter\")) {\n  resourceCalls.push({ type: \"shelters\", url: `https://api.localresources.org/shelters?location=${encodeURIComponent(location)}` });\n}\n\nif (needs.includes(\"health care\")) {\n  resourceCalls.push({ type: \"health_clinics\", url: `https://api.localresources.org/healthclinics?location=${encodeURIComponent(location)}` });\n}\n\nif (needs.includes(\"social services\")) {\n  resourceCalls.push({ type: \"social_services\", url: `https://api.localresources.org/socialservices?location=${encodeURIComponent(location)}` });\n}\n\nreturn [{ json: { resourceCalls } }];"
+      },
+      "name": "Prepare Resource API Calls",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1200, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{$json[\"url\"]}}",
+        "responseFormat": "json",
+        "options": {
+          "noThrottle": true
+        }
+      },
+      "name": "Fetch Local Resources",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [1500, 250],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "",
+          "name": ""
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const resources = items.map(item => {\n  return { type: item.json.type, data: item.json.resources || item.json };\n});\nreturn [{ json: { resources } }];"
+      },
+      "name": "Aggregate Resources",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1800, 250]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "prompt": "You are an AI assistant tasked with providing the user with a friendly, clear summary of the local community resources found based on their needs and location.\n\nResources JSON:\n{{ $json[\"resources\"] }}\n\nPlease create a concise and helpful response message listing recommended resources by category for the user. Include contact info and a brief description for each resource if possible.\n\nUser needs: {{ $json[\"needs\"] }}\nUser location: {{ $json[\"location\"] }}\n\nRespond with only the final message text to send back to the user.",
+        "options": {}
+      },
+      "name": "Create User Response Message",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [2100, 250]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: { responseMessage: $json.choices[0].message.content } }];"
+      },
+      "name": "Extract Final Response Text",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [2400, 250]
+    },
+    {
+      "parameters": {
+        "event": "message",
+        "path": "chat"
+      },
+      "name": "Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [100, 200]
+    },
+    {
+      "parameters": {
+        "text": "={{$json[\"responseMessage\"]}}",
+        "chatId": "={{$json[\"sessionId\"]}}"
+      },
+      "name": "Send Chatbot Reply",
+      "type": "n8n-nodes-base.customApi",
+      "typeVersion": 1,
+      "position": [2700, 250]
+    }
+  ],
+  "connections": {
+    "Trigger": {
+      "main": [
+        [
+          {
+            "node": "Initialize Session and Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Initialize Session and Message": {
+      "main": [
+        [
+          {
+            "node": "NLP - Extract Needs and Location",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NLP - Extract Needs and Location": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Needs and Location",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Needs and Location": {
+      "main": [
+        [
+          {
+            "node": "Prepare Resource API Calls",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Resource API Calls": {
+      "main": [
+        [
+          {
+            "node": "Fetch Local Resources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Local Resources": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Resources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Resources": {
+      "main": [
+        [
+          {
+            "node": "Create User Response Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create User Response Message": {
+      "main": [
+        [
+          {
+            "node": "Extract Final Response Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Final Response Text": {
+      "main": [
+        [
+          {
+            "node": "Send Chatbot Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {}
+}
