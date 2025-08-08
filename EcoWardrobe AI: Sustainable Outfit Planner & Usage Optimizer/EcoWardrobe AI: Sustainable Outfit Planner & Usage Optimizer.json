@@ -1,0 +1,175 @@
+{
+  "name": "Sustainable Style AI: Smart Outfit Planner & Wardrobe Optimizer",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "requestMethod": "GET",
+        "url": "https://api.weatherapi.com/v1/current.json",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "q",
+              "value": "={{$json[\"location\"]}}"
+            },
+            {
+              "name": "key",
+              "value": "YOUR_WEATHERAPI_KEY"
+            }
+          ]
+        },
+        "responseFormat": "json"
+      },
+      "name": "Get Climate Data",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "webhookPath": "user-preferences",
+        "httpMethod": "POST"
+      },
+      "name": "Receive User Preferences",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        50,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const wardrobe = $json.wardrobe;\nconst preferences = $json.preferences;\nconst climate = $json.climate;\n\n// Filter wardrobe items by eco-friendly label\nconst ecoFriendlyItems = wardrobe.filter(item => item.isEcoFriendly);\n\n// Filter by user's style preferences\nconst styleFiltered = ecoFriendlyItems.filter(item => preferences.styles.includes(item.style));\n\n// Filter by temperature range from climate data\nconst temp = climate.current.temp_c;\nconst weatherFiltered = styleFiltered.filter(item => {\n  if(item.minTemp && item.maxTemp){\n    return temp >= item.minTemp && temp <= item.maxTemp;\n  }\n  return true;\n});\n\n// Simple optimization: sort by timesWorn ascending (wear less used items first)\nweatherFiltered.sort((a,b) => a.timesWorn - b.timesWorn);\n\n// Return top 3 outfit recommendations\nreturn [{json: {recommendations: weatherFiltered.slice(0,3)}}];"
+      },
+      "name": "Generate Eco-Friendly Outfit Recommendations",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{json: {\n  userId: $json.userId,\n  usedItems: $json.recommendations.map(item => item.id)\n}}];"
+      },
+      "name": "Prepare Usage Optimization Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "resource": "item",
+        "upsertKey": "id",
+        "collection": "wardrobeItems",
+        "fieldsToUpdate": {
+          "timesWorn": "={{ $json.timesWorn + 1 }}"
+        },
+        "updateFilter": {
+          "id": "={{$json}}"
+        }
+      },
+      "name": "Update Wardrobe Usage",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ],
+      "credentials": {
+        "mongoDb": {
+          "database": "wardrobeDB",
+          "connectionString": "YOUR_MONGODB_CONNECTION_STRING"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getMany",
+        "resource": "item",
+        "collection": "wardrobeItems",
+        "query": "={ \"userId\": $json.userId }"
+      },
+      "name": "Load User Wardrobe",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ],
+      "credentials": {
+        "mongoDb": {
+          "database": "wardrobeDB",
+          "connectionString": "YOUR_MONGODB_CONNECTION_STRING"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Receive User Preferences": {
+      "main": [
+        [
+          {
+            "node": "Load User Wardrobe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load User Wardrobe": {
+      "main": [
+        [
+          {
+            "node": "Get Climate Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Climate Data": {
+      "main": [
+        [
+          {
+            "node": "Generate Eco-Friendly Outfit Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Eco-Friendly Outfit Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Prepare Usage Optimization Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Usage Optimization Data": {
+      "main": [
+        [
+          {
+            "node": "Update Wardrobe Usage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
