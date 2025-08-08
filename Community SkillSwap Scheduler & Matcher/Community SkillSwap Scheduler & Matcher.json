@@ -1,0 +1,241 @@
+{
+  "name": "AI-Powered Local Community Skill Sharing & Bartering Platform",
+  "nodes": [
+    {
+      "parameters": {
+        "collection": "users",
+        "operation": "find",
+        "query": {},
+        "options": {}
+      },
+      "name": "Get All Users",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        250,
+        250
+      ],
+      "credentials": {
+        "mongodb": "MongoDB Credential"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const listings = items.map(item => item.json);\n\nconst offers = {};\nconst needs = {};\n\nfor (const listing of listings) {\n  const userId = listing._id;\n  if (listing.skills_offered) {\n    for (const skill of listing.skills_offered) {\n      if (!offers[skill.toLowerCase()]) offers[skill.toLowerCase()] = [];\n      offers[skill.toLowerCase()].push(userId);\n    }\n  }\n  if (listing.skills_needed) {\n    for (const skill of listing.skills_needed) {\n      if (!needs[skill.toLowerCase()]) needs[skill.toLowerCase()] = [];\n      needs[skill.toLowerCase()].push(userId);\n    }\n  }\n}\n\nconst matches = [];\n\n// find matches where user A offers a skill user B needs, and user B offers skill user A needs\nfor (const skill in offers) {\n  if (!needs[skill]) continue;\n  for (const userOfferId of offers[skill]) {\n    for (const userNeedId of needs[skill]) {\n      if (userOfferId === userNeedId) continue;\n\n      const userOffer = listings.find(l => l._id === userOfferId);\n      const userNeed = listings.find(l => l._id === userNeedId);\n\n      if (!userOffer || !userNeed) continue;\n\n      // Check if reciprocal skill exists\n      const reciprocalSkills = userOffer.skills_needed ? userOffer.skills_needed.map(s => s.toLowerCase()) : [];\n      const userNeedOffers = userNeed.skills_offered ? userNeed.skills_offered.map(s => s.toLowerCase()) : [];\n\n      const reciprocal = reciprocalSkills.some(s => userNeedOffers.includes(s));\n\n      if (reciprocal) {\n        matches.push({\n          userA: {\n            id: userOfferId,\n            offers: skill,\n            needs: reciprocalSkills.filter(s => userNeedOffers.includes(s))\n          },\n          userB: {\n            id: userNeedId,\n            offers: reciprocalSkills.filter(s => userNeedOffers.includes(s)),\n            needs: skill\n          }\n        });\n      }\n    }\n  }\n}\n\nreturn matches.map(match => ({ json: match }));"
+      },
+      "name": "Match Users for Skill Exchange",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "collection": "users",
+        "operation": "findOne",
+        "query": "{\"_id\": {$oid: {{$json[\"userA\"].id}}}}",
+        "options": {}
+      },
+      "name": "Get User A Details",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        750,
+        150
+      ],
+      "credentials": {
+        "mongodb": "MongoDB Credential"
+      }
+    },
+    {
+      "parameters": {
+        "collection": "users",
+        "operation": "findOne",
+        "query": "{\"_id\": {$oid: {{$json[\"userB\"].id}}}}",
+        "options": {}
+      },
+      "name": "Get User B Details",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        750,
+        350
+      ],
+      "credentials": {
+        "mongodb": "MongoDB Credential"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const userA = items.find(i => i.parameter === 'userA').json;\nconst userB = items.find(i => i.parameter === 'userB').json;\nconst match = items.find(i => i.parameter === 'match').json;\n\nreturn [{\n  json: {\n    to: [userA.email, userB.email],\n    subject: `Skill Exchange Match: ${match.userA.offers} ↔ ${match.userB.offers}`,\n    text: `Hello ${userA.name} and ${userB.name},\\n\\nWe have found a skill exchange match for you!\\n\\n${userA.name} offers: ${match.userA.offers}\\nNeeds: ${match.userA.needs.join(\", \")}\\n\\n${userB.name} offers: ${match.userB.offers}\\nNeeds: ${match.userB.needs}\\n\\nPlease coordinate your skill sharing session and update scheduling details in the platform.\\n\\nHappy collaborating!\\nYour Community Skill Sharing Platform Team`\n  }\n}];"
+      },
+      "name": "Prepare Notification Email",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "community@n8n.io",
+        "toEmail": "={{$json[\"to\"].join(\",\")}}",
+        "subject": "={{$json[\"subject\"]}}",
+        "text": "={{$json[\"text\"]}}"
+      },
+      "name": "Send Match Notification Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        250
+      ],
+      "credentials": {
+        "smtp": "SMTP Credential"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const match = items[0].json;\n\n// Set default scheduling proposal (next available Saturday 10AM)\nconst now = new Date();\nconst dayOfWeek = now.getDay();\nconst daysUntilSaturday = (6 + 7 - dayOfWeek) % 7 || 7;\nconst nextSaturday = new Date(now);\nnextSaturday.setDate(now.getDate() + daysUntilSaturday);\nnextSaturday.setHours(10, 0, 0, 0);\n\nreturn [{\n  json: {\n    match,\n    proposedDateTime: nextSaturday.toISOString()\n  }\n}];"
+      },
+      "name": "Propose Scheduling Date",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "calendarEvent",
+        "operation": "create",
+        "calendarId": "primary",
+        "summary": "Skill Sharing Session: {{$json[\"match\"].userA.id}} & {{$json[\"match\"].userB.id}}",
+        "description": "Skill Exchange between two users: {{$json[\"match\"].userA.offers}} and {{$json[\"match\"].userB.offers}}",
+        "start": "={{$json[\"proposedDateTime\"]}}",
+        "end": "={{new Date(new Date($json[\"proposedDateTime\"]).getTime()+60*60*1000).toISOString()}}"
+      },
+      "name": "Create Calendar Event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        450
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": "Google Calendar OAuth2"
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "community@n8n.io",
+        "toEmail": "={{[$json[\"match\"].userA.id, $json[\"match\"].userB.id].map(id => {\n  const user = \$items(\"Get All Users\").find(i => i.json._id === id);\n  return user ? user.json.email : null;\n}).filter(email => email !== null).join(\",\")}}",
+        "subject": "Skill Sharing Session Scheduled",
+        "text": "Hello,\n\nYour skill sharing session has been scheduled on {{$json[\"proposedDateTime\"]}}.\n\nPlease check your calendar for details.\n\nHappy sharing!\nCommunity Skill Sharing Platform"
+      },
+      "name": "Send Scheduling Confirmation Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        450
+      ],
+      "credentials": {
+        "smtp": "SMTP Credential"
+      }
+    }
+  ],
+  "connections": {
+    "Get All Users": {
+      "main": [
+        [
+          {
+            "node": "Match Users for Skill Exchange",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Match Users for Skill Exchange": {
+      "main": [
+        [
+          {
+            "node": "Get User A Details",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get User B Details",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Propose Scheduling Date",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get User A Details": {
+      "main": [
+        [
+          {
+            "node": "Prepare Notification Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get User B Details": {
+      "main": [
+        [
+          {
+            "node": "Prepare Notification Email",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Prepare Notification Email": {
+      "main": [
+        [
+          {
+            "node": "Send Match Notification Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Propose Scheduling Date": {
+      "main": [
+        [
+          {
+            "node": "Create Calendar Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Calendar Event": {
+      "main": [
+        [
+          {
+            "node": "Send Scheduling Confirmation Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
