@@ -1,0 +1,230 @@
+{
+  "name": "AI-Powered Smart Home Water Leak Detection & Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "deviceId": "={{$json[\"sensorId\"]}}",
+        "options": {}
+      },
+      "name": "Smart Water Sensor Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ],
+      "webhookId": "smart-water-sensor-webhook",
+      "webhookPath": "smart-water-sensor"
+    },
+    {
+      "parameters": {
+        "functionCode": "const data = items[0].json;\nconst leakDetected = data.leakDetected;\nreturn leakDetected ? items : [];"
+      },
+      "name": "Filter Leak Events",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "resource": "item",
+        "collectionId": "WaterLeakLogs",
+        "data": "={{{\n  sensorId: $json.sensorId,\n  leakDetected: $json.leakDetected,\n  timestamp: new Date().toISOString(),\n  location: $json.location || 'unknown',\n  severity: $json.severity || 'normal'\n}}}"
+      },
+      "name": "Log Leak Data",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        700,
+        300
+      ],
+      "credentials": {
+        "mongodb": {
+          "id": "mongodb_credentials_id",
+          "name": "MongoDB Credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "to": "={{$json.phoneNumber}}",
+        "message": "Alert: Water leak detected at {{$json.location || 'your home'}} sensor {{$json.sensorId}} at {{$json.timestamp}}. Please check immediately."
+      },
+      "name": "Send SMS Alert",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        950,
+        200
+      ],
+      "credentials": {
+        "twilioApi": {
+          "id": "twilio_credentials_id",
+          "name": "Twilio API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "smarthome@domain.com",
+        "toEmail": "alerts@domain.com",
+        "subject": "Water Leak Alert - Smart Home",
+        "text": "A water leak was detected at sensor {{$json.sensorId}} located at {{$json.location || 'unknown'}} on {{$json.timestamp}}.\n\nPlease take immediate action to prevent damage.\n\nSeverity: {{$json.severity || 'normal'}}"
+      },
+      "name": "Send Email Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        950,
+        400
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "email_smtp_credentials_id",
+          "name": "SMTP Email Credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "deviceId": "={{$json[\"sensorId\"]}}",
+        "command": "close_valve",
+        "options": {}
+      },
+      "name": "Trigger Water Shut-off Valve",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        950,
+        600
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "valve_http_credentials_id",
+          "name": "Water Valve HTTP Credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "find",
+        "resource": "item",
+        "collectionId": "WaterLeakLogs",
+        "options": {
+          "limit": 100,
+          "sort": {
+            "timestamp": -1
+          }
+        }
+      },
+      "name": "Fetch Leak History",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        200,
+        700
+      ],
+      "credentials": {
+        "mongodb": {
+          "id": "mongodb_credentials_id",
+          "name": "MongoDB Credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const leaks = items.map(i => i.json);\n\nconst byDay = {};\n\nleaks.forEach(leak => {\n  const day = leak.timestamp.slice(0, 10);\n  if (!byDay[day]) byDay[day] = 0;\n  byDay[day] += 1;\n});\n\nreturn Object.entries(byDay).map(([date, count]) => ({ json: { date, leakCount: count } }));"
+      },
+      "name": "Analyze Leak Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "data": "={{[{ title: 'Water Leak Analytics', data: items.map(item => item.json) }]}}",
+        "options": {}
+      },
+      "name": "Generate Analytics Dashboard Data",
+      "type": "n8n-nodes-base.htmlNode",
+      "typeVersion": 1,
+      "position": [
+        700,
+        700
+      ]
+    }
+  ],
+  "connections": {
+    "Smart Water Sensor Webhook": {
+      "main": [
+        [
+          {
+            "node": "Filter Leak Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Leak Events": {
+      "main": [
+        [
+          {
+            "node": "Log Leak Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send SMS Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Trigger Water Shut-off Valve",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Leak History": {
+      "main": [
+        [
+          {
+            "node": "Analyze Leak Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Leak Data": {
+      "main": [
+        [
+          {
+            "node": "Generate Analytics Dashboard Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
