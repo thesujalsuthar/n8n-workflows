@@ -1,0 +1,169 @@
+{
+  "name": "Eco-Efficient Commute Planner and Carbon Offset Scheduler",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.transitapp.com/v3/schedules",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "origin",
+              "value": "={{$json.origin}}"
+            },
+            {
+              "name": "destination",
+              "value": "={{$json.destination}}"
+            },
+            {
+              "name": "mode",
+              "value": "={{$json.mode}}" 
+            }
+          ]
+        }
+      },
+      "name": "Fetch Transit Schedules",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const modes = ['public_transit', 'biking', 'walking', 'ride_sharing'];\n\n// Sample average emission factors in kg CO2 per km\nconst emissionFactors = {\n  single_occupancy_car: 0.271,\n  public_transit: 0.089,\n  biking: 0,\n  walking: 0,\n  ride_sharing: 0.136\n};\n\nconst distances = $json.distances || {};\n\nlet results = [];\n\nmodes.forEach(mode => {\n  const distance = Number(distances[mode]) || 0;\n  const singleCarEmission = distance * emissionFactors.single_occupancy_car;\n  const modeEmission = distance * emissionFactors[mode];\n  const saved = singleCarEmission - modeEmission;\n  results.push({\n    mode,\n    distance,\n    emission: modeEmission,\n    savedCarbon: saved >= 0 ? saved : 0\n  });\n});\n\nreturn results.map(r => ({json: r}));"
+      },
+      "name": "Calculate Carbon Emissions",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "calendarId": "primary",
+        "options": {},
+        "event": {
+          "summary": "Purchase Carbon Offsets or Join Eco-friendly Activity",
+          "description": "Reminder based on your recent commute to help offset carbon emissions or participate in sustainable community activities.",
+          "start": "={{new Date(new Date().getTime() + 24*60*60*1000).toISOString()}}",
+          "end": "={{new Date(new Date().getTime() + 25*60*60*1000).toISOString()}}"
+        }
+      },
+      "name": "Schedule Offset Reminder",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1,
+      "position": [
+        750,
+        350
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": "Google Calendar Account"
+      }
+    },
+    {
+      "parameters": {
+        "message": "Based on your eco-efficient commute today, you saved approximately {{$json.savedCarbon.toFixed(2)}} kg CO2 compared to driving alone. Remember to purchase carbon offsets or participate in eco-conscious activities!",
+        "title": "Eco Commute Reminder",
+        "priority": "high"
+      },
+      "name": "Send Notification",
+      "type": "n8n-nodes-base.pushbullet",
+      "typeVersion": 1,
+      "position": [
+        750,
+        250
+      ],
+      "credentials": {
+        "pushbulletApi": "Pushbullet Account"
+      }
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "origin",
+              "value": ""
+            },
+            {
+              "name": "destination",
+              "value": ""
+            },
+            {
+              "name": "mode",
+              "value": "public_transit"
+            },
+            {
+              "name": "distances[public_transit]",
+              "value": "10"
+            },
+            {
+              "name": "distances[biking]",
+              "value": "5"
+            },
+            {
+              "name": "distances[walking]",
+              "value": "1"
+            },
+            {
+              "name": "distances[ride_sharing]",
+              "value": "8"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Commute Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        50,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Commute Input": {
+      "main": [
+        [
+          {
+            "node": "Fetch Transit Schedules",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Transit Schedules": {
+      "main": [
+        [
+          {
+            "node": "Calculate Carbon Emissions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Carbon Emissions": {
+      "main": [
+        [
+          {
+            "node": "Send Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Schedule Offset Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
