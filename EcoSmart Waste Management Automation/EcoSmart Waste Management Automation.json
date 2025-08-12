@@ -1,0 +1,181 @@
+{
+  "name": "Eco-Friendly Smart Waste Management System",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sensor-data",
+        "responseMode": "lastNode",
+        "responseData": "firstEntryJson",
+        "jsonParameters": true,
+        "options": {}
+      },
+      "name": "Webhook - Sensor Data Collector",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ],
+      "webhookId": "GENERATED_UNIQUE_ID_1"
+    },
+    {
+      "parameters": {
+        "functionCode": "const fillLevelThreshold = 75;\n\n// sensorData assumed to be an array of objects with binId and fillLevel\nconst sensorData = items[0].json.data;\n\nconst alerts = [];\nconst schedulePickups = [];\n\nfor (const bin of sensorData) {\n  if (bin.fillLevel >= fillLevelThreshold) {\n    alerts.push({\n      binId: bin.binId,\n      fillLevel: bin.fillLevel,\n      needsService: true\n    });\n    schedulePickups.push({\n      binId: bin.binId,\n      pickupScheduled: false\n    });\n  }\n}\n\nreturn [{json: {alerts, schedulePickups}}];"
+      },
+      "name": "Process Fill Levels",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "alerts@cityservices.example.com",
+        "toEmail": "city.services@city.gov",
+        "subject": "Waste Bin Alert: Bins Needing Service",
+        "text": "The following bins have reached critical fill levels and require servicing:\n\n{{ $json.alerts.map(a => `Bin ID: ${a.binId}, Fill Level: ${a.fillLevel}%`).join('\\n') }}\n\nPlease schedule pickups accordingly."
+      },
+      "name": "Send Alert to City Services",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        750,
+        220
+      ],
+      "credentials": {
+        "smtp": "SMTP_CityServices"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const schedule = [];\n\nfor (const pickup of items[0].json.schedulePickups) {\n  schedule.push({\n    binId: pickup.binId,\n    provider: 'Local Waste Management',\n    pickupDate: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(), // 2 hours from now\n    status: 'scheduled'\n  });\n}\n\nreturn schedule.map(s => ({ json: s }));"
+      },
+      "name": "Schedule Pickups",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "event",
+        "operation": "create",
+        "calendarId": "primary",
+        "summary": "Waste Bin Pickup - Bin ID: {{$json.binId}}",
+        "description": "Automated pickup scheduling for waste bin with ID {{$json.binId}}.",
+        "start": {
+          "dateTime": "={{$json.pickupDate}}"
+        },
+        "end": {
+          "dateTime": "={{new Date(new Date($json.pickupDate).getTime() + 30*60000).toISOString()}}"
+        }
+      },
+      "name": "Create Calendar Event (Pickup)",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        380
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": "Google Calendar API Credential"
+      }
+    },
+    {
+      "parameters": {
+        "path": "/status",
+        "httpMethod": "GET",
+        "responseMode": "lastNode",
+        "responseData": "lastNode"
+      },
+      "name": "Webhook - Health Check",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        100
+      ],
+      "webhookId": "GENERATED_UNIQUE_ID_2"
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: { status: 'OK', timestamp: new Date().toISOString() } }];"
+      },
+      "name": "Health Check Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        100
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook - Sensor Data Collector": {
+      "main": [
+        [
+          {
+            "node": "Process Fill Levels",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Fill Levels": {
+      "main": [
+        [
+          {
+            "node": "Send Alert to City Services",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Schedule Pickups",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Alert to City Services": {
+      "main": []
+    },
+    "Schedule Pickups": {
+      "main": [
+        [
+          {
+            "node": "Create Calendar Event (Pickup)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Calendar Event (Pickup)": {
+      "main": []
+    },
+    "Webhook - Health Check": {
+      "main": [
+        [
+          {
+            "node": "Health Check Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Health Check Response": {
+      "main": []
+    }
+  },
+  "active": true,
+  "settings": {},
+  "id": "EcoFriendlySmartWasteManagement_001"
+}
