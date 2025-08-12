@@ -1,0 +1,260 @@
+{
+  "name": "Automated Daily Mental Wellness Check-in & Personalized Support System",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": [
+          {
+            "hour": 9,
+            "minute": 0
+          }
+        ]
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "send-checkin-message",
+        "options": {}
+      },
+      "name": "Send Check-in Message",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        400,
+        300
+      ],
+      "credentials": {
+        "twilioApi": "Twilio API Credentials"
+      }
+    },
+    {
+      "parameters": {
+        "webhookPath": "receive-checkin-response",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "responseData": "Sent"
+      },
+      "name": "Receive User Response",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const responseText = items[0].json.body || items[0].json.Body || '';\n\nreturn [{ json: { text: responseText } }];"
+      },
+      "name": "Extract User Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "completions",
+        "operation": "create",
+        "model": "gpt-4",
+        "prompts": [
+          {
+            "role": "system",
+            "content": "You are an empathetic mental wellness assistant. Analyze the daily user response to assess mood, identify trends and flag any potential mental health concerns or risks."
+          },
+          {
+            "role": "user",
+            "content": "Daily mental wellness check-in response: {{ $json.text }}\n\nPlease analyze the mood, identify if there are signs of distress, anxiety, depression, or any critical alerts, and provide a summary with recommended personalized support resources or suggestions."
+          }
+        ],
+        "options": {}
+      },
+      "name": "Analyze Response with AI",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ],
+      "credentials": {
+        "openAIApi": "OpenAI API"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const analysis = items[0].json.choices[0].message.content || '';\n\nconst criticalKeywords = ['suicide', 'self-harm', 'danger', 'emergency', 'crisis', 'harm to self', 'help immediately'];\n\nconst isCritical = criticalKeywords.some(keyword => analysis.toLowerCase().includes(keyword));\n\nreturn [{ json: { analysis, isCritical } }];"
+      },
+      "name": "Process AI Analysis",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "if (items[0].json.isCritical) {\n  return items;\n} else {\n  return null;\n}"
+      },
+      "name": "Filter Critical Cases",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "toEmail": "supportteam@example.com",
+        "subject": "CRITICAL Mental Wellness Alert for User",
+        "text": "Critical alert detected in daily mental wellness check-in:\n\n{{$json.analysis}}"
+      },
+      "name": "Send Critical Alert Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        200
+      ],
+      "credentials": {
+        "smtp": "SMTP Credentials"
+      }
+    },
+    {
+      "parameters": {
+        "operation": "sendMessage",
+        "phoneNumber": "+{{ $json.phoneNumber }}",
+        "message": "Thank you for your response. Based on your check-in:\n\n{{$json.analysis}}\n\nPlease consider the provided suggestions and feel free to reach out anytime."
+      },
+      "name": "Send Personalized Support SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        400
+      ],
+      "credentials": {
+        "twilioApi": "Twilio API Credentials"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: { phoneNumber: $json.phoneNumber || '1234567890', ...$json } }];"
+      },
+      "name": "Ensure Phone Number",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        100
+      ]
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Send Check-in Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Check-in Message": {
+      "main": [
+        [
+          {
+            "node": "Receive User Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Receive User Response": {
+      "main": [
+        [
+          {
+            "node": "Extract User Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract User Response": {
+      "main": [
+        [
+          {
+            "node": "Ensure Phone Number",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ensure Phone Number": {
+      "main": [
+        [
+          {
+            "node": "Analyze Response with AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Response with AI": {
+      "main": [
+        [
+          {
+            "node": "Process AI Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process AI Analysis": {
+      "main": [
+        [
+          {
+            "node": "Filter Critical Cases",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Personalized Support SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Critical Cases": {
+      "main": [
+        [
+          {
+            "node": "Send Critical Alert Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
