@@ -1,0 +1,186 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "user",
+        "operation": "get",
+        "returnAll": true
+      },
+      "name": "Fetch User Habits",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const data = items[0].json;\n\n// Extract relevant user habits and preferences\nconst habits = data.habits || {};\nconst preferences = data.preferences || {};\n\n// Simple example to calculate carbon footprint proxy\nconst carbonFootprint = (habits.transportation === 'car' ? 10 : 3) + \n  (habits.diet === 'meat' ? 5 : 2) + \n  (habits.energy_use === 'high' ? 7 : 3);\n\n// Return data for further processing\nreturn [{\n  json: {\n    habits,\n    preferences,\n    carbonFootprint\n  }\n}];"
+      },
+      "name": "Analyze Habits",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ],
+      "notesInFlow": true,
+      "notes": "Analyze user habits and calculate simple carbon footprint proxy"
+    },
+    {
+      "parameters": {
+        "functionCode": "const footprint = items[0].json.carbonFootprint;\nconst tips = [];\n\n// Provide sustainability tips based on carbon footprint and preferences\nif (footprint > 15) {\n  tips.push('Consider using public transit or biking to reduce transportation emissions.');\n  tips.push('Reduce meat consumption and include more plant-based meals.');\n  tips.push('Lower your home energy usage by switching to LED bulbs and unplugging devices.');\n} else if (footprint > 8) {\n  tips.push('Try to reduce car trips where possible.');\n  tips.push('Switch one meal a week to vegetarian.');\n  tips.push('Be mindful of energy consumption during peak hours.');\n} else {\n  tips.push('Great job! Keep maintaining your eco-friendly habits.');\n}\n\nreturn [{ json: { tips } }];"
+      },
+      "name": "Generate Tips",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ],
+      "notesInFlow": true,
+      "notes": "Generate personalized sustainability tips based on footprint"
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "chatId": "={{$json[\"preferences\"].chat_id || ''}}",
+        "text": "={{$json[\"tips\"].join('\\n- ')}}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "name": "Send Recommendations",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "1",
+          "name": "Telegram API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const now = new Date();\nconst data = items[0].json;\nif (!data.history) {\n  data.history = [];\n}\n\ndata.history.push({\n  date: now.toISOString(),\n  carbonFootprint: data.carbonFootprint\n});\n\nreturn [{ json: data }];"
+      },
+      "name": "Track Progress",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        450
+      ],
+      "notesInFlow": true,
+      "notes": "Store the user's carbon footprint history for tracking"
+    },
+    {
+      "parameters": {
+        "functionCode": "const data = items[0].json;\n// When footprint is improving, provide encouraging message\nconst history = data.history || [];\nlet encouragement = '';\nif (history.length > 1) {\n  const last = history[history.length-2].carbonFootprint;\n  const current = history[history.length-1].carbonFootprint;\n  if (current < last) {\n    encouragement = 'Nice work! Your carbon footprint is decreasing.';\n  } else if (current > last) {\n    encouragement = 'Let\'s try to improve your footprint next time!';\n  } else {\n    encouragement = 'Keep maintaining your current habits.';\n  }\n} else {\n  encouragement = 'Start your sustainability journey today!';\n}\nreturn [{ json: { encouragement } }];"
+      },
+      "name": "Generate Encouragement",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "chatId": "={{$json[\"preferences\"].chat_id || ''}}",
+        "text": "={{$json[\"encouragement\"]}}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "name": "Send Encouragement",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        450
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "1",
+          "name": "Telegram API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Fetch User Habits": {
+      "main": [
+        [
+          {
+            "node": "Analyze Habits",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Habits": {
+      "main": [
+        [
+          {
+            "node": "Generate Tips",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Track Progress",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Tips": {
+      "main": [
+        [
+          {
+            "node": "Send Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Track Progress": {
+      "main": [
+        [
+          {
+            "node": "Generate Encouragement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Encouragement": {
+      "main": [
+        [
+          {
+            "node": "Send Encouragement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
