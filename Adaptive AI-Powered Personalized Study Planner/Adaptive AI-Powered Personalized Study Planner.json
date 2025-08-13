@@ -1,0 +1,182 @@
+{
+  "name": "AI-Powered Personal Learning Style Analyzer and Adaptive Study Plan Generator",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "submit-learning-profile",
+        "responseMode": "lastNode",
+        "responseData": "dropdown",
+        "options": {}
+      },
+      "name": "Receive User Input",
+      "type": "n8n-nodes-base.httpTrigger",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Extract and parse user input\nconst data = items[0].json;\n\nconst learningProfile = {\n  preferences: data.preferences || {},\n  strengths: data.strengths || [],\n  weaknesses: data.weaknesses || [],\n  goals: data.goals || [],\n  availableTime: data.availableTime || {}\n};\n\nreturn [{ json: { learningProfile } }];"
+      },
+      "name": "Parse User Learning Profile",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an expert AI educational consultant. Analyze the user's learning preferences, strengths, weaknesses, goals, and available study time to create a personalized adaptive study plan that maximizes learning efficiency and knowledge retention. Use evidence-based learning techniques tailored to the user's input."
+          },
+          {
+            "role": "user",
+            "content": "User Learning Profile:\nPreferences: {{ $json.learningProfile.preferences }}\nStrengths: {{ $json.learningProfile.strengths }}\nWeaknesses: {{ $json.learningProfile.weaknesses }}\nGoals: {{ $json.learningProfile.goals }}\nAvailable Time: {{ $json.learningProfile.availableTime }}\n\nGenerate a detailed, adaptive study plan including daily tasks, recommended resources (linking to at least two popular educational platforms such as Khan Academy, Coursera, or edX), and tips to optimize retention based on the profile."
+          }
+        ],
+        "options": {}
+      },
+      "name": "Generate Adaptive Study Plan (AI)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        700,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const responseTxt = items[0].json.choices[0].message.content;\n\n// Parse AI response into structured JSON if possible\n// Assuming AI response is JSON or markdown with JSON snippet\n\ntry {\n  // Attempt to extract JSON from markdown\n  const jsonMatch = responseTxt.match(/```json\\n([\\s\\S]*?)\\n```/);\n  if(jsonMatch) {\n    const planJson = JSON.parse(jsonMatch[1]);\n    return [{ json: { studyPlan: planJson } }];\n  } else {\n    // fallback: return raw text\n    return [{ json: { studyPlanText: responseTxt } }];\n  }\n} catch (e) {\n  return [{ json: { studyPlanText: responseTxt } }];\n}"
+      },
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        950,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const studyPlan = items[0].json.studyPlan;\nif(!studyPlan) {\n  throw new Error('Study plan missing from input');\n}\n\n// Extract daily plan and convert into calendar events\n// Example structure: { days: [ { date: '2024-xx-xx', tasks: [...], resources: [...], tips: '...' } ] }\n\nconst events = [];\n\nif(studyPlan.days && Array.isArray(studyPlan.days)) {\n  studyPlan.days.forEach(day => {\n    const date = day.date;\n    if(day.tasks && Array.isArray(day.tasks)) {\n      day.tasks.forEach(task => {\n        events.push({\n          summary: `Study Task: ${task.title || 'Task'}`,\n          description: `${task.description || ''}\\nResources: ${(task.resources || []).join(', ')}`,\n          start: {\n            dateTime: new Date(date + 'T09:00:00').toISOString()\n          },\n          end: {\n            dateTime: new Date(date + 'T10:00:00').toISOString()\n          }\n        });\n      });\n    }\n  });\n}\n\nreturn [{ json: { calendarEvents: events } }];"
+      },
+      "name": "Convert Plan to Calendar Events",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oauth2",
+        "resource": "events",
+        "operation": "create",
+        "calendarId": "primary",
+        "event": "={{$json[\"calendarEvents\"]?.length ? $json[\"calendarEvents\"][0] : {}}"
+      },
+      "name": "Create Calendar Event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        320
+      ],
+      "credentials": {
+        "googleApi": "Google Calendar OAuth2"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: { message: 'Adaptive study plan generated and added to your calendar. Check your calendar for scheduled study tasks.' } }];"
+      },
+      "name": "Response Success Message",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1700,
+        320
+      ]
+    }
+  ],
+  "connections": {
+    "Receive User Input": {
+      "main": [
+        [
+          {
+            "node": "Parse User Learning Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse User Learning Profile": {
+      "main": [
+        [
+          {
+            "node": "Generate Adaptive Study Plan (AI)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Adaptive Study Plan (AI)": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Convert Plan to Calendar Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert Plan to Calendar Events": {
+      "main": [
+        [
+          {
+            "node": "Create Calendar Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Calendar Event": {
+      "main": [
+        [
+          {
+            "node": "Response Success Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
