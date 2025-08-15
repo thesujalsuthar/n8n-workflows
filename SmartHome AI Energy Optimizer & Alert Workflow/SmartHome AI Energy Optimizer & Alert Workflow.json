@@ -1,0 +1,263 @@
+{
+  "name": "AI-Powered Smart Home Energy Usage Optimizer and Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "http://smart-home-api.local/energy/consumption",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Fetch Real-Time Energy Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        300,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const usageData = items[0].json;\n\n// Example structure expected: { currentUsage: number, historicalData: [{timestamp, usage}], deviceUsages: [{deviceId, usage}] }\n\n// Flatten data for AI processing\n\nreturn [\n  {\n    json: {\n      currentUsage: usageData.currentUsage,\n      historicalData: usageData.historicalData,\n      deviceUsages: usageData.deviceUsages\n    }\n  }\n];"
+      },
+      "name": "Prepare Data for AI",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        550,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "resource": "completion",
+        "options": {},
+        "prompt": "You are an AI assistant specialized in smart home energy optimization. Given the following JSON data of real-time energy consumption, historical trends, and device-level usage, analyze and provide:\n1. Current identified unusual usage patterns.\n2. Optimization recommendations to reduce energy consumption.\n\nData:\n{{ $json }}\n\nReturn a JSON object with two fields: \"alerts\" (array of strings) and \"recommendations\" (array of strings)."
+      },
+      "name": "AI Energy Usage Analyzer",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const aiResponseText = items[0].json.choices[0].message.content;\n\ntry {\n  const aiResponse = JSON.parse(aiResponseText);\n  return [{ json: aiResponse }];\n} catch (error) {\n  return [{ json: { alerts: [], recommendations: [], error: 'Parsing AI response failed' } }];\n}"
+      },
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const alerts = items[0].json.alerts || [];\n\nif(alerts.length === 0) {\n  return [];\n}\n\nconst messages = alerts.map(alert => `⚠️ Alert: ${alert}`);\n\nreturn messages.map(text => ({ json: { text } }));"
+      },
+      "name": "Prepare Alert Messages",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "alerts@smarthome.local",
+        "toEmail": "user@smarthome.local",
+        "subject": "Unusual Energy Usage Alert",
+        "text": "={{$json[\"text\"]}}"
+      },
+      "name": "Email Alert Sender",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1550,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const recommendations = items[0].json.recommendations || [];\nreturn [{ json: { text: 'Optimization Recommendations:\\n' + recommendations.map((r,i) => `${i+1}. ${r}`).join('\\n') } }];"
+      },
+      "name": "Format Recommendations",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://smart-home-dashboard.local/api/energy-optimization",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={{ { recommendations: $json.text } }}"
+      },
+      "name": "Send Recommendations to Dashboard",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1550,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 0,
+              "minute": 0
+            },
+            {
+              "hour": 0,
+              "minute": 5
+            },
+            {
+              "hour": 0,
+              "minute": 10
+            },
+            {
+              "hour": 0,
+              "minute": 15
+            },
+            {
+              "hour": 0,
+              "minute": 20
+            },
+            {
+              "hour": 0,
+              "minute": 25
+            },
+            {
+              "hour": 0,
+              "minute": 30
+            },
+            {
+              "hour": 0,
+              "minute": 35
+            },
+            {
+              "hour": 0,
+              "minute": 40
+            },
+            {
+              "hour": 0,
+              "minute": 45
+            },
+            {
+              "hour": 0,
+              "minute": 50
+            },
+            {
+              "hour": 0,
+              "minute": 55
+            }
+          ]
+        }
+      },
+      "name": "Every 5 Minutes Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Every 5 Minutes Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Real-Time Energy Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Real-Time Energy Data": {
+      "main": [
+        [
+          {
+            "node": "Prepare Data for AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Data for AI": {
+      "main": [
+        [
+          {
+            "node": "AI Energy Usage Analyzer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Energy Usage Analyzer": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Prepare Alert Messages",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Format Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Alert Messages": {
+      "main": [
+        [
+          {
+            "node": "Email Alert Sender",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Send Recommendations to Dashboard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "id": "1"
+}
