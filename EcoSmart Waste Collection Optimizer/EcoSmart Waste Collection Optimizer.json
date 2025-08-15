@@ -1,0 +1,235 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "requestMethod": "GET",
+        "url": "https://api.sensors.example.com/iot-waste-sensor-data",
+        "responseFormat": "json",
+        "jsonParameters": true
+      },
+      "name": "Fetch IoT Sensor Data",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "requestMethod": "GET",
+        "url": "https://api.environmentaldata.example.com/current-conditions",
+        "responseFormat": "json"
+      },
+      "name": "Fetch Environmental Data",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "requestMethod": "GET",
+        "url": "https://api.localgov.example.com/waste-management-regulations",
+        "responseFormat": "json"
+      },
+      "name": "Fetch Local Regulations",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const sensorData = items[0].json;\nconst environmentalData = items[1].json;\nconst regulations = items[2].json;\n\n// Process sensor data and environmental data to determine bin fill levels and location\nlet bins = sensorData.bins.map(bin => {\n  return {\n    id: bin.id,\n    location: bin.location,\n    fillLevel: bin.fillLevel,\n    temperature: environmentalData.temperature,\n    humidity: environmentalData.humidity,\n    regulationCompliance: regulations.rules.some(rule => rule.binType === bin.type && rule.maxFillLevel >= bin.fillLevel)\n  };\n});\n\n// Filter bins that need collection (e.g. fillLevel above threshold and compliant)\nconst binsToCollect = bins.filter(bin => bin.fillLevel > 75 && bin.regulationCompliance);\n\nreturn [{ json: { binsToCollect } }];"
+      },
+      "name": "Analyze Bin Fill Levels & Compliance",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        400
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "functionCode": "const bins = items[0].json.binsToCollect;\n\n// Prepare waypoints for routing\nconst waypoints = bins.map(bin => `${bin.location.latitude},${bin.location.longitude}`);\n\n// Sample: call to an external routing API placeholder\nreturn [{\n  json: {\n    waypoints,\n    bins\n  }\n}];"
+      },
+      "name": "Prepare Routing Waypoints",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        700,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "https://api.mappingservice.example.com/optimize-route",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={\"waypoints\": $json[\"waypoints\"]}"
+      },
+      "name": "Optimize Collection Route",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        900,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const optimizedRoute = items[0].json.optimizedRoute;\nconst bins = items[0].json.bins;\n\nreturn [{\n  json: {\n    message: `Optimized route for ${bins.length} bins ready.`,\n    routeDetails: optimizedRoute,\n    bins\n  }\n}];"
+      },
+      "name": "Process Optimized Route Response",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "channel": "waste-management-notifications",
+        "text": "={{`🚛 Waste Collection Route Optimized\nNumber of bins: ${$json[\"bins\"].length}\nRoute summary: ${JSON.stringify($json[\"routeDetails\"])}\nSchedule collection accordingly.`}}"
+      },
+      "name": "Send Notification",
+      "type": "slack",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        400
+      ],
+      "credentials": {
+        "slackApi": "Slack Account"
+      }
+    },
+    {
+      "parameters": {
+        "path": "waste-management-reports/report-{{$now.toISOString().slice(0,10)}}.json",
+        "binaryData": false,
+        "options": {}
+      },
+      "name": "Save Report",
+      "type": "writeFile",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        550
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const bins = items[0].json.binsToCollect;\nconst environmentalData = $input.item.json;\nconst regulations = $input.item.json;\n\nreturn [{\n  json: {\n    reportDate: new Date().toISOString(),\n    binsToCollect: bins,\n    environmentalData: environmentalData,\n    localRegulations: regulations\n  }\n}];"
+      },
+      "name": "Compile Waste Management Report",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        550
+      ]
+    }
+  ],
+  "connections": {
+    "Fetch IoT Sensor Data": {
+      "main": [
+        [
+          {
+            "node": "Fetch Environmental Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Environmental Data": {
+      "main": [
+        [
+          {
+            "node": "Fetch Local Regulations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Local Regulations": {
+      "main": [
+        [
+          {
+            "node": "Analyze Bin Fill Levels & Compliance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Bin Fill Levels & Compliance": {
+      "main": [
+        [
+          {
+            "node": "Prepare Routing Waypoints",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Compile Waste Management Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Routing Waypoints": {
+      "main": [
+        [
+          {
+            "node": "Optimize Collection Route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Optimize Collection Route": {
+      "main": [
+        [
+          {
+            "node": "Process Optimized Route Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Optimized Route Response": {
+      "main": [
+        [
+          {
+            "node": "Send Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Save Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "name": "EcoSmart Waste Management Automation",
+  "id": "1"
+}
