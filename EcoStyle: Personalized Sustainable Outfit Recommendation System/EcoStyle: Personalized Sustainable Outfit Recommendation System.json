@@ -1,0 +1,167 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "options": {
+          "multiSelection": false
+        },
+        "content": "User uploads wardrobe data (e.g., JSON or CSV file containing clothing items with attributes like type, material, color, brand, etc.)",
+        "typeOptions": {}
+      },
+      "name": "Start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "={{\"https://api.openweathermap.org/data/2.5/weather?q=\" + $input.item.json.city + \"&appid=YOUR_OPENWEATHERMAP_API_KEY&units=metric\"}}",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": []
+        }
+      },
+      "name": "Get Weather Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        550,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.fashiontrends.example.com/v1/sustainability/trends",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_FASHION_TRENDS_API_KEY"
+            }
+          ]
+        }
+      },
+      "name": "Get Sustainable Fashion Trends",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        550,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const wardrobe = $input.all()[0].json.wardrobeItems;\nconst weather = $input.all()[1].json;\nconst trends = $input.all()[2].json;\n\n/**\n * Simple mock recommendation algorithm:\n * Filter wardrobe for eco-friendly items (e.g., organic cotton, recycled fabrics)\n * Match items suitable for current weather\n * Integrate trending styles\n */\n\nfunction isEcoFriendly(item) {\n  const ecoKeywords = ['organic', 'recycled', 'sustainable', 'eco'];\n  return ecoKeywords.some(keyword => item.material.toLowerCase().includes(keyword));\n}\n\nfunction suitableForWeather(item, weather) {\n  const temp = weather.main.temp;\n  // Simplified example:\n  if (temp < 10 && item.type.toLowerCase().includes('jacket')) return true;\n  if (temp >= 10 && temp < 25 && (item.type.toLowerCase().includes('shirt') || item.type.toLowerCase().includes('dress'))) return true;\n  if (temp >= 25 && item.type.toLowerCase().includes('shorts')) return true;\n  return false;\n}\n\nconst recommended = wardrobe.filter(item => isEcoFriendly(item) && suitableForWeather(item, weather));\n\n// Incorporate fashion trends: prioritize items or colors featured frequently in trends\nconst trendingColors = trends.trendingColors || [];\nfunction isTrending(item) {\n  return trendingColors.includes(item.color.toLowerCase());\n}\n\nconst finalRecommendations = recommended.map(item => {\n  item.isTrending = isTrending(item);\n  return item;\n}).sort((a, b) => b.isTrending - a.isTrending);\n\nreturn [{ json: { outfits: finalRecommendations.slice(0, 5) } }];"
+      },
+      "name": "AI Outfit Recommender",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "resource": "posts",
+        "operation": "create",
+        "additionalFields": {
+          "media": [
+            {
+              "type": "image",
+              "url": "={{$json.outfits[0]?.imageUrl || ''}}"
+            }
+          ],
+          "caption": "={{'Check out my sustainable outfit recommendations for today! #SustainableFashion #EcoFriendly'}}"
+        }
+      },
+      "name": "Share on Social Media",
+      "type": "n8n-nodes-base.facebookGraphApi",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "no-reply@sustainablefashion.com",
+        "toEmail": "={{$input.item.json.userEmail}}",
+        "subject": "Your AI-Powered Sustainable Outfit Recommendations",
+        "text": "Hello,\n\nHere are your personalized sustainable outfit recommendations for today:\n\n{{$json.outfits.map(o => `- ${o.type} in ${o.color} (${o.material})` ).join('\\n')}}\n\nStay stylish and eco-friendly!\n\nBest,\nSustainable Fashion Team"
+      },
+      "name": "Send Recommendations Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        450
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Get Weather Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Sustainable Fashion Trends",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Weather Data": {
+      "main": [
+        [
+          {
+            "node": "AI Outfit Recommender",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Sustainable Fashion Trends": {
+      "main": [
+        [
+          {
+            "node": "AI Outfit Recommender",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "AI Outfit Recommender": {
+      "main": [
+        [
+          {
+            "node": "Share on Social Media",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Recommendations Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "id": "1"
+}
