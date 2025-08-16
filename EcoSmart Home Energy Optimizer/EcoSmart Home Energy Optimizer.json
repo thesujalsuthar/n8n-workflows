@@ -1,0 +1,263 @@
+{
+  "name": "Personalized Eco-Friendly Smart Home Energy Optimization",
+  "nodes": [
+    {
+      "parameters": {
+        "interval": 300,
+        "options": {}
+      },
+      "name": "Trigger - Energy Check",
+      "type": "n8n-nodes-base.interval",
+      "typeVersion": 1,
+      "position": [
+        150,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.smarthome.example.com/devices/energy-consumption",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$credentials.smartHomeApi.apiKey}}"
+            }
+          ]
+        }
+      },
+      "name": "Get Real-Time Energy Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        400,
+        200
+      ],
+      "credentials": {
+        "smartHomeApi": {
+          "id": "1",
+          "name": "Smart Home API Credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.weather.example.com/current?lat={{$json.latitude}}&lon={{$json.longitude}}&units=metric",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "x-api-key",
+              "value": "{{$credentials.weatherApi.apiKey}}"
+            }
+          ]
+        }
+      },
+      "name": "Get Current Weather",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        650,
+        300
+      ],
+      "credentials": {
+        "weatherApi": {
+          "id": "2",
+          "name": "Weather API Credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const energyData = items[0].json;\nconst weatherData = items[1].json;\n\nconst usage = energyData.totalConsumptionWatts || 0;\nconst temp = weatherData.main ? weatherData.main.temp : null;\n\nfunction generateTips(usage, temp) {\n  const tips = [];\n\n  if (usage > 5000) {\n    tips.push('Consider turning off high wattage devices during peak hours.');\n  }\n  if (temp !== null) {\n    if (temp > 25) {\n      tips.push('Use smart thermostat settings to optimize cooling only when needed.');\n    } else if (temp < 18) {\n      tips.push('Optimize heating schedules to reduce energy waste.');\n    }\n  }\n  tips.push('Use LED lights to reduce energy consumption.');\n  tips.push('Unplug devices when not in use.');\n\n  return tips;\n}\n\nitems[0].json.energyTips = generateTips(usage, temp);\nitems[0].json.temperatureC = temp;\nreturn items[0];"
+      },
+      "name": "Analyze Usage and Suggest Tips",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        250
+      ],
+      "inputData": {
+        "main": [
+          [],
+          []
+        ]
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.smarthome.example.com/devices/control",
+        "method": "POST",
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "deviceId",
+              "value": "thermostat001"
+            },
+            {
+              "name": "action",
+              "value": "optimizeSettings"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Automate Smart Devices",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        1150,
+        300
+      ],
+      "credentials": {
+        "smartHomeApi": {
+          "id": "1",
+          "name": "Smart Home API Credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const energyData = items[0].json;\nconst tips = energyData.energyTips.join('\\n- ');\nconst consumption = energyData.totalConsumptionWatts || 0;\nconst temp = energyData.temperatureC || 'N/A';\n\nreturn [{\n  json: {\n    subject: 'Your Weekly Smart Home Energy Report',\n    text: `Hello!\\n\\nHere is your current home energy summary:\\n- Total Consumption: ${consumption} Watts\\n- Outside Temperature: ${temp} °C\\n\\nPersonalized Energy-Saving Tips:\\n- ${tips}\\n\\nStay green and save energy!`\n  }\n}];"
+      },
+      "name": "Generate Report Content",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "noreply@smarthome.com",
+        "toEmail": "={{$json.email}}",
+        "subject": "={{$json.subject}}",
+        "text": "={{$json.text}}",
+        "options": {}
+      },
+      "name": "Send Energy Report Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1650,
+        250
+      ]
+    },
+    {
+      "parameters": {},
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [
+        0,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "interval": 604800,
+        "options": {}
+      },
+      "name": "Weekly Report Trigger",
+      "type": "n8n-nodes-base.interval",
+      "typeVersion": 1,
+      "position": [
+        150,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "Trigger - Energy Check": {
+      "main": [
+        [
+          {
+            "node": "Get Real-Time Energy Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Real-Time Energy Data": {
+      "main": [
+        [
+          {
+            "node": "Get Current Weather",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Current Weather": {
+      "main": [
+        [
+          {
+            "node": "Analyze Usage and Suggest Tips",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Usage and Suggest Tips": {
+      "main": [
+        [
+          {
+            "node": "Automate Smart Devices",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Weekly Report Trigger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Weekly Report Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Real-Time Energy Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Automate Smart Devices": {
+      "main": [
+        [
+          {
+            "node": "Generate Report Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Report Content": {
+      "main": [
+        [
+          {
+            "node": "Send Energy Report Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "personalized-eco-friendly-smart-home-energy-optimization"
+}
