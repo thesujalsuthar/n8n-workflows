@@ -1,0 +1,177 @@
+{
+  "name": "AI-Powered Smart Urban Garden Assistant",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "http://environmental-sensor.local/api/data",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Fetch Sensor Data",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "weatherForecast",
+        "operation": "getForecast",
+        "city": "YOUR_CITY_NAME",
+        "units": "metric"
+      },
+      "name": "Get Weather Forecast",
+      "type": "n8n-nodes-base.openWeatherMap",
+      "typeVersion": 1,
+      "position": [
+        550,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const sensorData = items[0].json;\nconst weatherData = items[1].json;\n\nconst combinedData = {\n  light: sensorData.light,\n  temperature: sensorData.temperature,\n  humidity: sensorData.humidity,\n  forecast: weatherData.daily ? weatherData.daily[0] : null\n};\n\nreturn [{ json: combinedData }];"
+      },
+      "name": "Combine Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "jwt",
+        "headers": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $credentials.openaiApi.apiKey }}"
+            }
+          ]
+        },
+        "requestBodyType": "json",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": " {\n  \"model\": \"gpt-4\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are an AI assistant specialized in urban gardening. Analyze environmental data including light, temperature, humidity, and weather forecast to generate automated watering schedules and plant care recommendations optimized for plant health and water efficiency.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Analyze the following data and provide a watering schedule and plant care recommendations: {{ $json | jsonStringify }}\"\n    }\n  ],\n  \"temperature\": 0.5\n}"
+      },
+      "name": "AI Plant Care Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ],
+      "credentials": {
+        "openaiApi": {
+          "id": "1",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "mqtt",
+        "operation": "publish",
+        "topic": "smartgarden/watering",
+        "payload": "={{ $json.choices[0].message.content }}",
+        "broker": "your_mqtt_broker"
+      },
+      "name": "Send Watering Commands",
+      "type": "n8n-nodes-base.mqtt",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        300
+      ],
+      "credentials": {
+        "mqtt": {
+          "id": "1",
+          "name": "MQTT Broker"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "sendMessage",
+        "operation": "send",
+        "text": "={{ $json.choices[0].message.content }}",
+        "chatId": "YOUR_CHAT_ID"
+      },
+      "name": "Send Plant Care Recommendations",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        450
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "1",
+          "name": "Telegram Bot API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Fetch Sensor Data": {
+      "main": [
+        [
+          {
+            "node": "Get Weather Forecast",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Weather Forecast": {
+      "main": [
+        [
+          {
+            "node": "Combine Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine Data": {
+      "main": [
+        [
+          {
+            "node": "AI Plant Care Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Plant Care Analysis": {
+      "main": [
+        [
+          {
+            "node": "Send Watering Commands",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Plant Care Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
