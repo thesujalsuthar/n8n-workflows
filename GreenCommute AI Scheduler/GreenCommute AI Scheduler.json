@@ -1,0 +1,139 @@
+{
+  "name": "AI-Powered Green Commute Impact Scheduler",
+  "nodes": [
+    {
+      "parameters": {
+        "value": "Driving,Biking,Public Transport",
+        "options": {
+          "mode": "multiple"
+        }
+      },
+      "name": "Commute Options Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const commuteOptions = items[0].json.value.split(\",\");\n\n// Simulated data for carbon footprint (kg CO2) and transit time (minutes) per km\nconst data = {\n  \"Driving\": { carbonPerKm: 0.25, speedKmH: 40 },\n  \"Biking\": { carbonPerKm: 0, speedKmH: 15 },\n  \"Public Transport\": { carbonPerKm: 0.05, speedKmH: 25 }\n};\n\nconst commuteDistance = 10; // km, fixed example distance\n\nconst results = commuteOptions.map(option => {\n  const info = data[option.trim()];\n  if (!info) {\n    return {\n      mode: option,\n      error: \"No data available\"\n    };\n  }\n\n  const carbon = info.carbonPerKm * commuteDistance;\n  const time = commuteDistance / info.speedKmH * 60; // convert hours to minutes\n\n  return {\n    mode: option,\n    carbonFootprintKgCO2: parseFloat(carbon.toFixed(2)),\n    estimatedTimeMin: Math.round(time)\n  };\n});\n\nreturn results.map(r => ({ json: r }));"
+      },
+      "name": "Calculate Impact",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const data = items.map(item => item.json);\n\n// Filter out invalid entries\nconst validOptions = data.filter(d => !d.error);\n\n// Sort by carbon footprint (ascending)\nvalidOptions.sort((a, b) => a.carbonFootprintKgCO2 - b.carbonFootprintKgCO2);\n\nconst bestOption = validOptions[0] || null;\n\nconst recommendations = {\n  bestCommuteMode: bestOption ? bestOption.mode : 'No valid data',\n  carbonFootprintKgCO2: bestOption ? bestOption.carbonFootprintKgCO2 : null,\n  estimatedTimeMin: bestOption ? bestOption.estimatedTimeMin : null,\n  message: bestOption ?\n    `We recommend choosing ${bestOption.mode} for your commute to reduce your carbon footprint.` :\n    'No recommendations available.'\n};\n\nreturn [{ json: recommendations }];"
+      },
+      "name": "Generate Recommendation",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "text": "Reminder: Consider taking greener commute options today like {{ $json.bestCommuteMode }}. Estimated carbon footprint: {{ $json.carbonFootprintKgCO2 }} kg CO2, Transit time: {{ $json.estimatedTimeMin }} minutes."
+      },
+      "name": "Daily Reminder",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        200
+      ],
+      "credentials": {
+        "smtp": "SMTP Credentials"
+      }
+    },
+    {
+      "parameters": {
+        "text": "Daily Green Commute Report:\nRecommended Mode: {{ $json.bestCommuteMode }}\nEstimated Carbon Footprint: {{ $json.carbonFootprintKgCO2 }} kg CO2\nEstimated Transit Time: {{ $json.estimatedTimeMin }} minutes\n\nKeep up the sustainable commuting habits!"
+      },
+      "name": "Daily Report",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        400
+      ],
+      "credentials": {
+        "smtp": "SMTP Credentials"
+      }
+    },
+    {
+      "parameters": {
+        "mode": "everyDays",
+        "hour": 7,
+        "minute": 0
+      },
+      "name": "Trigger Daily Commute Check",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        50,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Trigger Daily Commute Check": {
+      "main": [
+        [
+          {
+            "node": "Commute Options Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Commute Options Input": {
+      "main": [
+        [
+          {
+            "node": "Calculate Impact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Impact": {
+      "main": [
+        [
+          {
+            "node": "Generate Recommendation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Recommendation": {
+      "main": [
+        [
+          {
+            "node": "Daily Reminder",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Daily Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
