@@ -1,0 +1,177 @@
+{
+  "name": "AI-Powered Sustainable Fashion Outfit Recommender",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "requestMethod": "GET",
+        "url": "https://api.example.com/user/wardrobe",
+        "options": {}
+      },
+      "name": "Get Wardrobe Data",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "requestMethod": "GET",
+        "url": "https://api.openweathermap.org/data/2.5/weather",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "q",
+              "value": "={{$json[\"location\"]}}"
+            },
+            {
+              "name": "appid",
+              "value": "={{$credentials.openWeather.apiKey}}"
+            },
+            {
+              "name": "units",
+              "value": "metric"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Get Current Weather",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "requestMethod": "GET",
+        "url": "https://api.example.com/sustainable-fashion-trends",
+        "options": {}
+      },
+      "name": "Get Sustainable Fashion Trends",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [\n  {\n    json: {\n      wardrobe: $items(\"Get Wardrobe Data\")[0].json,\n      weather: $items(\"Get Current Weather\")[0].json,\n      trends: $items(\"Get Sustainable Fashion Trends\")[0].json\n    }\n  }\n];"
+      },
+      "name": "Combine Data",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        550,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "temperature": 0.7,
+        "maxTokens": 600,
+        "options": {},
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an expert sustainable fashion assistant. Given user wardrobe data, the current weather, and sustainable fashion trends, suggest an eco-friendly outfit that matches the weather and promotes environment-conscious dressing habits."
+          },
+          {
+            "role": "user",
+            "content": "Wardrobe Data:\n{{$json.wardrobe}}\n\nCurrent Weather:\n{{$json.weather}}\n\nSustainable Fashion Trends:\n{{$json.trends}}\n\nPlease provide a detailed outfit recommendation focusing on sustainability."
+          }
+        ]
+      },
+      "name": "AI Outfit Recommendation",
+      "type": "openAI",
+      "typeVersion": 1,
+      "position": [
+        850,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: { recommendation: $json.choices[0].message.content } }];"
+      },
+      "name": "Format Output",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "Get Wardrobe Data": {
+      "main": [
+        [
+          {
+            "node": "Combine Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Current Weather": {
+      "main": [
+        [
+          {
+            "node": "Combine Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Sustainable Fashion Trends": {
+      "main": [
+        [
+          {
+            "node": "Combine Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine Data": {
+      "main": [
+        [
+          {
+            "node": "AI Outfit Recommendation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Outfit Recommendation": {
+      "main": [
+        [
+          {
+            "node": "Format Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "credentials": {
+    "openWeather": {
+      "id": "your-openweather-credential-id"
+    }
+  }
+}
