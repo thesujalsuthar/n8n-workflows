@@ -1,0 +1,175 @@
+{
+  "name": "AI-Powered Sustainable Gardening Companion",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "iot/sensor-data",
+        "responseFormat": "json",
+        "fullResponse": false,
+        "options": {}
+      },
+      "name": "Get IoT Sensor Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        150,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const { soilMoisture, temperature, humidity, lightIntensity } = items[0].json;\n\nreturn [{\n  json: {\n    soilMoisture,\n    temperature,\n    humidity,\n    lightIntensity,\n    needsWatering: soilMoisture < 30\n  }\n}];"
+      },
+      "name": "Evaluate Soil Moisture",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        350,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "weatherCurrent",
+        "operation": "get",
+        "cityName": "={{$json[\"location\"] || \"home\"}}",
+        "units": "metric",
+        "language": "en"
+      },
+      "name": "Get Current Weather",
+      "type": "n8n-nodes-base.openWeather",
+      "typeVersion": 1,
+      "position": [
+        150,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const weather = items[0].json;\nconst soilMoisture = items[1].json.soilMoisture;\nconst temp = weather.main.temp;\nconst humidity = weather.main.humidity;\n\nconst wateringRecommendation = (soilMoisture < 30 && temp > 10 && humidity < 70) ? 'Water the plants today.' : 'No watering needed today.';\n\nreturn [{ json: { wateringRecommendation } }];"
+      },
+      "name": "Watering Scheduler",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        550,
+        375
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "url": "https://api.example-ai.com/v1/pest-detection",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={\"imageData\": $items(\"Get IoT Sensor Data\")[0].json.cameraImage}"
+      },
+      "name": "Pest Detection AI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        350,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const pestDetection = items[0].json;\nconst wateringAdvice = items[1].json.wateringRecommendation;\n\n// Simple logic to generate personalized tips\nlet tips = [];\nif (pestDetection.pestsDetected) {\n  tips.push('Detected pests: ' + pestDetection.pests.join(', ') + '. Consider natural pest control methods like neem oil or introducing beneficial insects.');\n} else {\n  tips.push('No significant pests detected.');\n}\n\nif (wateringAdvice.includes('Water')) {\n  tips.push('Ensure watering is done early morning or late evening to minimize evaporation.');\n} else {\n  tips.push('Avoid overwatering to maintain soil health.');\n}\n\ntips.push('Use compost and organic mulch to improve soil fertility and water retention.');\n\ntips.push('Rotate crops and companion plant to reduce pest risks and improve yield.');\n\nreturn [{ json: { personalizedTips: tips } }];"
+      },
+      "name": "Generate Gardening Tips",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "channel": "#gardening-tips",
+        "text": "={{'🪴 AI-Powered Gardening Update:\\n' + $json.personalizedTips.join('\\n- ')}}"
+      },
+      "name": "Send Tips to Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        950,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Get IoT Sensor Data": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Soil Moisture",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Pest Detection AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Soil Moisture": {
+      "main": [
+        [
+          {
+            "node": "Watering Scheduler",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Get Current Weather": {
+      "main": [
+        [
+          {
+            "node": "Watering Scheduler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pest Detection AI": {
+      "main": [
+        [
+          {
+            "node": "Generate Gardening Tips",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Watering Scheduler": {
+      "main": [
+        [
+          {
+            "node": "Generate Gardening Tips",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Generate Gardening Tips": {
+      "main": [
+        [
+          {
+            "node": "Send Tips to Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
