@@ -1,0 +1,139 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.publictransitdata.com/routeschedules",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Fetch Transit Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Process fetched transit data and prepare input for AI optimization model.\n  This node extracts necessary info from data payload.\n*/\n\nconst transitData = items[0].json;\n\n// Example: extract route info and current schedules\nconst processedData = {\n  routes: transitData.routes.map(route => ({\n    id: route.id,\n    stops: route.stops,\n    schedule: route.schedule\n  }))\n};\n\nreturn [{ json: processedData }];"
+      },
+      "name": "Process Transit Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "language": "python",
+        "code": "# AI optimization of routes and schedules\nimport json\n\n# Input data from previous node\ninput_data = json.loads(items[0]['json'].get('routes', '[]'))\n\n# Dummy AI logic simulation: Optimize schedules by adjusting times (placeholder)\noptimized_routes = []\nfor route in input_data:\n    optimized_schedule = []\n    for time in route['schedule']:\n        optimized_time = time  # placeholder, normally apply AI model here\n        optimized_schedule.append(optimized_time)\n    optimized_routes.append({\n        'id': route['id'],\n        'optimized_schedule': optimized_schedule\n    })\n\nreturn [\n    {\n        'json': {\n            'optimizedRoutes': optimized_routes\n        }\n    }\n]"
+      },
+      "name": "AI Optimization",
+      "type": "n8n-nodes-base.python",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Prepare messages based on optimized routes for commuter alerts.\n  Simulate real-time assistance message generation.\n*/\nconst optimizedRoutes = items[0].json.optimizedRoutes;\n\nconst alerts = optimizedRoutes.map(route => {\n  return {\n    routeId: route.id,\n    message: `Route ${route.id} schedule optimized. Next departure times: ${route.optimized_schedule.join(\", \")}`\n  };\n});\n\nreturn alerts.map(alert => ({ json: alert }));"
+      },
+      "name": "Prepare Commuter Alerts",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "toEmail": "={{$json[\"commuterEmail\"] || \"commuter@example.com\"}}",
+        "subject": "Public Transport Update for Route {{$json.routeId}}",
+        "message": "{{$json.message}}",
+        "options": {}
+      },
+      "name": "Send Email Alerts",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "telegram",
+        "operation": "sendMessage",
+        "chatId": "=-123456789",
+        "text": "={{$json.message}}"
+      },
+      "name": "Send Telegram Alerts",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        340
+      ]
+    }
+  ],
+  "connections": {
+    "Fetch Transit Data": {
+      "main": [
+        [
+          {
+            "node": "Process Transit Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Transit Data": {
+      "main": [
+        [
+          {
+            "node": "AI Optimization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Optimization": {
+      "main": [
+        [
+          {
+            "node": "Prepare Commuter Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Commuter Alerts": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alerts",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Telegram Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
