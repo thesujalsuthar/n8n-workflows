@@ -1,0 +1,222 @@
+{
+  "name": "AI-Powered Sustainable Fashion Outfit Recommender",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "url": "https://api.fashiontrends.com/v1/current-trends",
+        "options": {},
+        "queryParametersUi": {
+          "parameter": []
+        }
+      },
+      "name": "Fetch Fashion Trends",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        200
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "fashionApiCredentialId",
+          "name": "Fashion API Credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "url": "https://api.sustainabilityindex.com/v1/index",
+        "options": {},
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "category",
+              "value": "clothing"
+            }
+          ]
+        }
+      },
+      "name": "Fetch Sustainability Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        400
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "sustainabilityApiCredentialId",
+          "name": "Sustainability API Credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "url": "https://api.userprofileservice.com/v1/user/preferences",
+        "options": {},
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "userId",
+              "value": "={{$json[\"userId\"]}}"
+            }
+          ]
+        }
+      },
+      "name": "Fetch User Preferences",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        600
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "userProfileApiCredentialId",
+          "name": "User Profile API Credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const userPreferences = $items(\"Fetch User Preferences\")[0].json;\nconst fashionTrends = $items(\"Fetch Fashion Trends\")[0].json;\nconst sustainabilityData = $items(\"Fetch Sustainability Data\")[0].json;\n\n// Simple merging and filtering logic\n\nfunction filterEcoFriendly(options, sustainabilityIndex) {\n  return options.filter(option => {\n    const ecoScore = sustainabilityIndex[option.brand] || 0;\n    return ecoScore >= 7; // Threshold for eco-friendly\n  });\n}\n\n// Extract trending options\nconst trendingOptions = fashionTrends.trendingItems || [];\n\n// Filter by user style preferences\nconst preferredStyle = userPreferences.style || null;\nconst styleFiltered = preferredStyle\n  ? trendingOptions.filter(item => item.style === preferredStyle)\n  : trendingOptions;\n\n// Filter options by sustainability\nconst recommendations = filterEcoFriendly(styleFiltered, sustainabilityData.indices);\n\nreturn [{ json: { recommendations } }];"
+      },
+      "name": "Generate Recommendations",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        600,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "no-reply@sustainablefashion.ai",
+        "toEmail": "={{$json[\"userEmail\"]}}",
+        "subject": "Your Eco-Friendly Outfit Recommendations",
+        "text": "Hello,\n\nBased on your preferences and current sustainable fashion trends, here are some eco-friendly outfit options we recommend:\n\n{{$json[\"recommendations\"].map(item => `- ${item.name} by ${item.brand}`).join('\\n')}}\n\nStay stylish and sustainable!\n\nBest regards,\nSustainable Fashion Team"
+      },
+      "name": "Send Email Recommendations",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "smtpCredentialId",
+          "name": "SMTP Credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: { userId: '12345', userEmail: 'user@example.com' } }];"
+      },
+      "name": "Start - Dummy User Input",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        50,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "resource": "message",
+        "additionalFields": {},
+        "text": "Hello! Here are your personalized sustainable fashion outfit recommendations:\n\n{{$json[\"recommendations\"].map(item => `- ${item.name} by ${item.brand}`).join('\\n')}}"
+      },
+      "name": "Send Messaging Platform Notification",
+      "type": "n8n-nodes-base.microsoftTeams",
+      "typeVersion": 1,
+      "position": [
+        850,
+        500
+      ],
+      "credentials": {
+        "microsoftTeamsOAuth2Api": {
+          "id": "microsoftTeamsCredentialId",
+          "name": "Microsoft Teams OAuth2 API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Start - Dummy User Input": {
+      "main": [
+        [
+          {
+            "node": "Fetch Fashion Trends",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Sustainability Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch User Preferences",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Fashion Trends": {
+      "main": [
+        [
+          {
+            "node": "Generate Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Sustainability Data": {
+      "main": [
+        [
+          {
+            "node": "Generate Recommendations",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch User Preferences": {
+      "main": [
+        [
+          {
+            "node": "Generate Recommendations",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Generate Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Send Email Recommendations",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Messaging Platform Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
