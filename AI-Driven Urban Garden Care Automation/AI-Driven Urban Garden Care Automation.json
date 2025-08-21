@@ -1,0 +1,255 @@
+{
+  "name": "AI-Powered Smart Urban Garden AI Care Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "mode": "polling",
+        "interval": 300,
+        "webhookId": "sensor-data-collector"
+      },
+      "id": "SensorDataTrigger",
+      "name": "Sensor Data Collector Trigger",
+      "type": "n8n-nodes-base.interval",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Simulate or fetch sensor data for soil moisture, temperature, and light levels.\n  In real implementation, connect to sensor API or MQTT broker.\n*/\n\nconst soilMoisture = parseFloat((Math.random() * 100).toFixed(2));\nconst temperature = parseFloat((15 + Math.random() * 15).toFixed(2));\nconst lightLevel = parseFloat((Math.random() * 1000).toFixed(2));\n\nreturn [{\n  json: {\n    soilMoisture,\n    temperature,\n    lightLevel,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "SensorDataProcessor",
+      "name": "Sensor Data Processor",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$credentials.openAIApi.apiKey}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "model",
+              "value": "gpt-4"
+            },
+            {
+              "name": "messages",
+              "value": "=[\n  {\n    \"role\": \"system\",\n    \"content\": \"You are an AI assistant specialized in plant health and smart garden automation.\"\n  },\n  {\n    \"role\": \"user\",\n    \"content\": \"Analyze this sensor data and provide plant health status as well as optimize watering schedule recommendations. Data:\\nSoil Moisture: {{$json.soilMoisture}}%\\nTemperature: {{$json.temperature}} °C\\nLight Level: {{$json.lightLevel}} lux\"\n  }\n]"
+            },
+            {
+              "name": "max_tokens",
+              "value": 400
+            },
+            {
+              "name": "temperature",
+              "value": 0.7
+            }
+          ]
+        },
+        "responseFormat": "json",
+        "optionsUi": {}
+      },
+      "id": "AIPlantHealthAnalyzer",
+      "name": "AI Plant Health Analyzer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        770,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const aiResponse = $json.choices && $json.choices[0] && $json.choices[0].message && $json.choices[0].message.content ? $json.choices[0].message.content : \"No response\";\n\nreturn [{ json: { aiAnalysis: aiResponse, timestamp: new Date().toISOString() } }];"
+      },
+      "id": "ExtractAIResponse",
+      "name": "Extract AI Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "no-reply@smartgarden.ai",
+        "toEmail": "={{$json.userEmail || 'user@example.com'}}",
+        "subject": "Urgent: Plant Care Alert - Tasks Recommended",
+        "text": "={{$json.aiAnalysis}}\n\nTimestamp: {{$json.timestamp}}",
+        "html": "<p>{{$json.aiAnalysis.replace(/\\n/g, '<br>')}}</p><p><i>Timestamp: {{$json.timestamp}}</i></p>"
+      },
+      "id": "SendPlantCareAlert",
+      "name": "Send Plant Care Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "path": "plant-health-reports",
+        "fileName": "weekly-plant-health-report-{{$now.format(\"YYYY-MM-DD\")}}.txt",
+        "dataPropertyName": "aiAnalysis",
+        "options": {}
+      },
+      "id": "SaveWeeklyReport",
+      "name": "Save Weekly Plant Health Report",
+      "type": "n8n-nodes-base.writeBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "executeOnce",
+        "executeOnce": true,
+        "continueOnFail": false
+      },
+      "id": "WeeklyReportTrigger",
+      "name": "Weekly Report Trigger - Cron",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        250,
+        600
+      ],
+      "notes": "Runs every week on Monday at 7am"
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Gather all weekly sensor data and AI analyses, aggregate into report.\n  Placeholder returns static text.\n*/\n\nreturn [{\n  json: {\n    aiAnalysis: \"Weekly Plant Health Report:\\n- Soil moisture is within optimal range in 80% of measurements.\\n- Temperature remained stable between 18-25°C.\\n- Light levels optimal for photosynthesis.\\n- Suggested watering schedule: every 4 days, adjust if rain detected.\"\n  }\n}];"
+      },
+      "id": "AggregateWeeklyData",
+      "name": "Aggregate Weekly Data for Report",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "no-reply@smartgarden.ai",
+        "toEmail": "user@example.com",
+        "subject": "Weekly Plant Health Report",
+        "text": "={{$json.aiAnalysis}}",
+        "html": "<pre>{{$json.aiAnalysis}}</pre>"
+      },
+      "id": "SendWeeklyReportEmail",
+      "name": "Send Weekly Report Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        770,
+        600
+      ]
+    }
+  ],
+  "connections": {
+    "SensorDataTrigger": {
+      "main": [
+        [
+          {
+            "node": "SensorDataProcessor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SensorDataProcessor": {
+      "main": [
+        [
+          {
+            "node": "AIPlantHealthAnalyzer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AIPlantHealthAnalyzer": {
+      "main": [
+        [
+          {
+            "node": "ExtractAIResponse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ExtractAIResponse": {
+      "main": [
+        [
+          {
+            "node": "SendPlantCareAlert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "SaveWeeklyReport",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WeeklyReportTrigger": {
+      "main": [
+        [
+          {
+            "node": "AggregateWeeklyData",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AggregateWeeklyData": {
+      "main": [
+        [
+          {
+            "node": "SendWeeklyReportEmail",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "SaveWeeklyReport",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
