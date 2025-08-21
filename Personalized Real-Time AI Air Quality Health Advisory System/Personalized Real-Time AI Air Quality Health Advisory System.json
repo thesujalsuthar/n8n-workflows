@@ -1,0 +1,142 @@
+{
+  "name": "AI-Powered Personalized Real-Time Air Quality Health Advisory System",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.openaq.org/v2/latest",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "coordinates",
+              "value": "={{$json[\"userLocation\"]}}"
+            },
+            {
+              "name": "radius",
+              "value": "5000"
+            }
+          ]
+        }
+      },
+      "name": "Fetch Air Quality Data",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        300,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const userHealthProfile = $json.userHealthProfile;\nconst airQualityData = $json.apiResponse.results || [];\n\nfunction assessHealthImpact(pollutant, value) {\n  // Simple example rules - could be expanded or replaced with ML model\n  const thresholds = {\n    pm25: 35, // µg/m3\n    pm10: 50,\n    no2: 100,\n    o3: 120\n  };\n  if (!thresholds[pollutant]) return null;\n  if (value > thresholds[pollutant]) {\n    if (userHealthProfile.asthma) return `High risk for asthma sufferers due to elevated ${pollutant.toUpperCase()}.`;\n    if (userHealthProfile.cardiac) return `Elevated ${pollutant.toUpperCase()} poses risk for cardiac conditions.`;\n    return `Elevated ${pollutant.toUpperCase()} level. Sensitive individuals should take care.`;\n  }\n  return `Air quality for ${pollutant.toUpperCase()} is within safe limits.`;\n}\n\nconst advisories = [];\n\nairQualityData.forEach(station => {\n  if (station.measurements) {\n    station.measurements.forEach(measurement => {\n      const pollutant = measurement.parameter;\n      const value = measurement.value;\n      const message = assessHealthImpact(pollutant, value);\n      if (message) advisories.push({ pollutant, value, message });\n    });\n  }\n});\n\nreturn [{\n  json: {\n    userEmail: $json.userEmail,\n    userPhone: $json.userPhone,\n    advisories\n  }\n}];"
+      },
+      "name": "Analyze Health Impact",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        520,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "subject": "Your Real-Time Air Quality Health Advisory",
+        "text": "Dear User,\n\nHere is your personalized air quality health advisory based on current data:\n\n{{$json.advisories.map(a => `- ${a.message}`).join('\\n')}}\n\nPlease take appropriate preventive measures.\n\nStay safe,\nAir Quality Advisory System",
+        "toEmail": "={{$json.userEmail}}"
+      },
+      "name": "Send Email Notification",
+      "type": "emailSend",
+      "typeVersion": 1,
+      "position": [
+        760,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "smsMessage",
+        "operation": "send",
+        "to": "={{$json.userPhone}}",
+        "message": "Air Quality Advisory: {{$json.advisories.map(a => a.message).join('; ')}}. Take preventive measures."
+      },
+      "name": "Send SMS Notification",
+      "type": "twilio",
+      "typeVersion": 1,
+      "position": [
+        760,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "userEmail",
+              "value": ""
+            },
+            {
+              "name": "userPhone",
+              "value": ""
+            },
+            {
+              "name": "userLocation",
+              "value": ""
+            },
+            {
+              "name": "userHealthProfile",
+              "value": "{\"asthma\": false, \"cardiac\": false, \"otherConditions\": []}"
+            }
+          ]
+        }
+      },
+      "name": "User Data Input",
+      "type": "set",
+      "typeVersion": 1,
+      "position": [
+        120,
+        250
+      ]
+    }
+  ],
+  "connections": {
+    "User Data Input": {
+      "main": [
+        [
+          {
+            "node": "Fetch Air Quality Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Air Quality Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze Health Impact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Health Impact": {
+      "main": [
+        [
+          {
+            "node": "Send Email Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send SMS Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
