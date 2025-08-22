@@ -1,0 +1,319 @@
+{
+  "name": "GreenCommute AI Scheduler",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.publictransport.example.com/v1/schedules",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "origin",
+              "value": "={{$json.origin}}"
+            },
+            {
+              "name": "destination",
+              "value": "={{$json.destination}}"
+            },
+            {
+              "name": "datetime",
+              "value": "={{$json.datetime}}"
+            }
+          ]
+        },
+        "responseFormat": "json"
+      },
+      "name": "Get Public Transport Schedules",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.weather.example.com/v1/forecast",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "lat",
+              "value": "={{$json.latitude}}"
+            },
+            {
+              "name": "lon",
+              "value": "={{$json.longitude}}"
+            },
+            {
+              "name": "datetime",
+              "value": "={{$json.datetime}}"
+            }
+          ]
+        },
+        "responseFormat": "json"
+      },
+      "name": "Get Weather Forecast",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        250,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.airquality.example.com/v1/airquality",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "lat",
+              "value": "={{$json.latitude}}"
+            },
+            {
+              "name": "lon",
+              "value": "={{$json.longitude}}"
+            }
+          ]
+        },
+        "responseFormat": "json"
+      },
+      "name": "Get Air Quality Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        250,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nInput:\n- Public Transport schedules in items[0].json\n- Weather data in items[1].json\n- Air Quality data in items[2].json\n\nThis function merges and analyzes to find the optimal eco-friendly commute options\n*/\n\nconst schedules = items[0].json.schedules || [];\nconst weather = items[1].json.weather || {};\nconst airQuality = items[2].json.air_quality || {};\n\n// Simple scoring function to estimate carbon footprint impact\nfunction scoreOption(option) {\n  let score = 0;\n\n  // Lower carbon footprint for transit options using cleaner modes\n  if (option.mode === 'bus') score += 10;\n  else if (option.mode === 'subway') score += 5;\n  else if (option.mode === 'bike') score += 1;\n  else if (option.mode === 'walk') score += 0;\n  else score += 20; // Unknown mode penalty\n\n  // Weather penalties\n  if (weather.precipitation && weather.precipitation > 0.2) {\n    if (option.mode === 'bike' || option.mode === 'walk') score += 10;\n  }\n\n  // Air quality penalty\n  if (airQuality.aqi && airQuality.aqi > 100) {\n    if (option.mode === 'bike' || option.mode === 'walk') score += 15;\n  }\n\n  // Transit delays penalty\n  if (option.delayed) score += 15;\n\n  return score;\n}\n\n// Rank options by score ascending (best first)\nconst rankedOptions = schedules.map(option => {\n  return {\n    ...option,\n    ecoScore: scoreOption(option)\n  };\n}).sort((a, b) => a.ecoScore - b.ecoScore);\n\nreturn rankedOptions.map(option => ({ json: option }));"
+      },
+      "name": "Analyze & Rank Options",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        550,
+        450
+      ],
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "fromEmail": "no-reply@greencommute.ai",
+        "toEmail": "={{$json.userEmail}}",
+        "subject": "GreenCommute: Best Eco-Friendly Route Recommendation",
+        "message": "Hello,\n\nBased on real-time public transport schedules, weather, and air quality, here is your optimal eco-friendly commute option:\n\nRoute: {{$json.route}}\nMode: {{$json.mode}}\nEstimated Departure: {{$json.departure_time}}\nEstimated Arrival: {{$json.arrival_time}}\n\nPlease check air quality advisories and transit delay notices to stay safe.\n\nThank you for choosing GreenCommute AI Scheduler!"
+      },
+      "name": "Send Route Recommendation Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        900,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "event": "transitDelay",
+        "conditions": "={{$json.delayed === true}}"
+      },
+      "name": "Detect Transit Delays",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "event": "airQualityAlert",
+        "conditions": "={{$json.aqi && $json.aqi > 150}}"
+      },
+      "name": "Detect Air Quality Alerts",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        700,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "alerts@greencommute.ai",
+        "toEmail": "={{$json.userEmail}}",
+        "subject": "GreenCommute Alert: Transit Delay Detected",
+        "message": "Alert: There is a delay on your selected transit route.\nPlease consider alternate options."
+      },
+      "name": "Send Transit Delay Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "alerts@greencommute.ai",
+        "toEmail": "={{$json.userEmail}}",
+        "subject": "GreenCommute Alert: Poor Air Quality Advisory",
+        "message": "Alert: Current air quality is unhealthy for outdoor activities.\nPlease consider indoor alternatives or take precautions."
+      },
+      "name": "Send Air Quality Advisory",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        900,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "origin",
+              "value": "userInput.origin"
+            },
+            {
+              "name": "destination",
+              "value": "userInput.destination"
+            },
+            {
+              "name": "datetime",
+              "value": "userInput.datetime"
+            },
+            {
+              "name": "latitude",
+              "value": "userInput.latitude"
+            },
+            {
+              "name": "longitude",
+              "value": "userInput.longitude"
+            },
+            {
+              "name": "userEmail",
+              "value": "userInput.email"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set Initial Input Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        50,
+        450
+      ]
+    }
+  ],
+  "connections": {
+    "Set Initial Input Data": {
+      "main": [
+        [
+          {
+            "node": "Get Public Transport Schedules",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Weather Forecast",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Air Quality Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Public Transport Schedules": {
+      "main": [
+        [
+          {
+            "node": "Analyze & Rank Options",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Detect Transit Delays",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Weather Forecast": {
+      "main": [
+        [
+          {
+            "node": "Analyze & Rank Options",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Get Air Quality Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze & Rank Options",
+            "type": "main",
+            "index": 2
+          },
+          {
+            "node": "Detect Air Quality Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze & Rank Options": {
+      "main": [
+        [
+          {
+            "node": "Send Route Recommendation Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect Transit Delays": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Send Transit Delay Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect Air Quality Alerts": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Send Air Quality Advisory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
