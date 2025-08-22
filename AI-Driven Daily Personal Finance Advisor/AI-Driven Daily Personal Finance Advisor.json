@@ -1,0 +1,163 @@
+{
+  "name": "AI-Powered Personal Finance Automated Savings & Investment Planner",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 7,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "defaultMode": "column",
+        "url": "https://api.yourbank.com/v1/transactions",
+        "options": {
+          "headers": {
+            "Authorization": "Bearer {{$credentials.BankAPI.apiKey}}"
+          },
+          "queryParametersUi": {
+            "parameter": [
+              {
+                "name": "from_date",
+                "value": "={{$today.minusDays(7).toFormat('yyyy-MM-dd')}}"
+              },
+              {
+                "name": "to_date",
+                "value": "={{$today.toFormat('yyyy-MM-dd')}}"
+              }
+            ]
+          }
+        }
+      },
+      "name": "Fetch Transactions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const transactions = items[0].json.data || items[0].json.transactions || [];\n\nconst income = transactions.filter(t => t.amount > 0);\nconst expenses = transactions.filter(t => t.amount < 0);\n\nconst totalIncome = income.reduce((acc, curr) => acc + curr.amount, 0);\nconst totalExpenses = expenses.reduce((acc, curr) => acc + Math.abs(curr.amount), 0);\n\nreturn [{\n  json: {\n    totalIncome,\n    totalExpenses,\n    incomeCategories: income.reduce((acc, curr) => {\n      acc[curr.category] = (acc[curr.category] || 0) + curr.amount;\n      return acc;\n    }, {}),\n    expenseCategories: expenses.reduce((acc, curr) => {\n      acc[curr.category] = (acc[curr.category] || 0) + Math.abs(curr.amount);\n      return acc;\n    }, {}),\n    transactions\n  }\n}];"
+      },
+      "name": "Analyze Spending Patterns",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "openai",
+        "operation": "chatCompletion",
+        "model": "gpt-4",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are a personal finance AI assistant. Based on the user's income, expenses, and spending categories you will provide personalized recommendations for savings and investment plans."
+          },
+          {
+            "role": "user",
+            "content": "Given these data:\n- Total Income: {{$json[\"totalIncome\"]}}\n- Total Expenses: {{$json[\"totalExpenses\"]}}\n- Income Breakdown: {{$json[\"incomeCategories\"]}}\n- Expense Breakdown: {{$json[\"expenseCategories\"]}}\n- Transactions data provided\n\nPlease generate a tailored savings plan including recommended monthly saving amount and suitable investment plan suggestions considering the user's spending habits."
+          }
+        ],
+        "options": {}
+      },
+      "name": "Generate Savings & Investment Recommendations",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ],
+      "credentials": {
+        "openAiApi": "OpenAI API"
+      }
+    },
+    {
+      "parameters": {
+        "resource": "email",
+        "operation": "send",
+        "fromEmail": "financebot@yourdomain.com",
+        "toEmail": "={{$json[\"userEmail\"] || $credentials.UserEmail.email}}",
+        "subject": "Your Personalized Savings & Investment Plan",
+        "text": "={{$json[\"choices\"][0][\"message\"][\"content\"]}}"
+      },
+      "name": "Send Recommendations Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        300
+      ],
+      "credentials": {
+        "smtp": "SMTP Credentials"
+      }
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Transactions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Transactions": {
+      "main": [
+        [
+          {
+            "node": "Analyze Spending Patterns",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Spending Patterns": {
+      "main": [
+        [
+          {
+            "node": "Generate Savings & Investment Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Savings & Investment Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Send Recommendations Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
