@@ -1,0 +1,246 @@
+{
+  "name": "AI-Powered Sustainable Travel Itinerary Planner and Carbon Offset Tracker",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "start",
+        "options": {}
+      },
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "text",
+        "operation": "completion",
+        "model": "gpt-4",
+        "prompt": "You are an AI travel assistant specializing in sustainable eco-friendly travel. Given the user's input travel destination, dates, and preferences, suggest a detailed travel itinerary that includes sustainable transportation options, eco-friendly accommodations, and activities focused on sustainability.\n\nReturn the itinerary as a JSON object with sections: transport, accommodation, activities. Each section should have name, description, and sustainability notes.\n\nUser Input:\n{{ $json.travelDetails }}",
+        "temperature": 0.7,
+        "maxTokens": 800,
+        "topP": 1,
+        "frequencyPenalty": 0,
+        "presencePenalty": 0,
+        "stop": []
+      },
+      "name": "Generate Sustainable Itinerary (OpenAI)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        600,
+        300
+      ],
+      "credentials": {
+        "openAiApi": "OpenAI API"
+      }
+    },
+    {
+      "parameters": {
+        "mode": "json",
+        "json": "={{$json[\"choices\"][0][\"message\"][\"content\"]}}"
+      },
+      "name": "Parse Itinerary JSON",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.example.carbonfootprint.io/v1/calculate",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={\"transport\": $json.transport, \"accommodation\": $json.accommodation, \"activities\": $json.activities}"
+      },
+      "name": "Calculate Carbon Footprint",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        300
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "user": "YOUR_CARBON_API_USER",
+          "password": "YOUR_CARBON_API_PASSWORD"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "text",
+        "operation": "completion",
+        "model": "gpt-4",
+        "prompt": "Based on this itinerary:\nTransport:\n{{$json[\"transport\"]}}\nAccommodation:\n{{$json[\"accommodation\"]}}\nActivities:\n{{$json[\"activities\"]}}\n\nAnd this carbon footprint estimate:\n{{$json[\"carbonFootprint\"]}} kg CO2,\nGenerate user-friendly explanations about the sustainability of the travel plan and provide a call to action to purchase carbon offsets. Include estimated cost for offset purchase, assuming $10 per 100 kg CO2 offset.\n\nReturn as plain text.",
+        "temperature": 0.7,
+        "maxTokens": 500,
+        "topP": 1,
+        "frequencyPenalty": 0,
+        "presencePenalty": 0,
+        "stop": []
+      },
+      "name": "Generate Sustainability Summary and Offset CTA",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        300
+      ],
+      "credentials": {
+        "openAiApi": "OpenAI API"
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://api.carbonoffsets.example.com/v1/purchase",
+        "method": "POST",
+        "jsonParameters": true,
+        "bodyParametersJson": "={\"offset_kg\": $json.carbonFootprint, \"amount_usd\": (($json.carbonFootprint / 100) * 10).toFixed(2), \"user_info\": $json.userInfo }"
+      },
+      "name": "Purchase Carbon Offset",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        300
+      ],
+      "credentials": {
+        "apiKeyAuth": {
+          "apiKey": "YOUR_OFFSET_API_KEY"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fields": {
+          "string": [
+            {
+              "name": "travelDetails",
+              "value": ""
+            },
+            {
+              "name": "userInfo",
+              "value": ""
+            }
+          ]
+        }
+      },
+      "name": "Set Travel Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "carbonFootprint",
+              "value": "={{$json.body.carbon_kg_co2}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set Carbon Footprint in Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Set Travel Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Travel Input": {
+      "main": [
+        [
+          {
+            "node": "Generate Sustainable Itinerary (OpenAI)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Sustainable Itinerary (OpenAI)": {
+      "main": [
+        [
+          {
+            "node": "Parse Itinerary JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Itinerary JSON": {
+      "main": [
+        [
+          {
+            "node": "Calculate Carbon Footprint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Carbon Footprint": {
+      "main": [
+        [
+          {
+            "node": "Set Carbon Footprint in Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Carbon Footprint in Data": {
+      "main": [
+        [
+          {
+            "node": "Generate Sustainability Summary and Offset CTA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Sustainability Summary and Offset CTA": {
+      "main": [
+        [
+          {
+            "node": "Purchase Carbon Offset",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
