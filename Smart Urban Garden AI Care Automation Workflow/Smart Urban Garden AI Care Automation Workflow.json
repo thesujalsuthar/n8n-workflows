@@ -1,0 +1,306 @@
+{
+  "name": "Smart Urban Garden AI Care Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.thingspeak.com/channels/CHANNEL_ID/fields/1.json?results=1",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "api-key",
+              "value": "YOUR_THINGSPEAK_API_KEY"
+            }
+          ]
+        }
+      },
+      "name": "Get Soil Moisture Sensor Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.thingspeak.com/channels/CHANNEL_ID/fields/2.json?results=1",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "api-key",
+              "value": "YOUR_THINGSPEAK_API_KEY"
+            }
+          ]
+        }
+      },
+      "name": "Get Sunlight Sensor Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        100,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.thingspeak.com/channels/CHANNEL_ID/fields/3.json?results=1",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "api-key",
+              "value": "YOUR_THINGSPEAK_API_KEY"
+            }
+          ]
+        }
+      },
+      "name": "Get Temperature Sensor Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        100,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.openweathermap.org/data/2.5/weather",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "lat",
+              "value": "YOUR_LATITUDE"
+            },
+            {
+              "name": "lon",
+              "value": "YOUR_LONGITUDE"
+            },
+            {
+              "name": "appid",
+              "value": "YOUR_OPENWEATHER_API_KEY"
+            },
+            {
+              "name": "units",
+              "value": "metric"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Get Weather Forecast",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        300,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const soilMoisture = parseFloat($items(\"Get Soil Moisture Sensor Data\")[0].json.feeds[0].field1);\nconst sunlight = parseFloat($items(\"Get Sunlight Sensor Data\")[0].json.feeds[0].field2);\nconst temperature = parseFloat($items(\"Get Temperature Sensor Data\")[0].json.feeds[0].field3);\nconst weather = $items(\"Get Weather Forecast\")[0].json;\n\n// Define watering threshold and sunlight needs\nconst soilMoistureThreshold = 30;\nconst sunlightOptimal = 6; // hours\nconst temperatureOptimalMin = 15;\nconst temperatureOptimalMax = 30;\n\n// Extract weather conditions\nconst rain = weather.weather.some(condition => condition.main.toLowerCase().includes('rain'));\nconst forecastTemp = weather.main.temp;\n\n// Decide watering need\nlet wateringNeeded = false;\nlet wateringRecommendation = \"No watering needed\";\n\nif (soilMoisture < soilMoistureThreshold && !rain) {\n  wateringNeeded = true;\n  wateringRecommendation = \"Water the plants now to maintain adequate soil moisture.\";\n}\n\n// Generate care tips\nlet careTips = [];\n\nif (sunlight < sunlightOptimal) {\n  careTips.push(\"Consider placing plants in a sunnier spot or supplement with grow lights.\");\n}\n\nif (temperature < temperatureOptimalMin) {\n  careTips.push(\"Protect plants from cold temperatures.\");\n} else if (temperature > temperatureOptimalMax) {\n  careTips.push(\"Provide shade to prevent heat stress.\");\n}\n\nif (rain) {\n  careTips.push(\"Rain expected, adjust watering accordingly.\");\n}\n\nreturn [{\n  json: {\n    soilMoisture,\n    sunlight,\n    temperature,\n    rain,\n    forecastTemp,\n    wateringNeeded,\n    wateringRecommendation,\n    careTips\n  }\n}];"
+      },
+      "name": "Analyze Sensor Data and Weather",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [
+        500,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.example-watering-system.com/devices/DEVICE_ID/water",
+        "method": "POST",
+        "options": {},
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "duration",
+              "value": "30"
+            }
+          ]
+        },
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_WATERING_SYSTEM_API_TOKEN"
+            }
+          ]
+        }
+      },
+      "name": "Activate Watering System",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        700,
+        350
+      ],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "functionCode": "if (items[0].json.wateringNeeded) {\n  return items;\n} else {\n  return [];\n}"
+      },
+      "name": "Check Watering Need",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [
+        600,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "googleApi",
+        "operation": "append",
+        "sheetId": "YOUR_GOOGLE_SHEET_ID",
+        "range": "SensorLogs!A1:E1",
+        "valueInputMode": "USER_ENTERED",
+        "options": {},
+        "values": [
+          [
+            "={{$now}}",
+            "={{$json.soilMoisture}}",
+            "={{$json.sunlight}}",
+            "={{$json.temperature}}",
+            "={{$json.wateringNeeded}}"
+          ]
+        ]
+      },
+      "name": "Log Sensor Data",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [
+        700,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oauth2",
+        "resource": "messages",
+        "operation": "send",
+        "to": "user@example.com",
+        "subject": "Smart Urban Garden Care Update",
+        "text": "Soil Moisture: {{$json.soilMoisture}}%\nSunlight: {{$json.sunlight}} hours\nTemperature: {{$json.temperature}} °C\n\nWatering Recommendation: {{$json.wateringRecommendation}}\n\nCare Tips:\n{{$json.careTips.join('\\n')}}"
+      },
+      "name": "Send Care Tips Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 1,
+      "position": [
+        700,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const soilMoisture = $json.soilMoisture;\nconst wateringNeeded = $json.wateringNeeded;\n\n// Basic predictive analytics for next day watering need\nconst forecastTemp = $json.forecastTemp;\n\nlet predictedNeed = false;\nif (soilMoisture < 40 && forecastTemp > 15) {\n  predictedNeed = true;\n}\n\nreturn [{ json: { ...$json, predictedWateringNeedTomorrow: predictedNeed } }];"
+      },
+      "name": "Predictive Analytics",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [
+        500,
+        550
+      ]
+    }
+  ],
+  "connections": {
+    "Get Soil Moisture Sensor Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze Sensor Data and Weather",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Sunlight Sensor Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze Sensor Data and Weather",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Get Temperature Sensor Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze Sensor Data and Weather",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Get Weather Forecast": {
+      "main": [
+        [
+          {
+            "node": "Analyze Sensor Data and Weather",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Analyze Sensor Data and Weather": {
+      "main": [
+        [
+          {
+            "node": "Predictive Analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Predictive Analytics": {
+      "main": [
+        [
+          {
+            "node": "Check Watering Need",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log Sensor Data",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "Send Care Tips Email",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Check Watering Need": {
+      "main": [
+        [
+          {
+            "node": "Activate Watering System",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "id": "SmartUrbanGardenAICareAutomation"
+}
