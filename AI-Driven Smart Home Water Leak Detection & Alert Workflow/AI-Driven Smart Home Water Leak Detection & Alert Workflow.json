@@ -1,0 +1,182 @@
+{
+  "name": "AI-Powered Smart Home Water Leak Detection & Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.smartsensorprovider.com/v1/water-leak-sensors/data",
+        "responseFormat": "json",
+        "fullResponse": true,
+        "authentication": "headerAuth",
+        "headerAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$credentials.smartSensorApi.apiKey}}"
+        }
+      },
+      "name": "Get Water Leak Sensor Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const sensorData = items[0].json.data;\n\n// Prepare features for AI analysis\nconst features = sensorData.map(reading => {\n  return {\n    moistureLevel: reading.moistureLevel,\n    sensorId: reading.sensorId,\n    timestamp: reading.timestamp\n  };\n});\n\nreturn features.map(feature => {\n  return { json: feature };\n});"
+      },
+      "name": "Extract Features for AI",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an AI assistant specialized in analyzing smart home water sensor data to detect leaks or unusual moisture levels and minimize false alarms."
+          },
+          {
+            "role": "user",
+            "content": "Analyze the following sensor reading and determine if it indicates a potential leak or abnormal moisture level. Return a JSON object with keys: leakDetected (true/false), confidence (0-1), recommendedAction (string). Use historical norms to reduce false alarms."
+          },
+          {
+            "role": "user",
+            "content": "Sensor reading data: {{$node[\"Extract Features for AI\"].json}}"
+          }
+        ],
+        "options": {}
+      },
+      "name": "AI Leak Detection Analysis",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const aiResponse = JSON.parse(items[0].json.choices[0].message.content);\n\nif (aiResponse.leakDetected) {\n  return [{ json: aiResponse }];\n}\n\nreturn [];"
+      },
+      "name": "Filter Leak Alerts",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        950,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "alerts@smarthome.com",
+        "toEmail": "={{$credentials.homeowner.email}}",
+        "subject": "Urgent: Water Leak Detected in Your Home",
+        "text": "Attention Homeowner,\n\nOur system has detected a potential water leak with confidence {{$json.confidence}}. Recommended action:\n\n{{$json.recommendedAction}}\n\nPlease address this promptly to avoid water damage.\n\nThank you,\nSmart Home Monitoring System"
+      },
+      "name": "Send Email Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "phoneNumber": "={{$credentials.homeowner.phoneNumber}}",
+        "text": "Water Leak Alert! Confidence: {{$json.confidence}}. Action: {{$json.recommendedAction}}"
+      },
+      "name": "Send SMS Alert",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        380
+      ],
+      "credentials": {
+        "twilioApi": {
+          "id": "1",
+          "name": "Twilio Account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Get Water Leak Sensor Data": {
+      "main": [
+        [
+          {
+            "node": "Extract Features for AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Features for AI": {
+      "main": [
+        [
+          {
+            "node": "AI Leak Detection Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Leak Detection Analysis": {
+      "main": [
+        [
+          {
+            "node": "Filter Leak Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Leak Alerts": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send SMS Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "credentials": [
+    {
+      "name": "smartSensorApi",
+      "type": "httpHeaderAuth",
+      "data": {
+        "apiKey": ""
+      }
+    },
+    {
+      "name": "homeowner",
+      "type": "credentials",
+      "data": {
+        "email": "",
+        "phoneNumber": ""
+      }
+    }
+  ]
+}
