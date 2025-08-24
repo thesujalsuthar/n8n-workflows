@@ -1,0 +1,203 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 9,
+              "minute": 0,
+              "mode": "everyDay"
+            }
+          ]
+        }
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "database",
+        "operation": "findMany",
+        "table": "users",
+        "options": {},
+        "filters": {}
+      },
+      "name": "Fetch Users",
+      "type": "n8n-nodes-base.database",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an AI assistant that generates personalized daily sustainability tips based on provided user preferences and habit history."
+          },
+          {
+            "role": "user",
+            "content": "User Preferences: {{$json[\"preferences\"]}}\nHabit Data: {{$json[\"habitData\"]}}\nGenerate one personalized, actionable sustainability tip for today."
+          }
+        ],
+        "temperature": 0.7,
+        "top_p": 1,
+        "max_tokens": 150
+      },
+      "name": "Generate Tip",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "database",
+        "operation": "findMany",
+        "table": "habits",
+        "options": {},
+        "filters": {
+          "user_id": "={{$json[\"id\"]}}"
+        }
+      },
+      "name": "Fetch Habit Data",
+      "type": "n8n-nodes-base.database",
+      "typeVersion": 1,
+      "position": [
+        500,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "multiple",
+        "values": {
+          "string": [
+            {
+              "name": "message",
+              "value": "={{$json[\"choices\"][0][\"message\"][\"content\"]}}"
+            },
+            {
+              "name": "userId",
+              "value": "={{$json[\"id\"]}}"
+            }
+          ]
+        }
+      },
+      "name": "Prepare Notification",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "phoneNumber": "={{$json[\"phone\"]}}",
+        "message": "EcoAware Tip: {{$node[\"Prepare Notification\"].json[\"message\"]}}",
+        "send": true
+      },
+      "name": "Send SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "database",
+        "operation": "insert",
+        "table": "habit_tracking",
+        "fields": {
+          "user_id": "={{$json[\"id\"]}}",
+          "date": "={{$now}}",
+          "tip_sent": "={{$node[\"Generate Tip\"].json[\"choices\"][0][\"message\"][\"content\"]}}",
+          "habit_progress": "pending"
+        }
+      },
+      "name": "Record Habit Data",
+      "type": "n8n-nodes-base.database",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        450
+      ]
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Users",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Users": {
+      "main": [
+        [
+          {
+            "node": "Fetch Habit Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Habit Data": {
+      "main": [
+        [
+          {
+            "node": "Generate Tip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Tip": {
+      "main": [
+        [
+          {
+            "node": "Prepare Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Record Habit Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Notification": {
+      "main": [
+        [
+          {
+            "node": "Send SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
