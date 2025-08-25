@@ -1,0 +1,184 @@
+{
+  "name": "AI-Powered Local Food Waste Reduction and Donation Optimization System",
+  "nodes": [
+    {
+      "parameters": {
+        "resource": "item",
+        "operation": "getAll",
+        "returnAll": true,
+        "endpoint": "surplus-food-data",
+        "queryParameters": {}
+      },
+      "name": "Get Surplus Food Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const data = items.map(item => item.json);\n\nconst aggregatedData = {};\n\nfor (const entry of data) {\n  const location = entry.location;\n  if (!aggregatedData[location]) {\n    aggregatedData[location] = [];\n  }\n  aggregatedData[location].push({\n    foodType: entry.foodType,\n    quantity: entry.quantity,\n    pickupWindowStart: entry.pickupWindowStart,\n    pickupWindowEnd: entry.pickupWindowEnd\n  });\n}\n\nreturn [{ json: aggregatedData }];"
+      },
+      "name": "Aggregate Surplus Food Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "temperature": 0.4,
+        "top_p": 1,
+        "max_tokens": 350,
+        "stop": [
+          "\n"
+        ],
+        "prompt": "You are an AI system tasked with optimizing redistribution routes and donation schedules based on surplus food data. Given the aggregated data of locations, food types, quantities, and pickup windows, generate an optimized schedule and route plan that minimizes food waste and maximizes timely donations. Output JSON with an array of route objects, each containing: location, scheduledPickupTime, foodItems (with type and quantity), and assignedDriver."
+      },
+      "name": "Optimize Redistribution Routes & Schedules",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "user",
+        "operation": "list"
+      },
+      "name": "Get Stakeholders",
+      "type": "n8n-nodes-base.crmSystem",
+      "typeVersion": 1,
+      "position": [
+        250,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const routes = JSON.parse(items[0].json.choices[0].text.trim());\nconst stakeholders = items[1].json.users;\n\nconst notifications = [];\n\nfor (const route of routes) {\n  for (const stakeholder of stakeholders) {\n    if (stakeholder.location === route.location || stakeholder.role === 'driver') {\n      notifications.push({\n        json: {\n          to: stakeholder.email,\n          subject: `Pickup Schedule for ${route.location}`,\n          message: `Dear ${stakeholder.name},\\nYour scheduled pickup time is ${route.scheduledPickupTime}. Food items: ${route.foodItems.map(f => `${f.type} (${f.quantity})`).join(', ')}.`\n        }\n      });\n    }\n  }\n}\n\nreturn notifications;"
+      },
+      "name": "Prepare Notifications",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        400
+      ],
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "toEmail": "={{$json[\"to\"]}}",
+        "subject": "={{$json[\"subject\"]}}",
+        "text": "={{$json[\"message\"]}}"
+      },
+      "name": "Send Notifications",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "impact",
+        "operation": "create",
+        "fields": {
+          "totalFoodSaved": "={{ Object.values($items('Aggregate Surplus Food Data')[0].json).flat().reduce((acc, cur) => acc + cur.quantity, 0) }}",
+          "totalRoutesPlanned": "={{$items('Optimize Redistribution Routes & Schedules').length}}",
+          "notificationsSent": "={{$items('Send Notifications').length}}",
+          "timestamp": "={{new Date().toISOString()}}"
+        }
+      },
+      "name": "Track Impact Metrics",
+      "type": "n8n-nodes-base.customApi",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Get Surplus Food Data": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Surplus Food Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Surplus Food Data": {
+      "main": [
+        [
+          {
+            "node": "Optimize Redistribution Routes & Schedules",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Stakeholders": {
+      "main": [
+        [
+          {
+            "node": "Prepare Notifications",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Optimize Redistribution Routes & Schedules": {
+      "main": [
+        [
+          {
+            "node": "Prepare Notifications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Notifications": {
+      "main": [
+        [
+          {
+            "node": "Send Notifications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Notifications": {
+      "main": [
+        [
+          {
+            "node": "Track Impact Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  ],
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
