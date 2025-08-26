@@ -1,0 +1,230 @@
+{
+  "name": "AI-Powered Smart Home Air Quality Monitoring & Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "interval": 300,
+        "options": {}
+      },
+      "name": "Trigger - Poll Air Quality Sensors",
+      "type": "n8n-nodes-base.interval",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "json",
+        "url": "http://smart-home.local/api/air-quality",
+        "responseFormat": "json",
+        "jsonParameters": false,
+        "options": {}
+      },
+      "name": "HTTP Request - Get Air Quality Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const data = items[0].json;\n\n// Example pollutant thresholds (can be customized or dynamic)\nconst thresholds = {\n  pm25: 35,   // ug/m3\n  co2: 1000,  // ppm\n  voc: 500,   // ppb\n  humidity: 60, // % (too high)\n  temp: 30    // °C (too high)\n};\n\nconst alerts = [];\n\nif (data.pm25 !== undefined && data.pm25 > thresholds.pm25) {\n  alerts.push('PM2.5 level is high (' + data.pm25 + ' ug/m3). Consider increasing ventilation.');\n}\n\nif (data.co2 !== undefined && data.co2 > thresholds.co2) {\n  alerts.push('CO2 concentration is elevated (' + data.co2 + ' ppm). Open windows or increase airflow.');\n}\n\nif (data.voc !== undefined && data.voc > thresholds.voc) {\n  alerts.push('VOC levels are above safe limits (' + data.voc + ' ppb). Reduce sources of VOCs and ventilate.');\n}\n\nif (data.humidity !== undefined && data.humidity > thresholds.humidity) {\n  alerts.push('Humidity is high (' + data.humidity + '%). Use a dehumidifier to prevent mold.');\n}\n\nif (data.temp !== undefined && data.temp > thresholds.temp) {\n  alerts.push('Temperature is high (' + data.temp + '°C). Consider cooling options.');\n}\n\nreturn [{\n  json: {\n    data,\n    alerts,\n    alertPresent: alerts.length > 0\n  }\n}];"
+      },
+      "name": "Function - Analyze Air Quality Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json[\"alertPresent\"]}}",
+              "operation": "isTrue"
+            }
+          ]
+        }
+      },
+      "name": "IF - Alerts Present?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "no-reply@smarthome.local",
+        "toEmail": "={{$node[\"User Settings\"].json[\"email\"]}}",
+        "subject": "Indoor Air Quality Alert",
+        "text": "The following indoor air quality alerts have been detected:\n\n{{$json[\"alerts\"].join('\\n- ')}}\n\nRecommendations:\n{{ $json[\"alerts\"].join('\\n- ') }}\n\nPlease take appropriate actions to improve your indoor environment.",
+        "html": "<p>The following indoor air quality alerts have been detected:</p><ul><li>{{ $json[\"alerts\"].join('</li><li>') }}</li></ul><p><strong>Recommendations:</strong></p><ul><li>{{ $json[\"alerts\"].join('</li><li>') }}</li></ul><p>Please take appropriate actions to improve your indoor environment.</p>"
+      },
+      "name": "Email Send - Air Quality Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        250
+      ],
+      "credentials": {
+        "smtp": "SMTP Credentials"
+      }
+    },
+    {
+      "parameters": {
+        "title": "Indoor Air Quality Alert",
+        "message": "The following alerts detected:\n{{$json[\"alerts\"].join('\\n- ')}}\nPlease take recommended actions.",
+        "priority": "high"
+      },
+      "name": "Push Notification - Air Quality Alert",
+      "type": "n8n-nodes-base.pushbullet",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        350
+      ],
+      "credentials": {
+        "pushbulletApi": "Pushbullet API"
+      }
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "email",
+              "value": "user@example.com"
+            },
+            {
+              "name": "preferredAlertMethod",
+              "value": "email"  // or "push"
+            }
+          ]
+        }
+      },
+      "name": "User Settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        250,
+        150
+      ]
+    },
+    {
+      "parameters": {},
+      "name": "No-op",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Trigger - Poll Air Quality Sensors": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - Get Air Quality Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - Get Air Quality Data": {
+      "main": [
+        [
+          {
+            "node": "Function - Analyze Air Quality Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Function - Analyze Air Quality Data": {
+      "main": [
+        [
+          {
+            "node": "IF - Alerts Present?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Alerts Present?": {
+      "main": [
+        [
+          {
+            "node": "User Settings",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No-op",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "User Settings": {
+      "main": [
+        [
+          {
+            "node": "Email Send - Air Quality Alert",
+            "type": "main",
+            "index": 0,
+            "condition": "={{$json[\"preferredAlertMethod\"] === 'email'}}"
+          },
+          {
+            "node": "Push Notification - Air Quality Alert",
+            "type": "main",
+            "index": 0,
+            "condition": "={{$json[\"preferredAlertMethod\"] === 'push'}}"
+          }
+        ]
+      ]
+    },
+    "Email Send - Air Quality Alert": {
+      "main": [
+        [
+          {
+            "node": "No-op",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Push Notification - Air Quality Alert": {
+      "main": [
+        [
+          {
+            "node": "No-op",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
