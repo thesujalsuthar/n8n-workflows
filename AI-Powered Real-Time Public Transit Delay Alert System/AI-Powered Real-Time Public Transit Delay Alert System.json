@@ -1,0 +1,305 @@
+{
+  "name": "AI-Driven Real-Time Public Transit Delay Prediction and Commuter Notification System",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.publictransitdata.com/realtime",
+        "responseFormat": "json",
+        "options": {},
+        "jsonParameters": true,
+        "queryParametersJson": "[]"
+      },
+      "name": "Fetch Real-Time Transit Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/* Format and clean raw transit data for AI input */\nreturn items.map(item => {\n  const data = item.json;\n  // Example transformation - adapt as needed\n  return {\n    json: {\n      routeId: data.routeId || '',\n      tripId: data.tripId || '',\n      timestamp: data.timestamp || new Date().toISOString(),\n      stopId: data.stopId || '',\n      arrivalTime: data.arrivalTime || null,\n      scheduledArrivalTime: data.scheduledArrivalTime || null,\n      delaySeconds: data.delaySeconds || 0,\n      vehicleId: data.vehicleId || ''\n    }\n  };\n});"
+      },
+      "name": "Clean and Format Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "headers": {
+          "Authorization": "Bearer YOUR_AI_API_KEY",
+          "Content-Type": "application/json"
+        },
+        "requestBody": "={{ { input: $json } }}",
+        "options": {},
+        "url": "https://api.your-aipredictor.com/predictTransitDelay",
+        "responseFormat": "json",
+        "jsonParameters": true
+      },
+      "name": "AI Delay Prediction",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/* Filter predicted delays considered significant (e.g., delays over 2 minutes) */\nreturn items.filter(item => item.json.predictedDelaySeconds > 120);"
+      },
+      "name": "Filter Significant Delays",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/* Example user preferences lookup based on tripId or routeId */\nconst preferences = {\n  'trip-123': { email: 'user1@example.com', phone: '+1234567890', channel: 'SMS' },\n  'route-456': { email: 'user2@example.com', phone: '+1987654321', channel: 'Email' }\n};\n\nreturn items.map(item => {\n  const tripId = item.json.tripId || '';\n  const routeId = item.json.routeId || '';\n  const userPref = preferences[tripId] || preferences[routeId] || null;\n  if (!userPref) {\n    return null; // no user configured for this entry\n  }\n  item.json.userPreferences = userPref;\n  return item;\n}).filter(i => i !== null);"
+      },
+      "name": "Attach User Preferences",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "noreply@transitalerts.com",
+        "toEmail": "={{ $json[\"userPreferences\"].email }}",
+        "subject": "Transit Delay Alert: Route {{$json.routeId}} Trip {{$json.tripId}}",
+        "text": "Dear Commuter,\n\nThere is a predicted delay of {{$json.predictedDelaySeconds}} seconds on your transit route {{$json.routeId}} (Trip ID: {{$json.tripId}}).\n\nPlease plan accordingly.\n\nThank you,\nTransit Alerts Team"
+      },
+      "name": "Send Email Notification",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        120
+      ],
+      "credentials": {
+        "smtp": "Your SMTP Credentials"
+      }
+    },
+    {
+      "parameters": {
+        "phoneNumber": "={{ $json[\"userPreferences\"].phone }}",
+        "message": "Transit Delay Alert: Delay of {{$json.predictedDelaySeconds}} sec on Route {{$json.routeId}} (Trip {{$json.tripId}}). Please adjust your plans accordingly."
+      },
+      "name": "Send SMS Notification",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        300
+      ],
+      "credentials": {
+        "twilioApi": "Your Twilio API Credentials"
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json[\"userPreferences\"].chatId || '' }}",
+        "text": "Transit Delay Alert: Delay of {{$json.predictedDelaySeconds}} seconds on Route {{$json.routeId}} (Trip {{$json.tripId}}). Please stay informed."
+      },
+      "name": "Send Messaging App Notification",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        480
+      ],
+      "credentials": {
+        "telegramApi": "Your Telegram API Credentials"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "/* Route notifications based on user preference channel */\nreturn items.map(item => {\n  const channel = item.json.userPreferences.channel || 'Email';\n  item.json.notificationChannel = channel;\n  return item;\n});"
+    },
+      "name": "Determine Notification Channel",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1375,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "rules": [
+          {
+            "value1": "={{$json.notificationChannel}}",
+            "operation": "equal",
+            "value2": "Email"
+          }
+        ]
+      },
+      "name": "IF: Email Channel",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "rules": [
+          {
+            "value1": "={{$json.notificationChannel}}",
+            "operation": "equal",
+            "value2": "SMS"
+          }
+        ]
+      },
+      "name": "IF: SMS Channel",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "rules": [
+          {
+            "value1": "={{$json.notificationChannel}}",
+            "operation": "equal",
+            "value2": "MessagingApp"
+          }
+        ]
+      },
+      "name": "IF: Messaging App Channel",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        540
+      ]
+    }
+  ],
+  "connections": {
+    "Fetch Real-Time Transit Data": {
+      "main": [
+        [
+          {
+            "node": "Clean and Format Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean and Format Data": {
+      "main": [
+        [
+          {
+            "node": "AI Delay Prediction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Delay Prediction": {
+      "main": [
+        [
+          {
+            "node": "Filter Significant Delays",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Significant Delays": {
+      "main": [
+        [
+          {
+            "node": "Attach User Preferences",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach User Preferences": {
+      "main": [
+        [
+          {
+            "node": "Determine Notification Channel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Determine Notification Channel": {
+      "main": [
+        [
+          {
+            "node": "IF: Email Channel",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "IF: SMS Channel",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "IF: Messaging App Channel",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "IF: Email Channel": {
+      "main": [
+        [
+          {
+            "node": "Send Email Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: SMS Channel": {
+      "main": [
+        [
+          {
+            "node": "Send SMS Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Messaging App Channel": {
+      "main": [
+        [
+          {
+            "node": "Send Messaging App Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
