@@ -1,0 +1,324 @@
+{
+  "name": "Smart Urban Garden AI Assistant",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sensor-data",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "name": "Receive Sensor Data",
+      "type": "n8n-nodes-base.httpTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const manualData = $items(\"Manual Data Entry\").length ? $items(\"Manual Data Entry\")[0].json : {};\nreturn [{ json: { ...manualData, ...$json } }];"
+      },
+      "name": "Merge Sensor and Manual Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        520,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "temperature": 0.5,
+        "top_p": 1,
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an expert urban garden AI assistant analyzing plant sensor data and manual inputs to determine plant health status, watering needs, pest detection, and care recommendations."
+          },
+          {
+            "role": "user",
+            "content": "Analyze the following data for plant health, watering schedule optimization, and pest alerts. Provide a structured JSON with keys: \"healthStatus\" (string), \"wateringSchedule\" (array of datetime strings for next watering events), \"pestAlert\" (boolean), \"careRecommendations\" (array of strings). Data: {{ $json | json }}"
+          }
+        ]
+      },
+      "name": "AI Analysis",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        780,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const analysis = JSON.parse(items[0].json.choices[0].message.content);\nreturn [{ json: analysis }];"
+      },
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1020,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "timezone": "America/New_York",
+        "expression": "{{$json[\"wateringSchedule\"]}}",
+        "options": {}
+      },
+      "name": "Create Watering Events",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 1,
+      "position": [
+        1240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.map(item => {\n  return {\n    json: {\n      text: `Reminder: Water your plants at ${item.json}`,\n      date: item.json\n    }\n  };\n});"
+      },
+      "name": "Format Watering Notification",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "type": "dateTime",
+              "value": "={{$json.date}}"
+            }
+          ]
+        }
+      },
+      "name": "Schedule Watering Notification",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        1680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "text": "={{$json.text}}",
+        "to": "={{$node[\"Notify User\"].parameter.to}}",
+        "options": {}
+      },
+      "name": "Send Watering Notification",
+      "type": "n8n-nodes-base.email",
+      "typeVersion": 1,
+      "position": [
+        1900,
+        300
+      ],
+      "credentials": {
+        "smtp": "SMTP Credentials"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return $json.pestAlert === true ? items : [];"
+      },
+      "name": "Filter Pest Alerts",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1020,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "text": "Pest alert detected in your urban garden! Immediate attention required.",
+        "to": "gardener@example.com",
+        "options": {}
+      },
+      "name": "Send Pest Alert Notification",
+      "type": "n8n-nodes-base.email",
+      "typeVersion": 1,
+      "position": [
+        1240,
+        480
+      ],
+      "credentials": {
+        "smtp": "SMTP Credentials"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return $items(\"Parse AI Response\")[0].json.careRecommendations.map(rec => ({ json: { recommendation: rec } }));"
+      },
+      "name": "Extract Care Recommendations",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1020,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "message": "={{\"Care Recommendation: \" + $json.recommendation}}",
+        "phoneNumber": "YOUR_PHONE_NUMBER",
+        "options": {}
+      },
+      "name": "Send Care Recommendation SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1240,
+        120
+      ],
+      "credentials": {
+        "twilioApi": "Twilio Account"
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "manual-entry",
+        "responseMode": "onReceived"
+      },
+      "name": "Manual Data Entry",
+      "type": "n8n-nodes-base.httpTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        120
+      ]
+    }
+  ],
+  "connections": {
+    "Receive Sensor Data": {
+      "main": [
+        [
+          {
+            "node": "Merge Sensor and Manual Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Data Entry": {
+      "main": [
+        [
+          {
+            "node": "Merge Sensor and Manual Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Sensor and Manual Data": {
+      "main": [
+        [
+          {
+            "node": "AI Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Analysis": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Extract Care Recommendations",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Filter Pest Alerts",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create Watering Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Care Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Send Care Recommendation SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Pest Alerts": {
+      "main": [
+        [
+          {
+            "node": "Send Pest Alert Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Watering Events": {
+      "main": [
+        [
+          {
+            "node": "Format Watering Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Watering Notification": {
+      "main": [
+        [
+          {
+            "node": "Schedule Watering Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Watering Notification": {
+      "main": [
+        [
+          {
+            "node": "Send Watering Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
