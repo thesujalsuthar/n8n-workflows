@@ -1,0 +1,314 @@
+{
+  "name": "EcoAware Daily Sustainability Tip Delivery Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 9,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "list",
+        "resource": "user"
+      },
+      "name": "Get Users",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "1",
+          "name": "UserAPI Credentials"
+        }
+      },
+      "notes": "Fetch users with preferences from an API or database"
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.map(item => {\n  const user = item.json;\n  return {\n    json: {\n      userId: user.id,\n      email: user.email,\n      messagingPlatform: user.messagingPlatform || null,\n      preferences: user.preferences || {},\n      location: user.location || null\n    }\n  };\n});"
+      },
+      "name": "Extract User Info",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.map(item => {\n  const location = item.json.location || 'global';\n  return {\n    json: {\n      userId: item.json.userId,\n      preferences: item.json.preferences,\n      location: location\n    }\n  };\n});"
+      },
+      "name": "Prepare Environmental Query",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.open-meteo.com/v1/forecast",
+        "method": "GET",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "latitude",
+              "value": "={{$json[\"location\"]?.latitude || 40.7128}}"
+            },
+            {
+              "name": "longitude",
+              "value": "={{$json[\"location\"]?.longitude || -74.006}}"
+            },
+            {
+              "name": "current_weather",
+              "value": "true"
+            }
+          ]
+        }
+      },
+      "name": "Get Environmental Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.map((item, index) => {\n  return {\n    json: {\n      userId: items[index].json.userId,\n      preferences: items[index].json.preferences,\n      environmentalData: item.json.current_weather || {},\n      location: items[index].json.location\n    }\n  };\n});"
+      },
+      "name": "Combine Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "temperature": 0.7,
+        "maxTokens": 300,
+        "prompts": [
+          {
+            "role": "system",
+            "content": "You are an AI assistant that generates personalized daily sustainability tips based on user preferences and current environmental data."
+          },
+          {
+            "role": "user",
+            "content": "Generate a concise and actionable sustainability tip for a user with the following preferences and today's environmental data: Preferences: {{$json[\"preferences\"]}} Environment: {{$json[\"environmentalData\"]}} Location: {{$json[\"location\"]}}"
+          }
+        ]
+      },
+      "name": "Generate Sustainability Tip",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        300
+      ],
+      "credentials": {
+        "openAIApi": {
+          "id": "2",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.map(item => {\n  const tip = item.json.choices && item.json.choices[0].message.content ? item.json.choices[0].message.content : '';\n  return {\n    json: {\n      userId: item.json.userId,\n      email: item.json.email,\n      messagingPlatform: item.json.messagingPlatform,\n      tip: tip\n    }\n  };\n});"
+      },
+      "name": "Extract Tip Text",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mailOptions": {
+          "toEmail": "={{$json[\"email\"]}}",
+          "subject": "Your EcoAware Daily Sustainability Tip",
+          "text": "Hello,\n\nHere is your personalized sustainability tip for today:\n\n{{$json[\"tip\"]}}\n\nStay green and eco-aware!\n\nBest,\nEcoAware Team"
+        }
+      },
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1850,
+        220
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "3",
+          "name": "SMTP Credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "channel": "={{$json[\"messagingPlatform\"]}}",
+        "message": "={{`Hello! Here is your personalized sustainability tip for today:\n\n${$json[\"tip\"]}\n\nStay green and eco-aware!`}}"
+      },
+      "name": "Send Message",
+      "type": "n8n-nodes-base.messagingPlatform",
+      "typeVersion": 1,
+      "position": [
+        1850,
+        380
+      ],
+      "credentials": {
+        "messagingPlatformApi": {
+          "id": "4",
+          "name": "Messaging Platform API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.flatMap(item => {\n  const outputs = [];\n  if (item.json.email) {\n    outputs.push({ json: item.json, sendBy: 'email' });\n  }\n  if (item.json.messagingPlatform) {\n    outputs.push({ json: item.json, sendBy: 'message' });\n  }\n  return outputs;\n});"
+      },
+      "name": "Split by Communication Method",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1750,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Users",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Users": {
+      "main": [
+        [
+          {
+            "node": "Extract User Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract User Info": {
+      "main": [
+        [
+          {
+            "node": "Prepare Environmental Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Environmental Query": {
+      "main": [
+        [
+          {
+            "node": "Get Environmental Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Environmental Data": {
+      "main": [
+        [
+          {
+            "node": "Combine Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine Data": {
+      "main": [
+        [
+          {
+            "node": "Generate Sustainability Tip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Sustainability Tip": {
+      "main": [
+        [
+          {
+            "node": "Extract Tip Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Tip Text": {
+      "main": [
+        [
+          {
+            "node": "Split by Communication Method",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split by Communication Method": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
