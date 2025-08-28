@@ -1,0 +1,186 @@
+{
+  "name": "SmartHome AirGuard: AI-Driven Indoor Air Quality Monitoring & Alerts",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "genericAuth",
+        "url": "https://api.smartairqualitydevices.com/v1/air-quality",
+        "options": {
+          "queryParameters": {}
+        },
+        "httpMethod": "GET"
+      },
+      "name": "Fetch Indoor Air Quality Data",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "1",
+          "name": "SmartAirQuality API Credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const airData = items[0].json;\n\n// Define pollutant thresholds\nconst thresholds = {\n  pm25: 35,      // PM2.5 ug/m3\n  co2: 1000,     // CO2 ppm\n  tvoc: 500,     // Total Volatile Organic Compounds ppb\n  co: 9          // Carbon Monoxide ppm\n};\n\nconst alerts = [];\nconst recommendations = [];\n\nif (airData.pm25 > thresholds.pm25) {\n  alerts.push(`PM2.5 level is high: ${airData.pm25} µg/m³`);\n  recommendations.push(\"Increase ventilation; consider using HEPA air purifier.\");\n}\n\nif (airData.co2 > thresholds.co2) {\n  alerts.push(`CO2 level is elevated: ${airData.co2} ppm`);\n  recommendations.push(\"Open windows or increase fresh air intake.\");\n}\n\nif (airData.tvoc > thresholds.tvoc) {\n  alerts.push(`TVOC level is high: ${airData.tvoc} ppb`);\n  recommendations.push(\"Eliminate sources of VOCs like cleaning products, paint.\");\n}\n\nif (airData.co > thresholds.co) {\n  alerts.push(`CO level is dangerous: ${airData.co} ppm`);\n  recommendations.push(\"Evacuate area immediately and seek fresh air.\");\n}\n\nreturn [{\n  json: {\n    airQualityData: airData,\n    alerts,\n    recommendations,\n    alertLevel: alerts.length > 0 ? \"warning\" : \"normal\"\n  }\n}];"
+      },
+      "name": "Analyze Air Quality",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json[\"alertLevel\"]}}",
+              "value2": "warning",
+              "operation": "equal"
+            }
+          ]
+        }
+      },
+      "name": "Check for Alerts",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "message": "Indoor Air Quality Alert!\n\n{{ $json[\"alerts\"].join(\"\\n\") }}\n\nRecommended Actions:\n{{ $json[\"recommendations\"].join(\"\\n\") }}",
+        "title": "SmartHome AirGuard Notification",
+        "priority": 1
+      },
+      "name": "Send Mobile Notification",
+      "type": "n8n-nodes-base.pushbullet",
+      "typeVersion": 1,
+      "position": [
+        900,
+        200
+      ],
+      "credentials": {
+        "pushbulletApi": {
+          "id": "2",
+          "name": "Pushbullet API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "subject": "SmartHome AirGuard Alert: Indoor Air Quality Warning",
+        "text": "The indoor air quality parameters have reached unsafe levels:\n\nAlerts:\n{{ $json[\"alerts\"].join(\"\\n\") }}\n\nRecommendations:\n{{ $json[\"recommendations\"].join(\"\\n\") }}",
+        "toEmail": "user@example.com"
+      },
+      "name": "Send Email Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        900,
+        400
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "3",
+          "name": "SMTP Credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "device": "smart-thermostat",
+        "command": "set_ventilation",
+        "parameters": {
+          "state": "on"
+        }
+      },
+      "name": "Turn On Ventilation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        300
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "4",
+          "name": "SmartThermostat API Credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "continueOnFail": true
+      },
+      "name": "No Alerts",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        900,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "Fetch Indoor Air Quality Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze Air Quality",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Air Quality": {
+      "main": [
+        [
+          {
+            "node": "Check for Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check for Alerts": {
+      "main": [
+        [
+          {
+            "node": "Send Mobile Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "Turn On Ventilation",
+            "type": "main",
+            "index": 2
+          }
+        ],
+        [
+          {
+            "node": "No Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
