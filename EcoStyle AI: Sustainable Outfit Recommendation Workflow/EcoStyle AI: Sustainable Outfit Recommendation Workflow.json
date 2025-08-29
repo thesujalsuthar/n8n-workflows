@@ -1,0 +1,294 @@
+{
+  "name": "AI-Powered Sustainable Fashion Outfit Recommender",
+  "nodes": [
+    {
+      "parameters": {
+        "questions": [
+          {
+            "type": "options",
+            "name": "occasion",
+            "label": "Occasion",
+            "options": [
+              {
+                "value": "casual",
+                "label": "Casual"
+              },
+              {
+                "value": "formal",
+                "label": "Formal"
+              },
+              {
+                "value": "work",
+                "label": "Work"
+              },
+              {
+                "value": "party",
+                "label": "Party"
+              },
+              {
+                "value": "sport",
+                "label": "Sport"
+              }
+            ],
+            "default": "casual"
+          },
+          {
+            "type": "string",
+            "name": "location",
+            "label": "Location (City or ZIP code)"
+          },
+          {
+            "type": "options",
+            "name": "preferredStyles",
+            "label": "Preferred Styles",
+            "options": [
+              {
+                "value": "minimalist",
+                "label": "Minimalist"
+              },
+              {
+                "value": "boho",
+                "label": "Boho"
+              },
+              {
+                "value": "streetwear",
+                "label": "Streetwear"
+              },
+              {
+                "value": "classic",
+                "label": "Classic"
+              },
+              {
+                "value": "athleisure",
+                "label": "Athleisure"
+              }
+            ],
+            "multipleValues": true,
+            "default": [
+              "minimalist"
+            ]
+          },
+          {
+            "type": "number",
+            "name": "temperaturePreference",
+            "label": "Preferred Temperature Range (°C)",
+            "description": "Enter preferred temperature or leave blank to use actual weather.",
+            "default": null
+          }
+        ]
+      },
+      "name": "User Input",
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 1,
+      "position": [
+        150,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.openweathermap.org/data/2.5/weather?q={{ $json.location }}&units=metric&appid=YOUR_OPENWEATHERMAP_APIKEY",
+        "options": {},
+        "responseFormat": "json"
+      },
+      "name": "Get Weather",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const tempPref = items[0].json.temperaturePreference;\nconst currentTemp = items[1].json.main.temp;\n\n// Use preferred temp if provided, else current temperature\nitems[0].json.useTemperature = tempPref !== null && tempPref !== undefined ? tempPref : currentTemp;\nreturn items;"
+      },
+      "name": "Determine Temperature",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://sustainable-fashion-api.example.com/brands",
+        "options": {},
+        "responseFormat": "json"
+      },
+      "name": "Fetch Sustainable Brands",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        400,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://sustainable-fashion-api.example.com/environmental-impact?brandIds={{ $json.brands.map(b => b.id).join(',') }}",
+        "options": {},
+        "responseFormat": "json"
+      },
+      "name": "Fetch Environmental Impact Ratings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        600,
+        100
+      ],
+      "credentials": {}
+    },
+    {
+      "parameters": {
+        "functionCode": "// Merge brands with their environmental impact ratings\nconst brands = items[0].json;\nconst impact = items[1].json;\n\nconst brandsMap = {};\nbrands.forEach(brand => {\n  brandsMap[brand.id] = {\n    ...brand,\n    impactRating: null\n  };\n});\n\nimpact.forEach(item => {\n  if (brandsMap[item.brandId]) {\n    brandsMap[item.brandId].impactRating = item.rating;\n  }\n});\n\nreturn [{ json: { sustainableBrands: Object.values(brandsMap) } }];"
+      },
+      "name": "Merge Brand Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        800,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const recommendedBrands = items[0].json.sustainableBrands.filter(brand => brand.impactRating <= 3);\n\n// Prepare data for AI prompt\nconst occasion = items[1].json.occasion;\nconst temperature = items[1].json.useTemperature;\nconst preferredStyles = items[1].json.preferredStyles;\n\nconst prompt = `You are a fashion assistant focused on sustainability.\nProvide an eco-friendly outfit recommendation for a ${occasion} occasion with a temperature around ${temperature}°C.\nPreferred styles: ${preferredStyles.join(\", \")}.\nUse only these sustainable brands: ${recommendedBrands.map(b => b.name).join(\", \")}.\nIncorporate current fashion trends.\nRespond with a JSON object containing outfit items with brand, item type, material, and rationale.`;\n\nreturn [{ json: { prompt } }];"
+      },
+      "name": "Build AI Prompt",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "options": {},
+        "messages": [
+          {
+            "role": "user",
+            "content": "={{ $json.prompt }}"
+          }
+        ]
+      },
+      "name": "OpenAI GPT-4",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const responseText = items[0].json.choices && items[0].json.choices[0] && items[0].json.choices[0].message && items[0].json.choices[0].message.content ? items[0].json.choices[0].message.content : \"{}\";\n\ntry {\n  return [{ json: { recommendation: JSON.parse(responseText) } }];\n} catch(e) {\n  return [{ json: { recommendation: responseText, error: 'Failed to parse JSON' } }];\n}"
+      },
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "User Input": {
+      "main": [
+        [
+          {
+            "node": "Get Weather",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Determine Temperature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Weather": {
+      "main": [
+        [
+          {
+            "node": "Determine Temperature",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch Sustainable Brands": {
+      "main": [
+        [
+          {
+            "node": "Fetch Environmental Impact Ratings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Environmental Impact Ratings": {
+      "main": [
+        [
+          {
+            "node": "Merge Brand Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Brand Data": {
+      "main": [
+        [
+          {
+            "node": "Build AI Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Determine Temperature": {
+      "main": [
+        [
+          {
+            "node": "Build AI Prompt",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Build AI Prompt": {
+      "main": [
+        [
+          {
+            "node": "OpenAI GPT-4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI GPT-4": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
