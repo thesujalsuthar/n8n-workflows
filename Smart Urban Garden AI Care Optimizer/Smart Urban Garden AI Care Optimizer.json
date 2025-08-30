@@ -1,0 +1,177 @@
+{
+  "name": "AI-Powered Smart Urban Garden Care Assistant",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "http://api.smartgarden.local/sensors/environment",
+        "responseFormat": "json",
+        "jsonParameters": false
+      },
+      "name": "Get Environmental Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "http://api.smartgarden.local/sensors/plantHealth",
+        "responseFormat": "json",
+        "jsonParameters": false
+      },
+      "name": "Get Plant Health Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const environment = items[0].json;\nconst plantHealth = items[1].json;\n\nconst combinedData = {\n  temperature: environment.temperature,\n  humidity: environment.humidity,\n  soilMoisture: environment.soilMoisture,\n  lightLevel: environment.lightLevel,\n  plantStatus: plantHealth.status,\n  pestAlerts: plantHealth.pestsDetected\n};\n\nreturn [{ json: combinedData }];"
+      },
+      "name": "Combine Sensor Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        550,
+        375
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "options": {},
+        "parameters": {
+          "prompt": "You are an AI gardening expert.\n\nAnalyze the following data and provide:\n- Plant health assessment\n- Recommendations for watering schedules\n- Pest detection alerts and advice\n- Personalized gardening tips based on current environment\n\nData:\n{{ $json | json }}\n\nOutput a JSON object with fields: plantAssessment, wateringSchedule, pestAlerts, gardeningTips.",
+          "temperature": 0.7,
+          "max_tokens": 300,
+          "top_p": 1,
+          "frequency_penalty": 0,
+          "presence_penalty": 0
+        }
+      },
+      "name": "AI Analyze Plant Conditions",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        900,
+        375
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const responseText = items[0].json.choices[0].message.content;\nconst cleanJsonStart = responseText.indexOf('{');\nconst cleanJsonEnd = responseText.lastIndexOf('}') + 1;\nconst jsonString = responseText.substring(cleanJsonStart, cleanJsonEnd);\n\nlet parsedOutput = {};\ntry {\n  parsedOutput = JSON.parse(jsonString);\n} catch (e) {\n  throw new Error('Failed to parse AI output as JSON: ' + e.message);\n}\n\nreturn [{ json: parsedOutput }];"
+      },
+      "name": "Parse AI JSON Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        375
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "url": "http://api.smartgarden.local/devices/wateringSystem/control",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "{\n  \"action\": \"schedule\",\n  \"schedule\": {{JSON.stringify($json.wateringSchedule)}}\n}"
+      },
+      "name": "Update Watering System",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "url": "http://api.smartgarden.local/devices/notificationSystem/send",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "{\n  \"title\": \"Garden Care Alert\",\n  \"message\": \"Pest Alerts: {{ $json.pestAlerts.join(', ') || 'No pests detected' }}. Gardening Tips: {{ $json.gardeningTips }}\"\n}"
+      },
+      "name": "Send Pest and Tips Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "Get Environmental Data": {
+      "main": [
+        [
+          {
+            "node": "Combine Sensor Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Plant Health Data": {
+      "main": [
+        [
+          {
+            "node": "Combine Sensor Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Combine Sensor Data": {
+      "main": [
+        [
+          {
+            "node": "AI Analyze Plant Conditions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Analyze Plant Conditions": {
+      "main": [
+        [
+          {
+            "node": "Parse AI JSON Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI JSON Response": {
+      "main": [
+        [
+          {
+            "node": "Update Watering System",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Pest and Tips Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
