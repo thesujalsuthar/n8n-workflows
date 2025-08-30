@@ -1,0 +1,332 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "mode": "polling",
+        "pollInterval": 10000,
+        "url": "http://your-iot-sensor-api.local/air-quality",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "id": "1",
+      "name": "Get Air Quality Data",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const data = items[0].json;\n\n// Sample thresholds for harmful pollutants and poor air quality\nconst thresholds = {\n  pm25: 35, // µg/m³\n  co2: 1000, // ppm\n  voc: 500, // ppb\n  humidityLow: 30, // %\n  humidityHigh: 60, // %\n  temperatureLow: 18, // °C\n  temperatureHigh: 28 // °C\n};\n\nconst alerts = [];\n\nif (data.pm25 !== undefined && data.pm25 > thresholds.pm25) {\n  alerts.push(`High PM2.5 detected: ${data.pm25} µg/m³`);\n}\nif (data.co2 !== undefined && data.co2 > thresholds.co2) {\n  alerts.push(`Elevated CO2 detected: ${data.co2} ppm`);\n}\nif (data.voc !== undefined && data.voc > thresholds.voc) {\n  alerts.push(`High VOC levels detected: ${data.voc} ppb`);\n}\nif (data.humidity !== undefined && (data.humidity < thresholds.humidityLow || data.humidity > thresholds.humidityHigh)) {\n  alerts.push(`Humidity out of range: ${data.humidity}%`);\n}\nif (data.temperature !== undefined && (data.temperature < thresholds.temperatureLow || data.temperature > thresholds.temperatureHigh)) {\n  alerts.push(`Temperature out of range: ${data.temperature} °C`);\n}\n\nreturn [{\n  json: {\n    originalData: data,\n    alerts: alerts,\n    alertCount: alerts.length,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "2",
+      "name": "Analyze Air Quality (AI)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json[\"alertCount\"]}}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "3",
+      "name": "Check For Alerts",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "airguard@example.com",
+        "toEmail": "={{$json[\"occupantEmail\"] || \"occupant@example.com\"}}",
+        "subject": "Indoor Air Quality Alert",
+        "text": "Attention: The following air quality issues were detected:\n\n{{$json[\"alerts\"].join('\\n')}}\n\nPlease take necessary precautions.",
+        "options": {}
+      },
+      "id": "4",
+      "name": "Send Email Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        900,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "to": "={{$json[\"occupantPhone\"] || \"+1234567890\"}}",
+        "message": "Indoor Air Quality Alert:\n{{$json[\"alerts\"].join('; ')}}"
+      },
+      "id": "5",
+      "name": "Send SMS Alert",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        900,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "command": "POST",
+        "url": "http://your-home-automation.local/devices/air-purifier/activate",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "{}"
+      },
+      "id": "6",
+      "name": "Activate Air Purifier",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "spreadsheet",
+        "operation": "append",
+        "sheetId": "Your_Google_Sheet_ID",
+        "range": "AirQuality!A:E",
+        "valueInputMode": "USER_ENTERED",
+        "columns": [
+          "timestamp",
+          "pm25",
+          "co2",
+          "voc",
+          "alerts"
+        ],
+        "options": {
+          "includeHeaders": false
+        }
+      },
+      "id": "7",
+      "name": "Log Data to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [
+        700,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "timerInterval": 3600000,
+        "mode": "everyDayAtTime",
+        "time": "08:00"
+      },
+      "id": "8",
+      "name": "Daily Schedule Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        250,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "spreadsheet",
+        "operation": "getAll",
+        "sheetId": "Your_Google_Sheet_ID",
+        "range": "AirQuality!A:E",
+        "options": {}
+      },
+      "id": "9",
+      "name": "Get Historical Data",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [
+        500,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const rows = items.map(item => item.json);\n\nlet pm25Sum = 0;\nlet co2Sum = 0;\nlet vocSum = 0;\nlet count = 0;\n\nfor (const row of rows) {\n  if (row.pm25 && row.co2 && row.voc) {\n    pm25Sum += parseFloat(row.pm25);\n    co2Sum += parseFloat(row.co2);\n    vocSum += parseFloat(row.voc);\n    count++;\n  }\n}\n\nconst pm25Avg = count ? (pm25Sum / count).toFixed(2) : 'N/A';\nconst co2Avg = count ? (co2Sum / count).toFixed(2) : 'N/A';\nconst vocAvg = count ? (vocSum / count).toFixed(2) : 'N/A';\n\nreturn [{\n  json: {\n    summary: `Average PM2.5: ${pm25Avg} µg/m³\\nAverage CO2: ${co2Avg} ppm\\nAverage VOC: ${vocAvg} ppb\\nData points: ${count}`\n  }\n}];"
+      },
+      "id": "10",
+      "name": "Analyze Historical Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        700,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "airguard@example.com",
+        "toEmail": "occupant@example.com",
+        "subject": "Daily Indoor Air Quality Report",
+        "text": "Hello,\n\nHere is the daily indoor air quality summary:\n\n{{$json[\"summary\"]}}\n\nBest regards,\nSmartHome AirGuard",
+        "options": {}
+      },
+      "id": "11",
+      "name": "Send Daily Report Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        900,
+        600
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "12",
+      "name": "No Alert Branch",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        900,
+        420
+      ]
+    }
+  ],
+  "connections": {
+    "Get Air Quality Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze Air Quality (AI)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Air Quality (AI)": {
+      "main": [
+        [
+          {
+            "node": "Check For Alerts",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log Data to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check For Alerts": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send SMS Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Activate Air Purifier",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Alert Branch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email Alert": {
+      "main": [
+        [
+          {
+            "node": "Activate Air Purifier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send SMS Alert": {
+      "main": [
+        []
+      ]
+    },
+    "Activate Air Purifier": {
+      "main": [
+        []
+      ]
+    },
+    "Log Data to Google Sheets": {
+      "main": [
+        []
+      ]
+    },
+    "Daily Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Historical Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Historical Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze Historical Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Historical Data": {
+      "main": [
+        [
+          {
+            "node": "Send Daily Report Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Daily Report Email": {
+      "main": [
+        []
+      ]
+    },
+    "No Alert Branch": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "SmartHome-AirGuard-Workflow"
+}
