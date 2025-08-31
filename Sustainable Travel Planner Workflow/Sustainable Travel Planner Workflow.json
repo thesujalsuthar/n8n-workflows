@@ -1,0 +1,117 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "functionCode": "const axios = require('axios');\n\nconst { origin, destination, travelDates, preferences } = $node[\"Start\"].json;\n\n// Fetch travel options from a mock API or predefined logic\nasync function fetchTravelOptions(origin, destination, travelDates, preferences) {\n  // This is a simplified placeholder. Replace with actual API integration.\n  return [\n    {\n      mode: \"flight\",\n      co2EmissionKg: 150,\n      durationHours: 3,\n      costUSD: 300\n    },\n    {\n      mode: \"train\",\n      co2EmissionKg: 20,\n      durationHours: 6,\n      costUSD: 120\n    },\n    {\n      mode: \"bus\",\n      co2EmissionKg: 15,\n      durationHours: 8,\n      costUSD: 80\n    }\n  ];\n}\n\n// Main execution\nreturn fetchTravelOptions(origin, destination, travelDates, preferences)\n  .then(options => {\n    return options.map(option => ({ json: option }));\n  })\n  .catch(error => {\n    return [{ json: { error: error.message } }];\n  });"
+      },
+      "name": "Fetch Travel Options",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "const options = items.map(item => item.json);\n\n// Sort options by CO2 emission ascending\noptions.sort((a, b) => a.co2EmissionKg - b.co2EmissionKg);\n\nreturn options.map(option => ({ json: option }));"
+      },
+      "name": "Sort by Sustainability",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "const selectedOption = items[0].json;\n\n// Calculate estimated carbon offset needed to be neutral\nconst carbonOffsetNeeded = selectedOption.co2EmissionKg;\n\nreturn [{ json: { ...selectedOption, carbonOffsetNeeded } }];"
+      },
+      "name": "Calculate Carbon Offset",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Use a fixed offset price per kg CO2 (example: $10/ton = $0.01/kg)\nconst offsetPricePerKg = 0.01;\nconst carbonOffsetKg = items[0].json.carbonOffsetNeeded;\nconst estimatedOffsetCost = carbonOffsetKg * offsetPricePerKg;\n\nreturn [{ json: { ...items[0].json, estimatedOffsetCost } }];"
+      },
+      "name": "Estimate Offset Cost",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "const plan = items[0].json;\n\n// Format final travel plan summary\nconst summary = {\n  travelMode: plan.mode,\n  co2EmissionKg: plan.co2EmissionKg,\n  durationHours: plan.durationHours,\n  costUSD: plan.costUSD,\n  carbonOffsetNeededKg: plan.carbonOffsetNeeded,\n  estimatedOffsetCostUSD: plan.estimatedOffsetCost\n};\n\nreturn [{ json: summary }];"
+      },
+      "name": "Build Final Output",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "options": {
+          "waitForTrigger": true
+        }
+      },
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [250, 300]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Fetch Travel Options",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Travel Options": {
+      "main": [
+        [
+          {
+            "node": "Sort by Sustainability",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sort by Sustainability": {
+      "main": [
+        [
+          {
+            "node": "Calculate Carbon Offset",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Carbon Offset": {
+      "main": [
+        [
+          {
+            "node": "Estimate Offset Cost",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Estimate Offset Cost": {
+      "main": [
+        [
+          {
+            "node": "Build Final Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
