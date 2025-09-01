@@ -1,0 +1,123 @@
+{
+  "name": "AI-Powered Personalized Career Skills Gap Analyzer and Development Roadmap Generator",
+  "nodes": [
+    {
+      "parameters": {
+        "functionCode": "return [\n  {\n    userId: $json.userId || null,\n    currentSkills: $json.currentSkills || [],\n    desiredJobRoles: $json.desiredJobRoles || []\n  }\n];"
+      },
+      "name": "Extract User Input",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "prompt": "You are an AI career skills analyst. Given the user's current skills and desired job roles, identify skill gaps needed to meet the requirements of those job roles.\n\nUser's Current Skills:\n{{ $json.currentSkills.join(\", \") }}\n\nDesired Job Roles:\n{{ $json.desiredJobRoles.join(\", \") }}\n\nPlease return a JSON object with:\n- \"skillGaps\": [list of missing or weak skills]\n- \"justification\": explanation for each skill gap\n\nFormat:\n{\n  \"skillGaps\": [\"skill1\", \"skill2\", ...],\n  \"justification\": {\n    \"skill1\": \"reason1\",\n    \"skill2\": \"reason2\"\n  }\n}",
+        "temperature": 0.6,
+        "maxTokens": 600,
+        "topP": 1,
+        "frequencyPenalty": 0,
+        "presencePenalty": 0
+      },
+      "name": "Analyze Skills Gap",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        550,
+        300
+      ],
+      "credentials": {
+        "openAiApi": "OpenAI API"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const analysis = JSON.parse(items[0].json.choices[0].message.content);\n\nreturn [{\n  json: {\n    skillGaps: analysis.skillGaps || [],\n    justification: analysis.justification || {}\n  }\n}];"
+      },
+      "name": "Parse Skills Gap Analysis",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const skillGaps = $json.skillGaps;\nconst timelinePerSkillDays = {\n  \"basic\": 14,\n  \"intermediate\": 30,\n  \"advanced\": 60\n};\n\n// Simple skill difficulty map (can be extended or replaced with real data)\nconst skillDifficulty = {\n  \"JavaScript\": \"intermediate\",\n  \"Python\": \"intermediate\",\n  \"Machine Learning\": \"advanced\",\n  \"Project Management\": \"intermediate\",\n  \"Communication\": \"basic\",\n  \"Cloud Computing\": \"advanced\",\n  \"Data Analysis\": \"intermediate\",\n  \"Leadership\": \"intermediate\"\n};\n\n// Learning resources database - ideally this should be a call to an external API or DB\nconst learningResources = {\n  \"JavaScript\": [\n    { title: \"JavaScript Basics - MDN\", url: \"https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide\" },\n    { title: \"JavaScript: The Good Parts\", url: \"https://www.oreilly.com/library/view/javascript-the-good/9780596517748/\" }\n  ],\n  \"Python\": [\n    { title: \"Official Python Tutorial\", url: \"https://docs.python.org/3/tutorial/\" },\n    { title: \"Automate the Boring Stuff\", url: \"https://automatetheboringstuff.com/\" }\n  ],\n  \"Machine Learning\": [\n    { title: \"Machine Learning by Andrew Ng - Coursera\", url: \"https://www.coursera.org/learn/machine-learning\" },\n    { title: \"Hands-On Machine Learning\", url: \"https://www.oreilly.com/library/view/hands-on-machine-learning/9781492032632/\" }\n  ],\n  \"Project Management\": [\n    { title: \"PMBOK Guide\", url: \"https://www.pmi.org/pmbok-guide-standards\" },\n    { title: \"Agile Project Management\", url: \"https://www.agilealliance.org\" }\n  ],\n  \"Communication\": [\n    { title: \"Effective Communication Skills\", url: \"https://www.coursera.org/learn/effective-communication-skills\" }\n  ],\n  \"Cloud Computing\": [\n    { title: \"AWS Certified Solutions Architect\", url: \"https://aws.amazon.com/certification/certified-solutions-architect-associate/\" },\n    { title: \"Google Cloud Training\", url: \"https://cloud.google.com/training\" }\n  ],\n  \"Data Analysis\": [\n    { title: \"Data Analysis with Python\", url: \"https://www.datacamp.com/courses/data-analysis-with-python\" }\n  ],\n  \"Leadership\": [\n    { title: \"Leadership Principles\", url: \"https://www.coursera.org/specializations/leadership\" }\n  ]\n};\n\nlet roadmap = [];\nlet currentDay = 1;\n\nfor (const skill of skillGaps) {\n  const difficulty = skillDifficulty[skill] || \"intermediate\";\n  const estimatedDays = timelinePerSkillDays[difficulty] || 30;\n  const resources = learningResources[skill] || [];\n\n  roadmap.push({\n    skill,\n    difficulty,\n    estimatedDays,\n    startDay: currentDay,\n    endDay: currentDay + estimatedDays - 1,\n    learningResources: resources\n  });\n\n  currentDay += estimatedDays;\n}\n\nreturn [{ json: { developmentRoadmap: roadmap } }];"
+      },
+      "name": "Generate Development Roadmap",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{\n  json: {\n    skillGaps: $json.skillGaps,\n    justification: $json.justification,\n    developmentRoadmap: $json.developmentRoadmap\n  }\n}];"
+      },
+      "name": "Combine Output",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Extract User Input": {
+      "main": [
+        [
+          {
+            "node": "Analyze Skills Gap",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Skills Gap": {
+      "main": [
+        [
+          {
+            "node": "Parse Skills Gap Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Skills Gap Analysis": {
+      "main": [
+        [
+          {
+            "node": "Generate Development Roadmap",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Development Roadmap": {
+      "main": [
+        [
+          {
+            "node": "Combine Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
