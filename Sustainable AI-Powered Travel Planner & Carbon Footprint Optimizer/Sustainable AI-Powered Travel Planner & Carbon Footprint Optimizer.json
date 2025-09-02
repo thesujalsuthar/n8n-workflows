@@ -1,0 +1,290 @@
+{
+  "name": "AI-Driven Personalized Sustainable Travel Itinerary and Carbon Offset Planner",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "get-destination-data",
+        "options": {}
+      },
+      "name": "Receive Destination Input",
+      "type": "n8n-nodes-base.httpTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const destination = $json[\"destination\"];\n\n// Simulating travel destination data fetch\n// In production, connect to a travel info API\nreturn [{ json: {\n    destination: destination,\n    country: \"Country for \" + destination,\n    attractions: [\n      \"Eco Park\",\n      \"Sustainable Museum\",\n      \"Nature Reserve\"\n    ],\n    bestTravelPeriod: \"April to June\",\n    averageTemperatureCelsius: 22\n} }];"
+      },
+      "name": "Fetch Destination Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const transportationOptions = [\n  {\n    mode: \"Train\",\n    description: \"Eco-friendly trains with low emissions\",\n    co2PerKm: 0.041\n  },\n  {\n    mode: \"Electric Car\",\n    description: \"Electric vehicle rental\",\n    co2PerKm: 0.05\n  },\n  {\n    mode: \"Bus\",\n    description: \"Public transport bus\",\n    co2PerKm: 0.089\n  },\n  {\n    mode: \"Bicycle\",\n    description: \"Bike rentals\",\n    co2PerKm: 0\n  }\n];\nreturn [{ json: { transportationOptions } }];"
+      },
+      "name": "Recommend Sustainable Transportation",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const accommodations = [\n  {\n    name: \"Green Stay Hotel\",\n    ecoCertifications: [\"LEED Platinum\", \"Green Key\"],\n    description: \"Hotel powered by renewable energy\",\n    averageNightlyCO2: 10\n  },\n  {\n    name: \"Eco Lodge\",\n    ecoCertifications: [\"EarthCheck\"],\n    description: \"Sustainable lodge with water-saving initiatives\",\n    averageNightlyCO2: 8\n  },\n  {\n    name: \"Organic Farm B&B\",\n    ecoCertifications: [],\n    description: \"Organic farm stay with local produce\",\n    averageNightlyCO2: 5\n  }\n];\nreturn [{ json: { accommodations } }];"
+      },
+      "name": "Suggest Eco-Friendly Accommodations",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "expression": "={{$json[\"distanceKm\"] * $json[\"co2PerKm\"]}}"
+      },
+      "name": "Calculate Transportation Footprint",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const nights = $json[\"nights\"] || 3;\nconst accommodationCO2 = $json[\"averageNightlyCO2\"] || 10;\nconst totalAccomCO2 = nights * accommodationCO2;\nreturn [{ json: { totalAccommodationCO2: totalAccomCO2 } }];"
+      },
+      "name": "Calculate Accommodation Footprint",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const transportationCO2 = $json[\"carbonFootprintTransportation\"] || 0;\nconst accommodationCO2 = $json[\"totalAccommodationCO2\"] || 0;\nconst totalCO2 = transportationCO2 + accommodationCO2;\nreturn [{ json: { totalCarbonFootprintKgCO2: totalCO2 } }];"
+      },
+      "name": "Aggregate Total Carbon Footprint",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const offsetOptions = [\n  {\n    name: \"Tree Planting\",\n    costPerKgCO2: 0.02,\n    description: \"Planting trees to absorb CO2\"\n  },\n  {\n    name: \"Renewable Energy Projects\",\n    costPerKgCO2: 0.03,\n    description: \"Supporting solar and wind power initiatives\"\n  },\n  {\n    name: \"Methane Capture\",\n    costPerKgCO2: 0.025,\n    description: \"Reducing methane emissions from waste\"\n  }\n];\nreturn [{ json: { offsetOptions } }];"
+      },
+      "name": "Provide Carbon Offset Options",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const totalCO2 = $json[\"totalCarbonFootprintKgCO2\"] || 0;\nconst chosenOffset = $json[\"chosenOffset\"] || \"Tree Planting\";\nconst availableOffsets = [\n  { name: \"Tree Planting\", costPerKgCO2: 0.02 },\n  { name: \"Renewable Energy Projects\", costPerKgCO2: 0.03 },\n  { name: \"Methane Capture\", costPerKgCO2: 0.025 }\n];\nconst offsetObj = availableOffsets.find(o => o.name === chosenOffset) || availableOffsets[0];\nconst offsetCostUSD = totalCO2 * offsetObj.costPerKgCO2;\n\nreturn [{ json: { offsetName: offsetObj.name, offsetCostUSD, totalCO2 } }];"
+      },
+      "name": "Calculate Offset Cost",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const tips = [\n  \"Bring a reusable water bottle\",\n  \"Choose direct flights when possible\",\n  \"Pack light to reduce fuel consumption\",\n  \"Use public or shared transport locally\",\n  \"Avoid single-use plastics\",\n  \"Support local eco-friendly businesses\"\n];\n\nconst personalizedTips = tips.slice(0, 4);\n\nreturn [{ json: { personalizedTips } }];"
+      },
+      "name": "Generate AI-Driven Eco Travel Tips",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: {\n  itinerary: {\n    destination: $json[\"destination\"],\n    attractions: $json[\"attractions\"],\n    bestTravelPeriod: $json[\"bestTravelPeriod\"],\n    avgTempC: $json[\"averageTemperatureCelsius\"]\n  },\n  transportationOptions: $json[\"transportationOptions\"],\n  accommodations: $json[\"accommodations\"],\n  carbonFootprint: {\n    totalKgCO2: $items(\"Aggregate Total Carbon Footprint\")[0].json.totalCarbonFootprintKgCO2,\n    offsetOptions: $items(\"Provide Carbon Offset Options\")[0].json.offsetOptions\n  },\n  offsetEstimate: $items(\"Calculate Offset Cost\")[0].json,\n  ecoTravelTips: $items(\"Generate AI-Driven Eco Travel Tips\")[0].json.personalizedTips\n}}];"
+      },
+      "name": "Compile Final Itinerary and Report",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        2100,
+        400
+      ]
+    },
+    {
+      "parameters": {},
+      "name": "Respond with Itinerary and Plan",
+      "type": "n8n-nodes-base.httpResponse",
+      "typeVersion": 1,
+      "position": [
+        2350,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Receive Destination Input": {
+      "main": [
+        [
+          {
+            "node": "Fetch Destination Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Destination Data": {
+      "main": [
+        [
+          {
+            "node": "Recommend Sustainable Transportation",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Suggest Eco-Friendly Accommodations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recommend Sustainable Transportation": {
+      "main": [
+        [
+          {
+            "node": "Calculate Transportation Footprint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Suggest Eco-Friendly Accommodations": {
+      "main": [
+        [
+          {
+            "node": "Calculate Accommodation Footprint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Transportation Footprint": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Total Carbon Footprint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Accommodation Footprint": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Total Carbon Footprint",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Aggregate Total Carbon Footprint": {
+      "main": [
+        [
+          {
+            "node": "Provide Carbon Offset Options",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate AI-Driven Eco Travel Tips",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Calculate Offset Cost",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Provide Carbon Offset Options": {
+      "main": [
+        [
+          {
+            "node": "Calculate Offset Cost",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Generate AI-Driven Eco Travel Tips": {
+      "main": [
+        [
+          {
+            "node": "Compile Final Itinerary and Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Offset Cost": {
+      "main": [
+        [
+          {
+            "node": "Compile Final Itinerary and Report",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Compile Final Itinerary and Report": {
+      "main": [
+        [
+          {
+            "node": "Respond with Itinerary and Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
