@@ -1,0 +1,281 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "getCurrentWeather",
+        "location": "={{$json[\"regionCoordinates\"]}}",
+        "apiKey": "={{$credentials.openWeatherApi.apiKey}}"
+      },
+      "name": "Fetch Weather Data",
+      "type": "n8n-nodes-base.openWeather",
+      "typeVersion": 1,
+      "position": [
+        200,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "url": "https://api.satellite-imagery-service.com/v1/images/latest",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "bbox",
+              "value": "={{$json[\"regionBoundingBox\"]}}"
+            },
+            {
+              "name": "cloud_coverage_max",
+              "value": "10"
+            }
+          ]
+        },
+        "options": {
+          "responseFormat": "json"
+        }
+      },
+      "name": "Fetch Satellite Imagery Metadata",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        200,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "url": "https://api.local-sensors.example.com/v1/data",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "region_id",
+              "value": "={{$json[\"regionId\"]}}"
+            },
+            {
+              "name": "last_minutes",
+              "value": "15"
+            }
+          ]
+        },
+        "options": {
+          "responseFormat": "json"
+        }
+      },
+      "name": "Fetch Local Sensor Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        200,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const weather = items.find(i => i.node === 'Fetch Weather Data').json;\nconst satellite = items.find(i => i.node === 'Fetch Satellite Imagery Metadata').json;\nconst sensors = items.find(i => i.node === 'Fetch Local Sensor Data').json;\n\n/**\n * Basic risk scoring example\n * - High temperature, low humidity, strong wind increase risk\n * - Satellite detected hotspots increase risk\n * - Local sensor smoke/dryness indicators increase risk\n */\n\nlet score = 0;\n\n// Weather-based factors\nconst temp = weather.main?.temp || 20; // Celsius\nconst humidity = weather.main?.humidity || 50; // %\nconst windSpeed = weather.wind?.speed || 0; // m/s\n\nif (temp >= 35) score += 30;\nelse if (temp >= 30) score += 20;\nelse if (temp >= 25) score += 10;\n\nif (humidity <= 20) score += 30;\nelse if (humidity <= 40) score += 15;\n\nif (windSpeed >= 10) score += 30;\nelse if (windSpeed >= 5) score += 15;\n\n// Satellite imagery hotspot detection (assuming response contains hotspots field)\nconst hotspots = satellite.hotspots || [];\nif (hotspots.length > 3) {\n  score += 40;\n} else if (hotspots.length > 0) {\n  score += 20;\n}\n\n// Local sensors smoke or dryness indicator\nconst smokeDetected = sensors.some(s => s.smokeLevel && s.smokeLevel > 3);\nconst drynessIndex = sensors.reduce((acc, s) => acc + (s.drynessIndex || 0), 0) / (sensors.length || 1);\n\nif (smokeDetected) score += 30;\nif (drynessIndex >= 7) score += 20;\nelse if (drynessIndex >= 5) score += 10;\n\n// Normalize and cap score to 100\nscore = score > 100 ? 100 : score;\n\nreturn [{\n  json: {\n    riskScore: score,\n    temperature: temp,\n    humidity: humidity,\n    windSpeed: windSpeed,\n    hotspotCount: hotspots.length,\n    smokeDetected: smokeDetected,\n    drynessIndex: drynessIndex\n  }\n}];"
+      },
+      "name": "Calculate Risk Score",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "rules": [
+          {
+            "value1": "={{$json[\"riskScore\"]}}",
+            "operation": "largerEqual",
+            "value2": "={{$json[\"dynamicRiskThreshold\"] || 60}}"
+          }
+        ]
+      },
+      "name": "Check Risk Threshold",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        650,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "email",
+        "operation": "send",
+        "toEmail": "={{$json[\"emailRecipients\"]}}",
+        "subject": "Wildfire Risk Alert - Score: {{$json[\"riskScore\"]}}",
+        "text": "Alert:\nThe wildfire risk score for region {{$json[\"regionName\"]}} has reached {{$json[\"riskScore\"]}}.\n\nRecommendations:\n- Monitor local weather and sensor data closely.\n- Prepare for possible evacuation orders.\n\nDetails:\nTemperature: {{$json[\"temperature\"]}} °C\nHumidity: {{$json[\"humidity\"]}} %\nWind Speed: {{$json[\"windSpeed\"]}} m/s\nHotspots Detected: {{$json[\"hotspotCount\"]}}\nSmoke Detected by Sensors: {{$json[\"smokeDetected\"]}}\nDryness Index: {{$json[\"drynessIndex\"] | number: 1}}"
+      },
+      "name": "Send Email Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        850,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "sms",
+        "operation": "send",
+        "toPhoneNumber": "={{$json[\"smsRecipients\"]}}",
+        "message": "Wildfire Risk Alert for {{$json[\"regionName\"]}}! Risk Score: {{$json[\"riskScore\"]}}. Follow safety procedures and updates."
+      },
+      "name": "Send SMS Alert",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        850,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://push-notifications.example.com/api/send",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={\n  \"region\": $json[\"regionId\"],\n  \"title\": \"Wildfire Risk Alert\",\n  \"message\": \"Risk score is {{$json[\"riskScore\"]}} in {{$json[\"regionName\"]}}. Stay alert and follow official instructions.\"\n}"
+      },
+      "name": "Send Push Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        850,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const incidentReport = {\n  regionId: $json.regionId,\n  riskScore: $json.riskScore,\n  timestamp: new Date().toISOString(),\n  details: {\n    temperature: $json.temperature,\n    humidity: $json.humidity,\n    windSpeed: $json.windSpeed,\n    hotspotCount: $json.hotspotCount,\n    smokeDetected: $json.smokeDetected,\n    drynessIndex: $json.drynessIndex\n  }\n};\n\n// Emulate storing the incident report,\n// here you could send it to a database or incident management API\nreturn [{ json: incidentReport }];"
+      },
+      "name": "Generate Incident Report",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "incidents",
+        "documents": "={{$json}}"
+      },
+      "name": "Store Incident Report",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "credentials": {
+        "mongoDb": "MongoDB Wildfire Incidents"
+      },
+      "position": [
+        1250,
+        250
+      ]
+    }
+  ],
+  "connections": {
+    "Fetch Weather Data": {
+      "main": [
+        [
+          {
+            "node": "Calculate Risk Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Satellite Imagery Metadata": {
+      "main": [
+        [
+          {
+            "node": "Calculate Risk Score",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch Local Sensor Data": {
+      "main": [
+        [
+          {
+            "node": "Calculate Risk Score",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Calculate Risk Score": {
+      "main": [
+        [
+          {
+            "node": "Check Risk Threshold",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Risk Threshold": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send SMS Alert",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "Send Push Notification",
+            "type": "main",
+            "index": 2
+          },
+          {
+            "node": "Generate Incident Report",
+            "type": "main",
+            "index": 3
+          }
+        ],
+        []
+      ]
+    },
+    "Generate Incident Report": {
+      "main": [
+        [
+          {
+            "node": "Store Incident Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "credentials": {
+    "openWeatherApi": {
+      "id": "1",
+      "name": "OpenWeather API"
+    },
+    "mongoDb": {
+      "id": "2",
+      "name": "MongoDB Wildfire Incidents"
+    },
+    "twilio": {
+      "id": "3",
+      "name": "Twilio SMS"
+    }
+  },
+  "name": "Real-Time Wildfire Risk Alert System"
+}
