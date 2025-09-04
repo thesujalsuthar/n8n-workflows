@@ -1,0 +1,250 @@
+{
+  "name": "AI-Powered Sustainable Fashion Outfit Recommender",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "user-preferences",
+        "options": {},
+        "responseMode": "lastNode",
+        "responseData": "allEntries",
+        "responseCode": 200,
+        "responseHeaders": {}
+      },
+      "name": "Receive User Preferences",
+      "type": "n8n-nodes-base.httpTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "weather",
+        "operation": "getCurrentWeather",
+        "cityName": "= $json[\"location\"]",
+        "units": "metric"
+      },
+      "name": "Fetch Weather Data",
+      "type": "n8n-nodes-base.openWeather",
+      "typeVersion": 1,
+      "position": [
+        500,
+        100
+      ],
+      "credentials": {
+        "openWeatherApi": "OpenWeather API"
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.fashiondb.com/v1/items",
+        "options": {
+          "queryParametersUi": {
+            "parameter": [
+              {
+                "name": "category",
+                "value": "outfit"
+              },
+              {
+                "name": "style",
+                "value": "={{$json[\"style\"]}}"
+              },
+              {
+                "name": "season",
+                "value": "={{$json[\"season\"]}}"
+              }
+            ]
+          }
+        }
+      },
+      "name": "Fetch Fashion Items",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        750,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": "FashionDB API Key"
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.sustainabilityratings.com/items",
+        "options": {
+          "queryParametersUi": {
+            "parameter": [
+              {
+                "name": "item_ids",
+                "value": "={{$json[\"items\"].map(item => item.id).join(\",\")}}"
+              }
+            ]
+          }
+        }
+      },
+      "name": "Fetch Sustainability Scores",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": "Sustainability Ratings API Key"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const items = $items(\"Fetch Fashion Items\")[0].json.items;\nconst scores = $items(\"Fetch Sustainability Scores\")[0].json.scores;\n\nconst scoredItems = items.map(item => {\n  const score = scores.find(s => s.id === item.id);\n  return {\n    ...item,\n    sustainabilityScore: score ? score.score : null\n  };\n}).filter(i => i.sustainabilityScore !== null);\n\n// Filter for sustainability threshold and sort\nconst threshold = 70;\nconst filtered = scoredItems.filter(i => i.sustainabilityScore >= threshold);\nfiltered.sort((a, b) => b.sustainabilityScore - a.sustainabilityScore);\n\nreturn filtered.slice(0, 5).map(item => ({ json: item }));"
+      },
+      "name": "Score & Filter Sustainable Items",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.localecofriendlystores.com/search",
+        "options": {
+          "queryParametersUi": {
+            "parameter": [
+              {
+                "name": "location",
+                "value": "={{$json[\"location\"]}}"
+              },
+              {
+                "name": "radius",
+                "value": "10"
+              }
+            ]
+          }
+        }
+      },
+      "name": "Fetch Local Eco Stores",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        500,
+        500
+      ],
+      "credentials": {
+        "httpHeaderAuth": "Local Eco Stores API Key"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return [\n  {\n    json: {\n      tips: [\n        \"Opt for organic cotton and recycled fabrics.\",\n        \"Support brands with transparent supply chains.\",\n        \"Wash clothes at lower temperatures to save energy.\",\n        \"Donate or upcycle old clothing instead of discarding.\"\n      ]\n    }\n  }\n];"
+      },
+      "name": "Generate Sustainable Fashion Tips",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "gmail",
+        "operation": "sendEmail",
+        "toEmail": "={{$json[\"email\"]}}",
+        "subject": "Your Sustainable Fashion Outfit Recommendations & Tips",
+        "text": "={{\n  const user = $json;\n  const items = $items(\"Score & Filter Sustainable Items\");\n  const tipsNode = $items(\"Generate Sustainable Fashion Tips\")[0].json.tips;\n  const stores = $items(\"Fetch Local Eco Stores\")[0].json.stores;\n  \n  let outfitList = items.map(i => `- ${i.json.name} (Sustainability Score: ${i.json.sustainabilityScore})`).join('\\n');\n  let tipsText = tipsNode.map(tip => `• ${tip}`).join('\\n');\n  let storesList = stores && stores.length ? stores.map(s => `- ${s.name}, ${s.address}`).join('\\n') : 'No local eco-friendly stores found nearby.';\n  \n  return `Hello ${user.name},\\n\\nHere are your personalized sustainable outfit recommendations based on your preferences and current weather:\\n${outfitList}\\n\\nSustainable Fashion Tips:\\n${tipsText}\\n\\nLocal Eco-Friendly Stores Near You:\\n${storesList}\\n\\nThank you for choosing sustainable fashion!\\n`;\n}}"
+      },
+      "name": "Send Email Notification",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        550
+      ],
+      "credentials": {
+        "gmailOAuth2": "Gmail OAuth2 Credentials"
+      }
+    }
+  ],
+  "connections": {
+    "Receive User Preferences": {
+      "main": [
+        [
+          {
+            "node": "Fetch Weather Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Fashion Items",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Local Eco Stores",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate Sustainable Fashion Tips",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Fashion Items": {
+      "main": [
+        [
+          {
+            "node": "Fetch Sustainability Scores",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Sustainability Scores": {
+      "main": [
+        [
+          {
+            "node": "Score & Filter Sustainable Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Score & Filter Sustainable Items": {
+      "main": [
+        [
+          {
+            "node": "Send Email Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Local Eco Stores": {
+      "main": [
+        []
+      ]
+    },
+    "Generate Sustainable Fashion Tips": {
+      "main": [
+        []
+      ]
+    },
+    "Fetch Weather Data": {
+      "main": [
+        []
+      ]
+    }
+  }
+}
