@@ -1,0 +1,173 @@
+{
+  "name": "AI-Driven Smart Home Energy Management and Cost Optimization System",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "getData",
+        "resource": "smartMeter",
+        "options": {}
+      },
+      "name": "Get Smart Meter Data",
+      "type": "n8n-nodes-base.smartMeter",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "url": "https://api.openweathermap.org/data/2.5/weather",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "lat",
+              "value": "={{$json[\"latitude\"]}}"
+            },
+            {
+              "name": "lon",
+              "value": "={{$json[\"longitude\"]}}"
+            },
+            {
+              "name": "appid",
+              "value": "={{$credentials.openWeatherApi.apiKey}}"
+            },
+            {
+              "name": "units",
+              "value": "metric"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Get Weather Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        200,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getData",
+        "resource": "iotDevicesStatus",
+        "options": {}
+      },
+      "name": "Get IoT Devices Status",
+      "type": "n8n-nodes-base.iot",
+      "typeVersion": 1,
+      "position": [
+        200,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const usage = items[0].json.energyUsage;\nconst weather = items[1].json;\nconst iotStatus = items[2].json.devices;\n\n// Define peak hours, renewable energy availability logic\nconst currentHour = new Date().getHours();\nconst peakHours = [17,18,19,20,21];\nconst isPeakHour = peakHours.includes(currentHour);\n\n// Example renewable energy availability based on weather\nconst renewableAvailable = weather.weather[0].main === 'Clear' || weather.weather[0].main === 'Clouds';\n\n// Calculate recommended adjustments\nlet recommendations = [];\n\nif (isPeakHour && usage > 5) {\n  recommendations.push('Reduce energy usage during peak hours to save cost.');\n}\n\nif (!isPeakHour && renewableAvailable) {\n  recommendations.push('Consider running high-energy devices now to make use of renewable energy.');\n}\n\n// Generate alerts if usage too high\nlet alerts = [];\nif (usage > 10) {\n  alerts.push('High energy consumption detected.');\n}\n\nreturn [{\n  json: {\n    usage,\n    weather,\n    iotStatus,\n    isPeakHour,\n    renewableAvailable,\n    recommendations,\n    alerts\n  }\n}];"
+      },
+      "name": "Analyze Energy Usage",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "sendNotification",
+        "resource": "userAlerts",
+        "data": "={{$json.alerts.concat($json.recommendations).join(\" \")}}"
+      },
+      "name": "Send User Alerts and Recommendations",
+      "type": "n8n-nodes-base.notifications",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "controlDevice",
+        "resource": "iotDevices",
+        "deviceControlParametersUi": {
+          "parameter": [
+            {
+              "name": "adjustmentAction",
+              "value": "={{$json.isPeakHour ? 'reducePower' : ($json.renewableAvailable ? 'increasePower' : 'maintain')}}"
+            }
+          ]
+        }
+      },
+      "name": "Adjust IoT Devices",
+      "type": "n8n-nodes-base.iot",
+      "typeVersion": 1,
+      "position": [
+        900,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "Get Smart Meter Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze Energy Usage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Weather Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze Energy Usage",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Get IoT Devices Status": {
+      "main": [
+        [
+          {
+            "node": "Analyze Energy Usage",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Analyze Energy Usage": {
+      "main": [
+        [
+          {
+            "node": "Send User Alerts and Recommendations",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Adjust IoT Devices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "credentials": {
+    "openWeatherApi": {
+      "id": "1",
+      "name": "OpenWeather API"
+    }
+  }
+}
