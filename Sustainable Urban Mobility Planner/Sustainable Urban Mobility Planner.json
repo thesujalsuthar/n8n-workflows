@@ -1,0 +1,306 @@
+{
+  "name": "Sustainable Urban Mobility Planner",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.publictransit.example.com/realtime",
+        "options": {}
+      },
+      "name": "Fetch Real-time Transit Data",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        200,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.bikesharing.example.com/availability",
+        "options": {}
+      },
+      "name": "Fetch Bike-sharing Availability",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        200,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const transitData = items[0].json;\nconst bikeData = items[1].json;\n\n// This function merges transit and bike data for route planning\nfunction mergeTransitBike(transit, bike) {\n  // Example: Combine stations with available bikes and transit stops\n  const bikeStations = bike.stations.filter(s => s.available_bikes > 0);\n  const transitStops = transit.stops;\n\n  return { bikeStations, transitStops };\n}\n\nreturn [{ json: mergeTransitBike(transitData, bikeData) }];"
+      },
+      "name": "Merge Transit & Bike Data",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        250
+      ],
+      "notesInFlow": true,
+      "notes": "Combine real-time transit stops with available bike stations to build mobility options"
+    },
+    {
+      "parameters": {
+        "functionCode": "const mergedData = items[0].json;\n\n// Mocked pedestrian route suggestions based on transit stops and bike stations\nfunction suggestPedestrianRoutes(transitStops, bikeStations) {\n  // Simple heuristic: suggest walking routes that connect transit stops and bike stations within 1km\n  const routes = [];\n  transitStops.forEach(stop => {\n    bikeStations.forEach(station => {\n      const distance = Math.sqrt(\n        Math.pow(stop.lat - station.lat, 2) + Math.pow(stop.lon - station.lon, 2)\n      ) * 111; // Rough km conversion\n      if (distance <= 1) {\n        routes.push({ from: stop.name, to: station.name, distanceKm: distance.toFixed(2) });\n      }\n    });\n  });\n  return routes;\n}\n\nreturn [{ json: { pedestrianRoutes: suggestPedestrianRoutes(mergedData.transitStops, mergedData.bikeStations) } }];"
+      },
+      "name": "Generate Pedestrian-friendly Routes",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        700,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const transitData = items[0].json;\n\n// Carbon footprint estimates per km per mode (example values)\nconst carbonRates = {\n  transit: 0.05,  // kg CO2 per km\n  bike: 0,        // kg CO2 per km\n  walk: 0          // kg CO2 per km\n};\n\n// User's planned route segments with distances and modes\nconst routeSegments = items[1].json.routes || [];\n\nfunction calculateCarbon(routeSegments) {\n  let totalCarbon = 0;\n  routeSegments.forEach(seg => {\n    totalCarbon += (carbonRates[seg.mode] || 0) * seg.distanceKm;\n  });\n  return totalCarbon.toFixed(3);\n}\n\nconst carbonFootprint = calculateCarbon(routeSegments);\n\nreturn [{ json: { carbonFootprintKgCO2: carbonFootprint } }];"
+      },
+      "name": "Calculate Carbon Footprint",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        950,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const carbonFootprint = parseFloat(items[0].json.carbonFootprintKgCO2);\nconst pedestrianRoutesCount = items[1].json.pedestrianRoutes.length || 0;\nconst transitStopsCount = items[2].json.transitStops ? items[2].json.transitStops.length : 0;\nconst bikeStationsCount = items[2].json.bikeStations ? items[2].json.bikeStations.length : 0;\n\n// Simple eco-friendly mobility score (scale 0-100)\n// Higher number = greener and efficient mobility\n\nfunction mobilityScore(carbon, pedestrianCount, transitCount, bikeCount) {\n  let score = 100;\n  score -= carbon * 10; // heavier penalty for carbon\n  score += pedestrianCount * 2; // bonus for walkable routes\n  score += transitCount * 0.5;\n  score += bikeCount * 0.5;\n  if (score > 100) score = 100;\n  if (score < 0) score = 0;\n  return score.toFixed(1);\n}\n\nconst score = mobilityScore(carbonFootprint, pedestrianRoutesCount, transitStopsCount, bikeStationsCount);\n\nreturn [{ json: { ecoFriendlyScore: Number(score) } }];"
+      },
+      "name": "Compute Eco-friendly Mobility Score",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.publictransit.example.com/status/alerts",
+        "options": {}
+      },
+      "name": "Fetch Transit Alerts",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        200,
+        550
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const alerts = items[0].json.alerts || [];\n\n// Filter only delay or disruption alerts\nconst filteredAlerts = alerts.filter(alert => {\n  return alert.type === 'delay' || alert.type === 'disruption';\n});\n\nreturn [{ json: { transitAlerts: filteredAlerts } }];"
+      },
+      "name": "Filter Transit Delays & Disruptions",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        550
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const alerts = items[0].json.transitAlerts;\n\nif (alerts.length > 0) {\n  return [{ json: { alertMessage: `Transit issues detected: ${alerts.length} active alert(s).` } }];\n} else {\n  return [{ json: { alertMessage: \"No current transit delays or disruptions.\" } }];\n}"
+      },
+      "name": "Generate Alert Message",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        700,
+        550
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const userPrefs = $json.preferences || {};\nconst history = $json.history || [];\n\n// Personalized recommendations based on preferences and history\nfunction getRecommendations(prefs, history) {\n  const recs = [];\n  if (prefs.prefersBike) recs.push(\"Consider starting your trip near bike-sharing stations.\");\n  if (prefs.prefersWalk) recs.push(\"Explore pedestrian-friendly routes connecting transit stops.\");\n  \n  // Example: if history shows frequent delays on line X, suggest alternatives\n  const delayedLines = history.filter(h => h.delays > 3).map(h => h.line);\n  if (delayedLines.length > 0) {\n    recs.push(`Lines with frequent delays: ${delayedLines.join(\", \")}. Try alternative routes.`);\n  }\n\n  if (recs.length === 0) recs.push(\"Your selected routes are optimal based on current data.\");\n  return recs;\n}\n\nconst recommendations = getRecommendations(userPrefs, history);\n\nreturn [{ json: { personalizedRecommendations: recommendations } }];"
+      },
+      "name": "Generate Personalized Recommendations",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        950,
+        550
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{\n  json: {\n    summary: {\n      carbonFootprintKgCO2: items[0].json.carbonFootprintKgCO2 || 0,\n      ecoFriendlyScore: items[1].json.ecoFriendlyScore || 0,\n      pedestrianRoutes: items[2].json.pedestrianRoutes || [],\n      transitAlerts: items[3].json.transitAlerts || [],\n      alertMessage: items[4].json.alertMessage || \"\",\n      personalizedRecommendations: items[5].json.personalizedRecommendations || []\n    }\n  }\n}];"
+      },
+      "name": "Compile Summary",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        550
+      ]
+    }
+  ],
+  "connections": {
+    "Fetch Real-time Transit Data": {
+      "main": [
+        [
+          {
+            "node": "Fetch Bike-sharing Availability",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Bike-sharing Availability": {
+      "main": [
+        [
+          {
+            "node": "Merge Transit & Bike Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Transit & Bike Data": {
+      "main": [
+        [
+          {
+            "node": "Generate Pedestrian-friendly Routes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Pedestrian-friendly Routes": {
+      "main": [
+        [
+          {
+            "node": "Calculate Carbon Footprint",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch Real-time Transit Data": {
+      "main": [
+        [
+          {
+            "node": "Calculate Carbon Footprint",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Compute Eco-friendly Mobility Score",
+            "type": "main",
+            "index": 2
+          }],
+        [
+          {
+            "node": "Filter Transit Delays & Disruptions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Carbon Footprint": {
+      "main": [
+        [
+          {
+            "node": "Compute Eco-friendly Mobility Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Eco-friendly Mobility Score": {
+      "main": [
+        [
+          {
+            "node": "Compile Summary",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Filter Transit Delays & Disruptions": {
+      "main": [
+        [
+          {
+            "node": "Generate Alert Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Alert Message": {
+      "main": [
+        [
+          {
+            "node": "Compile Summary",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Generate Pedestrian-friendly Routes": {
+      "main": [
+        [
+          {
+            "node": "Compute Eco-friendly Mobility Score",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch Transit Alerts": {
+      "main": [
+        [
+          {
+            "node": "Filter Transit Delays & Disruptions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Eco-friendly Mobility Score": {
+      "main": [
+        [
+          {
+            "node": "Compile Summary",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Generate Personalized Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Compile Summary",
+            "type": "main",
+            "index": 5
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
