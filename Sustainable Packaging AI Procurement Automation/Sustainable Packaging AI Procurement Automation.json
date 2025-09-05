@@ -1,0 +1,237 @@
+{
+  "name": "AI-Powered Sustainable Packaging Recommendation and Procurement Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "analyze-product-requirements",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "name": "Webhook - Receive Product Data",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ],
+      "webhookId": "a1b2c3d4-e5f6-7890-abcd-1234567890ab"
+    },
+    {
+      "parameters": {
+        "functionCode": "const productData = items[0].json;\n// Example: Extract packaging requirements\nconst packagingRequirements = {\n  weight: productData.weight,\n  dimensions: productData.dimensions,\n  fragility: productData.fragility,\n  volume: productData.volume\n};\nreturn [{ json: { packagingRequirements } }];"
+      },
+      "name": "Extract Packaging Requirements",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "temperature": 0.3,
+        "maxTokens": 500,
+        "topP": 1,
+        "frequencyPenalty": 0,
+        "presencePenalty": 0,
+        "prompt": "You are an AI assistant specializing in sustainable packaging solutions.\n\nInput packaging requirements:\n{{ $json.packagingRequirements | json }}\n\nPlease provide a list of recommended eco-friendly packaging options ranked by sustainability metrics including biodegradability, recyclability, and carbon footprint. Include estimated costs and supplier IDs for procurement."
+      },
+      "name": "Generate Packaging Recommendations",
+      "type": "n8n-nodes-base.openAI",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const recommendationsRaw = items[0].json.choices[0].message.content;\n// Assuming recommendations are returned as JSON string in the response content\ntry {\n  const recommendations = JSON.parse(recommendationsRaw);\n  return recommendations.map(rec => ({ json: rec }));\n} catch (error) {\n  throw new Error('Failed to parse recommendations: ' + error.message);\n}"
+      },
+      "name": "Parse Recommendations",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const recommendations = items.map(item => item.json);\nconst supplierRequests = recommendations.map(rec => {\n  return {\n    json: {\n      supplierId: rec.supplierId,\n      packagingOptionId: rec.id,\n      quantity: 100\n    }\n  };\n});\nreturn supplierRequests;"
+      },
+      "name": "Prepare Procurement Requests",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.supplier.com/procurements",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={\n  \"supplierId\": $json[\"supplierId\"],\n  \"packagingOptionId\": $json[\"packagingOptionId\"],\n  \"quantity\": $json[\"quantity\"]\n}"
+      },
+      "name": "Create Procurement Order",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "credential-http-header-auth-supplier"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const recommendations = items.filter(item => item.json.packagingOptionId).map(item => item.json);\nconst totalCost = recommendations.reduce((sum, rec) => sum + (rec.estimatedCost || 0) * (rec.quantity || 100), 0);\nconst sustainabilityScore = recommendations.reduce((sum, rec) => sum + (rec.sustainabilityScore || 0), 0) / recommendations.length;\n\nreturn [{ json: { totalCost, sustainabilityScore, recommendations } }];"
+      },
+      "name": "Calculate Cost-Benefit & Sustainability Impact",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "text": "Packaging Procurement Summary:\n\nTotal Estimated Cost: ${{ $json.totalCost.toFixed(2) }}\nAverage Sustainability Score: {{ $json.sustainabilityScore.toFixed(2) }}/10\n\nDetails per packaging option:\n{{ $json.recommendations.map(r => `- ${r.name}: Cost $${r.estimatedCost}, Sustainability ${r.sustainabilityScore}`).join('\\n')}}"
+      },
+      "name": "Generate Sustainability Report",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        2000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "channel": "email",
+        "subject": "Sustainable Packaging Procurement Report",
+        "text": "={{$node[\"Generate Sustainability Report\"].json[\"text\"]}}",
+        "toEmail": "business@company.com"
+      },
+      "name": "Send Report Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        2250,
+        300
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "credential-smtp-email"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook - Receive Product Data": {
+      "main": [
+        [
+          {
+            "node": "Extract Packaging Requirements",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Packaging Requirements": {
+      "main": [
+        [
+          {
+            "node": "Generate Packaging Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Packaging Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Parse Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Prepare Procurement Requests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Procurement Requests": {
+      "main": [
+        [
+          {
+            "node": "Create Procurement Order",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Calculate Cost-Benefit & Sustainability Impact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Procurement Order": {
+      "main": [
+        []
+      ]
+    },
+    "Calculate Cost-Benefit & Sustainability Impact": {
+      "main": [
+        [
+          {
+            "node": "Generate Sustainability Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Sustainability Report": {
+      "main": [
+        [
+          {
+            "node": "Send Report Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Report Email": {
+      "main": [
+        []
+      ]
+    }
+  }
+}
