@@ -1,0 +1,107 @@
+{
+  "name": "AI-Powered Sustainable Packaging Suggestion and Inventory Optimizer",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "getAll",
+        "resource": "product",
+        "returnAll": true,
+        "options": {}
+      },
+      "name": "Fetch Products",
+      "type": "n8n-nodes-base.api",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "prompt": "Analyze the following product packaging requirements and provide:\n1. A sustainability score (0-100), considering eco-friendliness.\n2. Suggested eco-friendly packaging alternatives with explanations.\n3. Packaging material recommendations optimized for cost and sustainability.\n\nProduct Details:\n{{ $json[\"products\"] }}",
+        "max_tokens": 1000,
+        "temperature": 0.7
+      },
+      "name": "AI Packaging Analysis",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        550,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "passThrough",
+        "values": {
+          "number": [],
+          "string": [],
+          "boolean": [],
+          "collection": []
+        }
+      },
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ],
+      "functionCode": "const responseText = items[0].json.choices[0].message.content;\nconst dataStart = responseText.indexOf('{');\nconst dataEnd = responseText.lastIndexOf('}');\nlet parsed = {};\nif(dataStart !== -1 && dataEnd !== -1) {\n  try {\n    const jsonString = responseText.substring(dataStart, dataEnd + 1);\n    parsed = JSON.parse(jsonString);\n  } catch(e) {\n    throw new Error('Failed to parse AI JSON response');\n  }\n} else {\n  throw new Error('No JSON object found in AI response');\n}\nreturn [{ json: parsed }];"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "resource": "inventoryOrder",
+        "updateFields": {
+          "packagingRecommendations": "={{$json.recommendations}}",
+          "sustainabilityScore": "={{$json.sustainabilityScore}}",
+          "orderOptimization": "={{$json.optimizedOrders}}"
+        }
+      },
+      "name": "Update Inventory Orders",
+      "type": "n8n-nodes-base.api",
+      "typeVersion": 1,
+      "position": [
+        950,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Fetch Products": {
+      "main": [
+        [
+          {
+            "node": "AI Packaging Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Packaging Analysis": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Update Inventory Orders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
