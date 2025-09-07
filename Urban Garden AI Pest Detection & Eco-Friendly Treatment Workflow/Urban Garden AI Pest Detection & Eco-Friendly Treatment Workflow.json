@@ -1,0 +1,226 @@
+{
+  "name": "AI-Powered Smart Urban Garden Pest Detection and Eco-Friendly Treatment Recommendation System",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": []
+        }
+      },
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        150,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "filePropertyName": "image",
+        "binaryData": true
+      },
+      "name": "Fetch Garden Images",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        350,
+        180
+      ],
+      "credentials": {}
+    },
+    {
+      "parameters": {
+        "resource": "sensor",
+        "operation": "getAll",
+        "options": {}
+      },
+      "name": "Read Sensor Data",
+      "type": "n8n-nodes-base.customApi",
+      "typeVersion": 1,
+      "position": [
+        350,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "model": "custom-pest-detection-model",
+        "input": "={{$json[\"imageData\"]}}",
+        "additionalOptions": {}
+      },
+      "name": "AI Pest Identification",
+      "type": "n8n-nodes-base.ai",
+      "typeVersion": 1,
+      "position": [
+        550,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "model": "custom-pest-identification-model",
+        "input": "={{$json.sensorData}}",
+        "additionalOptions": {}
+      },
+      "name": "AI Pest Detection from Sensors",
+      "type": "n8n-nodes-base.ai",
+      "typeVersion": 1,
+      "position": [
+        550,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{\n  pestIdentifications: [$json[\"pestIdentification\"], $items(\"AI Pest Detection from Sensors\")[0].json.pestIdentification].flat(),\n  ecoFriendlyTreatments: []\n}];"
+      },
+      "name": "Combine Identifications",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "pestName",
+              "value": "={{$json.pestName}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Evaluate Eco-Friendly Treatments",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        950,
+        300
+      ],
+      "credentials": {}
+    },
+    {
+      "parameters": {
+        "functionCode": "const pests = $json.pestIdentifications;\nconst treatmentsDB = {\n  \"aphids\": [\"Neem oil spray\", \"Introduce ladybugs\"],\n  \"whiteflies\": [\"Sticky traps\", \"Companion planting with marigolds\"],\n  \"caterpillars\": [\"Bacillus thuringiensis (Bt) application\", \"Handpicking\"],\n  \"mites\": [\"Insecticidal soap\", \"Increase humidity\"],\n  \"scale insects\": [\"Horticultural oil\", \"Prune affected branches\"]\n};\n\nconst recommendedTreatments = [];\npests.forEach(pest => {\n  if (treatmentsDB[pest.toLowerCase()]) {\n    recommendedTreatments.push({\n      pest,\n      treatments: treatmentsDB[pest.toLowerCase()]\n    });\n});\n\nreturn [{ json: { recommendedTreatments } }];"
+      },
+      "name": "Map Treatments Locally",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "message": "Pest detections and recommended eco-friendly treatments for your urban garden:\n\n{{$json.recommendedTreatments.map(t => `${t.pest}: ${t.treatments.join(\", \")}`).join(\"\\n\")}}",
+        "title": "Smart Urban Garden Pest Alert",
+        "options": {
+          "priority": "high"
+        }
+      },
+      "name": "Notify User",
+      "type": "n8n-nodes-base.pushbullet",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        300
+      ],
+      "credentials": {
+        "pushbulletApi": "Pushbullet API"
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Garden Images",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Read Sensor Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Garden Images": {
+      "main": [
+        [
+          {
+            "node": "AI Pest Identification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Sensor Data": {
+      "main": [
+        [
+          {
+            "node": "AI Pest Detection from Sensors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Pest Identification": {
+      "main": [
+        [
+          {
+            "node": "Combine Identifications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Pest Detection from Sensors": {
+      "main": [
+        [
+          {
+            "node": "Combine Identifications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine Identifications": {
+      "main": [
+        [
+          {
+            "node": "Map Treatments Locally",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map Treatments Locally": {
+      "main": [
+        [
+          {
+            "node": "Notify User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
