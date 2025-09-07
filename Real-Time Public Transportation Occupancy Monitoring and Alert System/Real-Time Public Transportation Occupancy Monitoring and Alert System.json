@@ -1,0 +1,164 @@
+{
+  "name": "Real-Time Public Transportation Occupancy and Crowd Management System",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "sensor-data",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "name": "Receive Sensor Data",
+      "type": "n8n-nodes-base.httpTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nAggregate and preprocess passenger counting sensor data.\nExpected input: an array of sensor data points containing:\n  - vehicleId\n  - timestamp\n  - occupancyCount\n*/\n\nconst sensorData = items.map(item => item.json);\n\nconst groupedByVehicle = {};\n\nfor (const data of sensorData) {\n  if (!groupedByVehicle[data.vehicleId]) {\n    groupedByVehicle[data.vehicleId] = [];\n  }\n  groupedByVehicle[data.vehicleId].push(data);\n}\n\n// For each vehicle, determine latest occupancy count\nconst latestOccupancy = Object.entries(groupedByVehicle).map(([vehicleId, records]) => {\n  records.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));\n  return {\n    vehicleId,\n    timestamp: records[0].timestamp,\n    occupancyCount: records[0].occupancyCount\n  };\n});\n\nreturn latestOccupancy.map(record => ({ json: record }));"
+      },
+      "name": "Preprocess Sensor Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nAnalyze occupancy and predict potential overcrowding.\nAssume maxCapacity per vehicleId known from parameters or predefined list.\nOvercrowding threshold: e.g. 90% of capacity\n\nOutput an alert if occupancy exceeds threshold or is predicted to do so soon.\n*/\n\nconst maxCapacities = {\n  bus1001: 60,\n  bus1002: 60,\n  train2001: 200,\n  train2002: 150\n};\n\nconst alerts = [];\n\nfor (const item of items) {\n  const { vehicleId, occupancyCount } = item.json;\n  const capacity = maxCapacities[vehicleId] || 100; // default capacity\n  const occupancyRate = occupancyCount / capacity;\n  \n  // Simple overcrowding alert threshold\n  if (occupancyRate >= 0.9) {\n    alerts.push({\n      vehicleId,\n      occupancyCount,\n      capacity,\n      occupancyRate,\n      alertType: 'OVERLOAD',\n      message: `Vehicle ${vehicleId} is overcrowded with occupancy at ${Math.round(occupancyRate * 100)}%.`\n    });\n  }\n}\n\nreturn alerts.map(alert => ({ json: alert }));"
+      },
+      "name": "Analyze & Predict Overcrowding",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "channel": "sms",
+        "to": "={{$json[\"phoneNumber\"] || \"+1234567890\"}}",
+        "message": "={{$json[\"message\"]}}"
+      },
+      "name": "Send SMS Alert",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        200
+      ],
+      "credentials": {
+        "twilioApi": "Twilio Account"
+      }
+    },
+    {
+      "parameters": {
+        "toEmail": "=alerts@transitauthority.example.com",
+        "subject": "Overcrowding Alert - Vehicle {{$json[\"vehicleId\"]}}",
+        "text": "={{$json[\"message\"]}}"
+      },
+      "name": "Send Email Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        350
+      ],
+      "credentials": {
+        "smtp": "SMTP Credentials"
+      }
+    },
+    {
+      "parameters": {
+        "resource": "tweet",
+        "operation": "create",
+        "text": "={{`Alert: Vehicle ${$json[\"vehicleId\"]} is currently overcrowded. Please expect delays and consider alternative options.`}}"
+      },
+      "name": "Post Social Media Alert",
+      "type": "n8n-nodes-base.twitter",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        450
+      ],
+      "credentials": {
+        "twitterOAuth2Api": "Twitter Account"
+      }
+    },
+    {
+      "parameters": {},
+      "name": "Split Alerts",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Receive Sensor Data": {
+      "main": [
+        [
+          {
+            "node": "Preprocess Sensor Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preprocess Sensor Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze & Predict Overcrowding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze & Predict Overcrowding": {
+      "main": [
+        [
+          {
+            "node": "Split Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Alerts": {
+      "main": [
+        [
+          {
+            "node": "Send SMS Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Post Social Media Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  ],
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
