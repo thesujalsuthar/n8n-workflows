@@ -1,0 +1,240 @@
+{
+  "name": "AI-Powered Sustainable Travel Planner & Carbon Footprint Optimizer",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "plan-itinerary",
+        "options": {}
+      },
+      "name": "Start HTTP Trigger",
+      "type": "n8n-nodes-base.httpTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "passThrough",
+        "options": {}
+      },
+      "name": "Parse Request",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ],
+      "notes": "Extracts user travel preferences and itinerary details from the request body",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "endpoint": "/travel-options",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "origin",
+              "value": "={{$json.preferences.origin}}"
+            },
+            {
+              "name": "destination",
+              "value": "={{$json.preferences.destination}}"
+            },
+            {
+              "name": "date",
+              "value": "={{$json.preferences.date}}"
+            },
+            {
+              "name": "mode",
+              "value": "all"
+            }
+          ]
+        }
+      },
+      "name": "Fetch Travel Options",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const travelOptions = items[0].json.data || [];\n\n// Placeholder emissions data in kg CO2 per passenger km\nconst emissionFactors = {\n  flight: 0.255,\n  train: 0.041,\n  bus: 0.105,\n  car: 0.192\n};\n\n// Assume travelOptions includes distance in km and mode\nitems[0].json.annotatedOptions = travelOptions.map(option => {\n  const mode = option.mode.toLowerCase();\n  const distance = option.distance_km || 0;\n  const emissions = (emissionFactors[mode] || 0) * distance;\n  return {\n    ...option,\n    estimated_emissions_kg: emissions\n  };\n});\n\nreturn items;"
+      },
+      "name": "Calculate Carbon Emissions",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const options = items[0].json.annotatedOptions || [];\n\n// Suggest lowest emission option\nconst sortedOptions = options.sort((a, b) => a.estimated_emissions_kg - b.estimated_emissions_kg);\nconst bestOption = sortedOptions[0] || null;\n\nreturn [{json: {\n  bestOption,\n  allOptions: sortedOptions\n}}];"
+      },
+      "name": "Identify Best Eco-Friendly Option",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "endpoint": "/carbon-offset-programs",
+        "queryParametersUi": {
+          "parameter": []
+        }
+      },
+      "name": "Fetch Carbon Offset Programs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        650,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const offsetPrograms = items[0].json.programs || [];\nconst emissions = $items(\"Identify Best Eco-Friendly Option\")[0].json.bestOption?.estimated_emissions_kg || 0;\n\n// Recommend offset programs scaled by emissions\nconst recommendedOffsets = offsetPrograms.map(program => {\n  return {\n    name: program.name,\n    url: program.url,\n    suggestedContribution: (emissions * (program.offset_factor || 1)).toFixed(2) + ' kg CO2'\n  };\n});\n\nreturn [{json: { recommendedOffsets, emissions}}];"
+      },
+      "name": "Generate Offset Recommendations",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const bestOption = $items(\"Identify Best Eco-Friendly Option\")[0].json.bestOption;\nconst allOptions = $items(\"Identify Best Eco-Friendly Option\")[0].json.allOptions;\nconst recommendedOffsets = items[0].json.recommendedOffsets;\n\nconst sustainabilityTips = [\n  \"Use public transportation whenever possible.\",\n  \"Pack light to reduce fuel consumption.\",\n  \"Choose non-stop flights if flying.\",\n  \"Consider traveling by train or bus for short to medium distances.\",\n  \"Offset your carbon emissions through verified programs.\"\n];\n\nconst alternatives = allOptions.filter(opt => opt.estimated_emissions_kg <= bestOption.estimated_emissions_kg * 1.5 && opt.mode !== bestOption.mode);\n\nreturn [{json: {\n  itinerarySuggestion: bestOption,\n  alternatives: alternatives,\n  sustainabilityTips: sustainabilityTips,\n  carbonOffsets: recommendedOffsets\n}}];"
+      },
+      "name": "Prepare User Recommendations",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "httpStatusCode": 200,
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "name": "Respond to User",
+      "type": "n8n-nodes-base.httpResponse",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Start HTTP Trigger": {
+      "main": [
+        [
+          {
+            "node": "Parse Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Request": {
+      "main": [
+        [
+          {
+            "node": "Fetch Travel Options",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Carbon Offset Programs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Travel Options": {
+      "main": [
+        [
+          {
+            "node": "Calculate Carbon Emissions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Carbon Emissions": {
+      "main": [
+        [
+          {
+            "node": "Identify Best Eco-Friendly Option",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Identify Best Eco-Friendly Option": {
+      "main": [
+        [
+          {
+            "node": "Prepare User Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Carbon Offset Programs": {
+      "main": [
+        [
+          {
+            "node": "Generate Offset Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Offset Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Prepare User Recommendations",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Prepare User Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Respond to User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
