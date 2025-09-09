@@ -1,0 +1,162 @@
+{
+  "name": "AI-Powered Real-Time Public Transit Delay Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.publictransit.example.com/v1/delays",
+        "responseFormat": "json",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "lines",
+              "value": "={{$json[\"userPreferences\"]?.lines?.join(\",\") || \"\"}}"
+            }
+          ]
+        }
+      },
+      "name": "Fetch Live Transit Data",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const delays = items[0].json.delays || [];\nconst threshold = $json.userPreferences.delayThresholdMinutes || 5;\nconst filteredDelays = delays.filter(delay => delay.delayMinutes >= threshold && ($json.userPreferences.lines.length ? $json.userPreferences.lines.includes(delay.line) : true));\n\nreturn filteredDelays.map(delay => ({json: {...delay}}));"
+      },
+      "name": "Filter Significant Delays",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.map(item => {\n  return {\n    json: {\n      message: `Delay Alert: Line ${item.json.line} is delayed by ${item.json.delayMinutes} minutes at stop ${item.json.stopName}. Expected arrival now at ${item.json.newArrivalTime}.`,\n      userPreferences: $json.userPreferences\n    }\n  };\n});"
+      },
+      "name": "Generate Alert Messages",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "alerts@transitalerts.example.com",
+        "toEmail": "={{$json.userPreferences.email}}",
+        "subject": "Transit Delay Alert",
+        "text": "={{$json.message}}"
+      },
+      "name": "Send Email Notification",
+      "type": "emailSend",
+      "typeVersion": 1,
+      "position": [
+        900,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "phoneNumber": "={{$json.userPreferences.phoneNumber}}",
+        "message": "={{$json.message}}"
+      },
+      "name": "Send SMS Notification",
+      "type": "twilio",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "notificationTitle": "Transit Delay Alert",
+        "notificationBody": "={{$json.message}}"
+      },
+      "name": "Send Push Notification",
+      "type": "pushNotification",
+      "typeVersion": 1,
+      "position": [
+        900,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [\n  {\n    json: {\n      userPreferences: {\n        lines: [\"Red Line\", \"Blue Line\"],\n        delayThresholdMinutes: 5,\n        email: \"user@example.com\",\n        phoneNumber: \"+1234567890\"\n      }\n    }\n  }\n];"
+      },
+      "name": "Mock User Preferences",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        50,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Mock User Preferences": {
+      "main": [
+        [
+          {
+            "node": "Fetch Live Transit Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Live Transit Data": {
+      "main": [
+        [
+          {
+            "node": "Filter Significant Delays",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Significant Delays": {
+      "main": [
+        [
+          {
+            "node": "Generate Alert Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Alert Messages": {
+      "main": [
+        [
+          {
+            "node": "Send Email Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send SMS Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Push Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
