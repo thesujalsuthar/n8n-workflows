@@ -1,0 +1,257 @@
+{
+  "name": "EcoAware Daily Sustainability Tip Delivery Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "mode": "everyDay",
+        "time": "08:00",
+        "options": {}
+      },
+      "name": "Trigger Daily",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.environmenttips.org/dailytip",
+        "responseFormat": "json",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_API_KEY_ENVIRONMENTTIPS"
+            }
+          ]
+        }
+      },
+      "name": "Fetch Tip - EnvironmentTips",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        500,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://sustainableworld.api/tips/today",
+        "responseFormat": "json",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "x-api-key",
+              "value": "YOUR_API_KEY_SUSTAINABLEWORLD"
+            }
+          ]
+        }
+      },
+      "name": "Fetch Tip - SustainableWorld",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        500,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const envTip = $items(\"Fetch Tip - EnvironmentTips\")[0].json.tip || null;\nconst swTip = $items(\"Fetch Tip - SustainableWorld\")[0].json.tip || null;\n\nconst aggregatedTips = [];\nif (envTip) aggregatedTips.push(envTip);\nif (swTip) aggregatedTips.push(swTip);\n\nreturn [{ json: { aggregatedTips } }];"
+      },
+      "name": "Aggregate Tips",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        730,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const users = [\n  {\n    email: 'alice@example.com',\n    location: 'California, USA',\n    preferences: { categories: ['water', 'energy'], bestTime: '07:30' },\n    pushToken: 'push_token_alice'\n  },\n  {\n    email: 'bob@example.com',\n    location: 'Berlin, Germany',\n    preferences: { categories: ['waste', 'transport'], bestTime: '08:15' },\n    pushToken: 'push_token_bob'\n  }\n];\n\nconst aggregatedTips = $items(\"Aggregate Tips\")[0].json.aggregatedTips;\n\n// Simple personalization: filter tips by user preferences (dummy logic here)\n// In real case, tips would have categories, here we simulate by choosing all tips\n\nconst personalized = users.map(user => {\n  return {\n    email: user.email,\n    location: user.location,\n    preferences: user.preferences,\n    pushToken: user.pushToken,\n    tips: aggregatedTips,\n    bestTime: user.preferences.bestTime\n  };\n});\n\nreturn personalized.map(person => ({ json: person }));"
+      },
+      "name": "Personalize Tips",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        950,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "everyDay",
+        "options": {}
+      },
+      "name": "Dynamic User Scheduler",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const user = $json;\nconst now = new Date();\nconst targetTime = user.bestTime.split(':');\nconst userTargetDate = new Date();\nuserTargetDate.setHours(parseInt(targetTime[0], 10), parseInt(targetTime[1], 10), 0, 0);\n\nconst diff = userTargetDate - now;\n\n// If time is negative, schedule for next day\nif(diff < 0) {\n  userTargetDate.setDate(userTargetDate.getDate() + 1);\n}\n\nreturn [{ json: { ...user, scheduleTime: userTargetDate.toISOString() } }];"
+      },
+      "name": "Calculate Schedule Time",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const user = $json;\nconst now = new Date();\nconst schedule = new Date(user.scheduleTime);\n\n// Only pass forward users whose scheduleTime is within the next 5 minutes\nconst diff = schedule.getTime() - now.getTime();\nif(diff >= 0 && diff < 300000) {\n  return [{ json: user }];\n}\nreturn [];"
+      },
+      "name": "Filter by Schedule Time",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "ecoaware@yourdomain.com",
+        "toEmail": "={{$json[\"email\"]}}",
+        "subject": "Your Daily Sustainability Tip 🌿",
+        "text": "Hello,\n\nHere are today’s sustainability tips tailored for your location ({{$json[\"location\"]}}):\n\n- {{$json[\"tips\"].join('\\n- ')}}\n\nKeep up the great work towards a greener planet!\n\nBest regards,\nEcoAware Team",
+        "html": "<p>Hello,</p><p>Here are today’s sustainability tips tailored for your location ({{$json[\"location\"]}}):</p><ul>{{$json[\"tips\"].map(tip => `<li>${tip}</li>`).join('')}}</ul><p>Keep up the great work towards a greener planet!</p><p>Best regards,<br/>EcoAware Team</p>"
+      },
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        550
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "none",
+        "options": {},
+        "url": "https://push-service.yourdomain.com/send",
+        "method": "POST",
+        "jsonParameters": true,
+        "bodyParametersJson": "{\n  \"to\": \"{{$json[\"pushToken\"]}}\",\n  \"title\": \"EcoAware Daily Tip\",\n  \"message\": \"{{$json[\"tips\"].join(' | ')}}\"\n}"
+      },
+      "name": "Send Push Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        650
+      ]
+    }
+  ],
+  "connections": {
+    "Trigger Daily": {
+      "main": [
+        [
+          {
+            "node": "Fetch Tip - EnvironmentTips",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Tip - SustainableWorld",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Tip - EnvironmentTips": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Tips",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Tip - SustainableWorld": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Tips",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Aggregate Tips": {
+      "main": [
+        [
+          {
+            "node": "Personalize Tips",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Personalize Tips": {
+      "main": [
+        [
+          {
+            "node": "Calculate Schedule Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dynamic User Scheduler": {
+      "main": [
+        [
+          {
+            "node": "Calculate Schedule Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Schedule Time": {
+      "main": [
+        [
+          {
+            "node": "Filter by Schedule Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter by Schedule Time": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Push Notification",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  }
+}
