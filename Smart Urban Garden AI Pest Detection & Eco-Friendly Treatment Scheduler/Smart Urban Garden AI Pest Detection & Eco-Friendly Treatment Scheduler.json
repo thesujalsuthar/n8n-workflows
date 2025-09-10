@@ -1,0 +1,135 @@
+{
+  "name": "AI-Powered Smart Urban Garden Pest Detection & Eco-Friendly Treatment Recommendation System",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "={{$json[\"imagePath\"]}}"
+      },
+      "name": "Read Image",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "apikey",
+        "apiKey": "={{$credentials.openaiApi.apiKey}}",
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an expert urban garden pest identification and eco-friendly treatment recommendation assistant."
+          },
+          {
+            "role": "user",
+            "content": "Analyze the following garden plant pest image and identify the pest type. Then provide personalized eco-friendly treatment recommendations suitable for urban gardens. Respond in JSON with keys: pestName, identificationConfidence (0-1), recommendedTreatments (array of short descriptions). Image data will be sent as base64 string."
+          },
+          {
+            "role": "user",
+            "content": "Image base64: {{$binary.data.data.toString('base64')}}"
+          }
+        ]
+      },
+      "name": "AI Pest Identification & Recommendation",
+      "type": "n8n-nodes-base.openai",
+      "typeVersion": 1,
+      "position": [
+        550,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "noreply@urbangardenai.com",
+        "toEmail": "={{$json[\"userEmail\"]}}",
+        "subject": "Your Pest Detection & Eco-Friendly Treatment Recommendations",
+        "text": "Hello,\n\nWe have identified the pest in your urban garden plant as: {{$json[\"pestName\"]}} with a confidence of {{$json[\"identificationConfidence\"]}}.\n\nRecommended treatments:\n\n{{$json[\"recommendedTreatments\"].map(t => `- ${t}`).join('\\n')}}\n\nWe will also schedule reminders for your treatment follow-ups.\n\nThank you for using our Smart Urban Garden Pest Detection System.\n\nBest regards,\nUrban Garden AI Team"
+      },
+      "name": "Send Email with Recommendations",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "workflow",
+        "data": {
+          "fields": {
+            "text": "Follow-up treatment reminder for pest: {{$json[\"pestName\"]}}",
+            "dateTime": "={{new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()}}",
+            "email": "={{$json[\"userEmail\"]}}"
+          }
+        }
+      },
+      "name": "Schedule Reminder",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        300
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": "Google Calendar Account"
+      }
+    },
+    {
+      "parameters": {},
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [
+        50,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Read Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Image": {
+      "main": [
+        [
+          {
+            "node": "AI Pest Identification & Recommendation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Pest Identification & Recommendation": {
+      "main": [
+        [
+          {
+            "node": "Send Email with Recommendations",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Schedule Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
