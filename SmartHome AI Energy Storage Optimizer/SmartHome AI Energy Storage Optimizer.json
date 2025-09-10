@@ -1,0 +1,176 @@
+{
+  "name": "AI-Powered Smart Home Energy Storage Optimization and Renewable Integration",
+  "nodes": [
+    {
+      "parameters": {
+        "rssFeedUrl": "https://forecast.weather.gov/MapClick.php?lat=40.7128&lon=-74.0060&FcstType=digitalJSON"
+      },
+      "name": "Renewable Generation Forecast",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "http://localhost:8080/api/energy/consumption/realtime",
+        "options": {}
+      },
+      "name": "Real-Time Energy Consumption",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "http://localhost:8080/api/energy/pricing/dynamic",
+        "options": {}
+      },
+      "name": "Dynamic Electricity Pricing",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nDecision logic for optimizing battery usage based on real-time consumption, renewable forecasts and dynamic pricing.\nInput data format assumed from previous nodes.\nOutput suggested battery charge/discharge commands.\nOptimization targets cost savings and environmental impact.\n*/\n\nconst consumption = items[0].json.consumptionKW || 0;\nconst forecastSolar = items[1].json.solarForecastKW || 0;\nconst price = items[2].json.pricePerKW || 0;\n\n// Simple AI heuristic example\nlet action = \"idle\";\nlet batteryChangeKW = 0;\n\nif (price > 0.20 && consumption > 0) {\n  // High price, discharge battery to reduce grid usage\n  action = \"discharge\";\n  batteryChangeKW = Math.min(consumption, 5); // max 5KW discharge\n} else if (price < 0.10 && forecastSolar > 0) {\n  // Low price and good solar forecast, charge battery\n  action = \"charge\";\n  batteryChangeKW = Math.min(forecastSolar, 5); // max 5KW charge\n}\n\nreturn [{\n  json: {\n    action,\n    batteryChangeKW,\n    consumption,\n    forecastSolar,\n    price\n  }\n}];"
+      },
+      "name": "Optimize Battery Usage",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        550,
+        300
+      ],
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "resource": "notification",
+        "operation": "send",
+        "title": "Home Energy Storage Update",
+        "message": "Battery action: {{$json[\"action\"]}}, Change: {{$json[\"batteryChangeKW\"]}} kW\nConsumption: {{$json[\"consumption\"]}} kW\nSolar Forecast: {{$json[\"forecastSolar\"]}} kW\nPrice: ${{$json[\"price\"]}} per kW",
+        "additionalFields": {}
+      },
+      "name": "Send User Notification",
+      "type": "n8n-nodes-base.pushbullet",
+      "typeVersion": 1,
+      "position": [
+        850,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "path": "energy_optimization_report_{{ $now.format(\"YYYY_MM_DD_HH_mm\") }}.txt",
+        "dataPropertyName": "data",
+        "encoding": "utf8"
+      },
+      "name": "Generate Report File",
+      "type": "n8n-nodes-base.writeBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        850,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "smart-home@energyopt.example.com",
+        "toEmail": "user@example.com",
+        "subject": "Daily Energy Storage Optimization Report",
+        "text": "Today's Battery Action: {{$json[\"action\"]}}\nBattery Change (kW): {{$json[\"batteryChangeKW\"]}}\nConsumption (kW): {{$json[\"consumption\"]}}\nSolar Forecast (kW): {{$json[\"forecastSolar\"]}}\nElectricity Price: ${{$json[\"price\"]}}/kW\n\nThis report helps you monitor your energy storage performance aimed at cost savings and environmental benefits.",
+        "attachmentsUi": {
+          "attachmentsValues": [
+            {
+              "binaryPropertyName": "data",
+              "fileName": "energy_optimization_report_{{ $now.format(\"YYYY_MM_DD\") }}.txt"
+            }
+          ]
+        }
+      },
+      "name": "Email Daily Report",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Real-Time Energy Consumption": {
+      "main": [
+        [
+          {
+            "node": "Optimize Battery Usage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Renewable Generation Forecast": {
+      "main": [
+        [
+          {
+            "node": "Optimize Battery Usage",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Dynamic Electricity Pricing": {
+      "main": [
+        [
+          {
+            "node": "Optimize Battery Usage",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Optimize Battery Usage": {
+      "main": [
+        [
+          {
+            "node": "Send User Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate Report File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Report File": {
+      "main": [
+        [
+          {
+            "node": "Email Daily Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "AI_Powered_Smart_Home_Energy_Storage_Optimization_And_Renewable_Integration"
+}
