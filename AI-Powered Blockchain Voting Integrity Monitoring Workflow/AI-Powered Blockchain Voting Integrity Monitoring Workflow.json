@@ -1,0 +1,289 @@
+{
+  "name": "AI-Driven Blockchain Voting Integrity Verification System",
+  "nodes": [
+    {
+      "parameters": {
+        "webhookPath": "voting-transactions-webhook",
+        "httpMethod": "POST"
+      },
+      "id": "1",
+      "name": "Receive Voting Transactions",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "parseJSON",
+        "value": "={{$json}}"
+      },
+      "id": "2",
+      "name": "Parse Incoming Transactions",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "passThrough",
+        "functionCode": "const ethers = require('ethers');\n\n// Connect to multiple blockchain platforms (Ethereum and Binance Smart Chain as example)\nconst transaction = items[0].json;\n\n// Basic validation of transaction structure\nif (!transaction.hash || !transaction.from || !transaction.to || !transaction.value || !transaction.timestamp) {\n  throw new Error('Invalid transaction format');\n}\n\n// Additional integrity checks could be placed here\n\nreturn items;"
+      },
+      "id": "3",
+      "name": "Basic Transaction Integrity Check",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const anomalyScore = (() => {\n  // Dummy scoring logic:\n  // - High value votes suspicious\n  // - Multiple transactions from same address in short span suspicious\n  const tx = items[0].json;\n  const highValueThreshold = 1000;\n\n  let score = 0;\n  if (parseFloat(tx.value) > highValueThreshold) {\n    score += 5;\n  }\n\n  // Implement additional heuristics or call external AI API here\n\n  return score;\n})();\n\nreturn [{ json: { ...items[0].json, anomalyScore }}];"
+      },
+      "id": "4",
+      "name": "Anomaly Detection Scoring",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "document",
+        "operation": "create",
+        "collection": "voting_transactions",
+        "fields": {
+          "transactionHash": "={{$json[\"hash\"]}}",
+          "from": "={{$json[\"from\"]}}",
+          "to": "={{$json[\"to\"]}}",
+          "value": "={{$json[\"value\"]}}",
+          "timestamp": "={{$json[\"timestamp\"]}}",
+          "anomalyScore": "={{$json[\"anomalyScore\"]}}"
+        }
+      },
+      "id": "5",
+      "name": "Store Transaction Record",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "if (items[0].json.anomalyScore > 3) {\n  return items;\n}\n\nreturn [];"
+      },
+      "id": "6",
+      "name": "Check for High Anomaly",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "channel": "admins-alerts",
+        "text": "Alert: Suspicious Voting Transaction Detected\n\nTransaction Hash: {{$json[\"hash\"]}}\nFrom: {{$json[\"from\"]}}\nTo: {{$json[\"to\"]}}\nValue: {{$json[\"value\"]}}\nTimestamp: {{$json[\"timestamp\"]}}\nAnomaly Score: {{$json[\"anomalyScore\"]}}"
+      },
+      "id": "7",
+      "name": "Notify Admins",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        300
+      ],
+      "credentials": {
+        "slackApi": "Slack API Credential"
+      }
+    },
+    {
+      "parameters": {
+        "collection": "voting_transactions",
+        "returnAll": true,
+        "filter": {}
+      },
+      "id": "8",
+      "name": "Fetch All Transactions",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        650,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const transactions = items[0].json;\n\nconst anomalySummary = transactions.reduce((acc, tx) => {\n  if (tx.anomalyScore && tx.anomalyScore > 3) {\n    acc.count += 1;\n    acc.transactions.push(tx);\n  }\n  return acc;\n}, { count: 0, transactions: [] });\n\nreturn [{ json: { anomalySummary } }];"
+      },
+      "id": "9",
+      "name": "Analyze Anomaly Summary",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "templateId": "blockchain-voting-report",
+        "data": "={{$json[\"anomalySummary\"]}}"
+      },
+      "id": "10",
+      "name": "Generate Anomaly Report",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        600
+      ],
+      "credentials": {
+        "smtp": "Email SMTP Credential"
+      }
+    },
+    {
+      "parameters": {
+        "webhookPath": "real-time-transaction-update",
+        "httpMethod": "GET"
+      },
+      "id": "11",
+      "name": "Real-time Updates Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: { status: 'Real-time transaction monitoring operational', timestamp: new Date().toISOString() } }];"
+      },
+      "id": "12",
+      "name": "Send Real-time Status",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        150
+      ]
+    }
+  ],
+  "connections": {
+    "Receive Voting Transactions": {
+      "main": [
+        [
+          {
+            "node": "Parse Incoming Transactions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Incoming Transactions": {
+      "main": [
+        [
+          {
+            "node": "Basic Transaction Integrity Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic Transaction Integrity Check": {
+      "main": [
+        [
+          {
+            "node": "Anomaly Detection Scoring",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anomaly Detection Scoring": {
+      "main": [
+        [
+          {
+            "node": "Store Transaction Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Transaction Record": {
+      "main": [
+        [
+          {
+            "node": "Check for High Anomaly",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check for High Anomaly": {
+      "main": [
+        [
+          {
+            "node": "Notify Admins",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch All Transactions": {
+      "main": [
+        [
+          {
+            "node": "Analyze Anomaly Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Anomaly Summary": {
+      "main": [
+        [
+          {
+            "node": "Generate Anomaly Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Real-time Updates Webhook": {
+      "main": [
+        [
+          {
+            "node": "Send Real-time Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "AI-Driven-Blockchain-Voting-Integrity-Verification-System"
+}
