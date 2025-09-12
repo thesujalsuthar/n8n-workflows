@@ -1,0 +1,236 @@
+{
+  "name": "AI-Driven Personal Data Privacy Audit and Recommendation System",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "userProfile",
+        "operation": "get",
+        "additionalFields": {}
+      },
+      "name": "Fetch Facebook Profile",
+      "type": "n8n-nodes-base.facebook",
+      "typeVersion": 1,
+      "position": [
+        120,
+        300
+      ],
+      "credentials": {
+        "facebookOAuth2Api": ""
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "tweets",
+        "operation": "getRecent",
+        "additionalFields": {
+          "maxResults": 50
+        }
+      },
+      "name": "Fetch Twitter Tweets",
+      "type": "n8n-nodes-base.twitter",
+      "typeVersion": 1,
+      "position": [
+        120,
+        450
+      ],
+      "credentials": {
+        "twitterOAuth2Api": ""
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "drive",
+        "operation": "listFiles",
+        "additionalFields": {
+          "pageSize": 50
+        }
+      },
+      "name": "Fetch Google Drive Files",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 1,
+      "position": [
+        120,
+        600
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": ""
+      }
+    },
+    {
+      "parameters": {
+        "resource": "data",
+        "operation": "get",
+        "endpoint": "search",
+        "queryParameters": {
+          "query": "user email OR username",
+          "source": "publicData"
+        }
+      },
+      "name": "Fetch Public Data Exposure",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        120,
+        750
+      ],
+      "credentials": {}
+    },
+    {
+      "parameters": {
+        "functionCode": "const facebookData = items.find(item => item.json.service === 'facebook')?.json || {};\nconst twitterData = items.find(item => item.json.service === 'twitter')?.json || {};\nconst driveData = items.find(item => item.json.service === 'googleDrive')?.json || {};\nconst publicExposure = items.find(item => item.json.service === 'publicData')?.json || {};\n\nreturn [{\n  json: {\n    combinedData: {\n      facebook: facebookData,\n      twitter: twitterData,\n      drive: driveData,\n      publicExposure: publicExposure\n    }\n  }\n}];"
+      },
+      "name": "Combine Data Sources",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        350,
+        525
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "input": "Analyze the following combined personal digital footprint data for privacy risks and data exposure vulnerabilities. Identify any sensitive information, risky sharing settings, or exposed accounts. Suggest personalized, actionable recommendations to improve privacy settings and minimize data exposure.\n\nUser Data:\n{{ $json[\"combinedData\"] }}",
+        "options": {
+          "temperature": 0.3,
+          "maxTokens": 500
+        }
+      },
+      "name": "AI Privacy Audit and Recommendations",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        600,
+        525
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "no-reply@privacyaudit.system",
+        "toEmail": "={{$json[\"userEmail\"]}}",
+        "subject": "Your AI-Driven Personal Data Privacy Audit and Recommendations",
+        "text": "Hello,\n\nHere is your personalized privacy audit and recommendations based on your digital footprint analysis:\n\n{{$node[\"AI Privacy Audit and Recommendations\"].json.choices[0].message.content}}\n\nStay safe,\nPrivacy Audit System"
+      },
+      "name": "Send Privacy Report Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        850,
+        525
+      ],
+      "credentials": {
+        "smtp": ""
+      }
+    },
+    {
+      "parameters": {},
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [
+        50,
+        525
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Fetch Facebook Profile",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Twitter Tweets",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Google Drive Files",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Public Data Exposure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Facebook Profile": {
+      "main": [
+        [
+          {
+            "node": "Combine Data Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Twitter Tweets": {
+      "main": [
+        [
+          {
+            "node": "Combine Data Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Google Drive Files": {
+      "main": [
+        [
+          {
+            "node": "Combine Data Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Public Data Exposure": {
+      "main": [
+        [
+          {
+            "node": "Combine Data Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine Data Sources": {
+      "main": [
+        [
+          {
+            "node": "AI Privacy Audit and Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Privacy Audit and Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Send Privacy Report Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
