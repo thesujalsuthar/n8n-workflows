@@ -1,0 +1,266 @@
+{
+  "name": "AI-Powered Personalized Renewable Energy Usage Optimizer and Cost Savings Forecast",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.openweathermap.org/data/2.5/onecall",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "lat",
+              "value": "={{$json.latitude}}"
+            },
+            {
+              "name": "lon",
+              "value": "={{$json.longitude}}"
+            },
+            {
+              "name": "exclude",
+              "value": "minutely,alerts"
+            },
+            {
+              "name": "units",
+              "value": "metric"
+            },
+            {
+              "name": "appid",
+              "value": "={{$credentials.openWeatherApiKey}}"
+            }
+          ]
+        },
+        "responseFormat": "json"
+      },
+      "name": "Fetch Weather & Solar Forecast",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nThis node processes users' past energy consumption data\nand aligns it with weather conditions to find usage patterns.\nIt also calculates predicted solar energy generation potential\nand outputs an optimized energy usage schedule.\n*/\n\nconst consumption = $items(\"Get Energy Consumption\");\nconst forecast = $items(\"Fetch Weather & Solar Forecast\")[0].json;\n\n// Simplified example assuming hourly data and solar insolation estimate\nconst usagePatterns = [];\nconst solarPotential = [];\n\nfor(let i=0; i < forecast.hourly.length; i++) {\n  const hourData = forecast.hourly[i];\n  // Estimate solar generation potential from cloud cover and solar elevation\n  const solarEstimate = Math.max(0, (1 - hourData.clouds / 100) * Math.sin((hourData.dt % 86400) / 86400 * Math.PI));\n  solarPotential.push(solarEstimate);\n  \n  // Here add pattern logic with consumption (mocked):\n  usagePatterns.push({\n    hour: i,\n    predictedConsumption: 1.2, // placeholder kWh\n    solarPotential: solarEstimate\n  });\n}\n\nreturn [{ json: { usagePatterns, solarPotential } }];"
+      },
+      "name": "Analyze Consumption & Solar Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nThis node performs AI-driven optimization using a dummy\nmodel to schedule energy storage/use times to maximize\nrenewable consumption and cost savings.\nIt also forecasts cost savings.\n*/\n\nconst usageData = $items(\"Analyze Consumption & Solar Data\")[0].json.usagePatterns;\n\nconst optimizedSchedule = usageData.map(entry => {\n  // Example: use solar energy when solarPotential > 0.3, else grid\n  const useSolar = entry.solarPotential > 0.3;\n  const costSaving = useSolar ? 0.15 : 0.05; // hypothetical savings per kWh\n  return {\n    hour: entry.hour,\n    useSolarEnergy: useSolar,\n    predictedConsumption_kWh: entry.predictedConsumption,\n    estimatedCostSavingUSD: entry.predictedConsumption * costSaving\n  };\n});\n\nconst totalSavings = optimizedSchedule.reduce((sum, val) => sum + val.estimatedCostSavingUSD, 0);\n\nreturn [{ json: { optimizedSchedule, totalSavingsUSD: totalSavings.toFixed(2) } }];"
+      },
+      "name": "Optimize Energy Usage & Forecast Savings",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "document",
+        "operation": "create",
+        "collection": "users_energy_data",
+        "data": "={{{ $json }}}"
+      },
+      "name": "Store Optimization Result",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ],
+      "credentials": {
+        "mongodb": {
+          "id": "mongodb_credential_id"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{\n  json: {\n    message: 'Energy usage optimized successfully',\n    totalCostSavings: $items(\"Optimize Energy Usage & Forecast Savings\")[0].json.totalSavingsUSD,\n    scheduleSummary: $items(\"Optimize Energy Usage & Forecast Savings\")[0].json.optimizedSchedule.slice(0, 5)\n  }\n}];"
+      },
+      "name": "Prepare Output Summary",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "path": "optimize-energy-usage",
+        "method": "POST",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "headerAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$credentials.openWeatherApiKey}}"
+        },
+        "url": "https://api.energy-prices.com/v1/prices",
+        "responseFormat": "json"
+      },
+      "name": "Fetch Energy Prices",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nThis node merges energy prices from the external API\ninto the usage optimization logic for cost forecasting.\nCurrently mocked within optimization node.\n*/\nreturn items;"
+      },
+      "name": "Integrate Energy Prices (Placeholder)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        100
+      ]
+    },
+    {
+      "parameters": {},
+      "name": "Get Energy Consumption",
+      "type": "n8n-nodes-base.spreadsheetFile",
+      "typeVersion": 1,
+      "position": [
+        250,
+        500
+      ],
+      "credentials": {
+        "spreadsheetFile": {
+          "id": "spreadsheet_file_credential_id"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Energy Consumption",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Weather & Solar Forecast",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Energy Prices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Energy Consumption": {
+      "main": [
+        [
+          {
+            "node": "Analyze Consumption & Solar Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Weather & Solar Forecast": {
+      "main": [
+        [
+          {
+            "node": "Analyze Consumption & Solar Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch Energy Prices": {
+      "main": [
+        [
+          {
+            "node": "Integrate Energy Prices (Placeholder)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Integrate Energy Prices (Placeholder)": {
+      "main": [
+        [
+          {
+            "node": "Analyze Consumption & Solar Data",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Analyze Consumption & Solar Data": {
+      "main": [
+        [
+          {
+            "node": "Optimize Energy Usage & Forecast Savings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Optimize Energy Usage & Forecast Savings": {
+      "main": [
+        [
+          {
+            "node": "Store Optimization Result",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Output Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Optimization Result": {
+      "main": [
+        []
+      ]
+    },
+    "Prepare Output Summary": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "ai_personalized_renewable_energy_optimizer"
+}
