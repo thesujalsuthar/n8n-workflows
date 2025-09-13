@@ -1,0 +1,220 @@
+{
+  "name": "Urban Wildlife AI Monitoring and Conservation Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "resource": "device",
+        "operation": "getAll",
+        "returnAll": true,
+        "filters": {}
+      },
+      "name": "Fetch IoT Sensor Data",
+      "type": "n8n-nodes-base.iotDevice",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Pre-process sensor data for AI analysis.\n  For example, normalize data, filter noise, or structure input.\n*/\n\nconst items = [];\nfor (const item of items) {\n  // Placeholder, real data comes from previous node\n}\n\n// Use incoming data\nconst sensorData = items.length ? items : $input.all();\n\nreturn sensorData;\n"
+      },
+      "name": "Preprocess Sensor Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "options": {},
+        "prompt": "Analyze the following urban wildlife and environmental sensor data and detect any unusual patterns, anomalies, or potential threats to wildlife such as poaching, unexpected animal movement, or hazardous environmental changes. Return a JSON object indicating detected issues and confidence scores.\n\nData:\n{{ $json.data }}\n\nRespond only with JSON formatted output.",
+        "temperature": 0.3,
+        "maxTokens": 500
+      },
+      "name": "AI Analyze Wildlife Data",
+      "type": "n8n-nodes-base.openAIApi",
+      "typeVersion": 2,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.status }}",
+              "operation": "notEmpty"
+            }
+          ]
+        }
+      },
+      "name": "Check For Alerts",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "toEmail": "conservation-team@example.org",
+        "subject": "Urgent Wildlife Alert Detected",
+        "message": "An unusual wildlife or environmental event was detected:\n\n{{ $json.details }}\n\nPlease take necessary action.",
+        "additionalFields": {
+          "ccEmail": "local-authorities@example.org"
+        }
+      },
+      "name": "Send Alert Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "sms",
+        "operation": "send",
+        "to": "+1234567890",
+        "message": "ALERT: Unusual wildlife activity detected. Check email for details."
+      },
+      "name": "Send SMS Alert",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Format data for logging including AI results and timestamp.\n*/\nconst item = $input.item;\n\nreturn [{\n  json: {\n    timestamp: new Date().toISOString(),\n    sensorData: item.json.data || null,\n    analysis: item.json || null\n  }\n}];"
+      },
+      "name": "Prepare Data for Logging",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "path": "urban_wildlife_logs.json",
+        "dataPropertyName": "json",
+        "options": {}
+      },
+      "name": "Log Data to File",
+      "type": "n8n-nodes-base.file",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "triggerTimes": {},
+        "workflowId": null
+      },
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        50,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch IoT Sensor Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch IoT Sensor Data": {
+      "main": [
+        [
+          {
+            "node": "Preprocess Sensor Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preprocess Sensor Data": {
+      "main": [
+        [
+          {
+            "node": "AI Analyze Wildlife Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Analyze Wildlife Data": {
+      "main": [
+        [
+          {
+            "node": "Check For Alerts",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Data for Logging",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check For Alerts": {
+      "main": [
+        [
+          {
+            "node": "Send Alert Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send SMS Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Prepare Data for Logging": {
+      "main": [
+        [
+          {
+            "node": "Log Data to File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
