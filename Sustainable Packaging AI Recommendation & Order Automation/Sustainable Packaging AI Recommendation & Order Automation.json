@@ -1,0 +1,200 @@
+{
+  "name": "AI-Powered Sustainable Packaging Recommendation System",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "submit-product-info",
+        "options": {}
+      },
+      "name": "Webhook Receive Product Info",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const productInfo = items[0].json;\n\n// construct prompt for AI model\nconst prompt = `Provide eco-friendly packaging material and design recommendations for the following product:\n\nProduct Type: ${productInfo.productType}\nIndustry: ${productInfo.industry}\nSustainability Goals: ${productInfo.sustainabilityGoals}\n\nInclude:\n- Recommended materials\n- Design suggestions\n- Compliance with industry standards\n\nFormat the response as JSON with fields: materials (array), designSuggestions (string), and complianceNotes (string).`;\n\nreturn [{ json: { prompt } }];"
+      },
+      "name": "Prepare AI Prompt",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "options": {},
+        "prompt": "={{$json[\"prompt\"]}}",
+        "maxTokens": 500,
+        "temperature": 0.7,
+        "topP": 1,
+        "frequencyPenalty": 0,
+        "presencePenalty": 0,
+        "stopSequences": []
+      },
+      "name": "AI Packaging Recommendation",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const responseText = items[0].json.choices[0].message.content;\n\n// Parse AI JSON response\nlet recommendation = {};\ntry {\n  recommendation = JSON.parse(responseText);\n} catch (error) {\n  throw new Error('Failed to parse AI response as JSON: ' + responseText);\n}\n\nreturn [{ json: recommendation }];"
+      },
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "options": {},
+        "expression": "={{\n  `Recommended Materials:\\n${JSON.stringify($json.materials, null, 2)}\\n\\nDesign Suggestions:\\n${$json.designSuggestions}\\n\\nCompliance Notes:\\n${$json.complianceNotes}`\n}}"
+      },
+      "name": "Format Report Text",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "no-reply@sustainablepackaging.ai",
+        "toEmail": "={{$json.businessEmail}}",
+        "subject": "Eco-Friendly Packaging Recommendation Report",
+        "text": "={{$json[\"expression\"]}}"
+      },
+      "name": "Send Report Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Prepare order payload for supplier API integration:\n  - materials array with quantity\n  - product info included\n*/\n\nconst materials = $json.materials.map(material => {\n  return {\n    materialName: material.name || material,\n    quantity: material.quantity || 100\n  };\n});\n\nconst orderPayload = {\n  productType: $json.productType || \"Unknown\",\n  industry: $json.industry || \"Unknown\",\n  materials: materials\n};\n\nreturn [{ json: orderPayload }];"
+      },
+      "name": "Prepare Supplier Order Payload",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        550
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.supplier.example.com/orders",
+        "method": "POST",
+        "responseFormat": "json",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={{JSON.stringify($json)}}"
+      },
+      "name": "Place Material Order",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        550
+      ],
+      "credentials": {
+        "httpHeaderAuth": "SupplierApiHeaderAuth"
+      }
+    }
+  ],
+  "connections": {
+    "Webhook Receive Product Info": {
+      "main": [
+        [
+          {
+            "node": "Prepare AI Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare AI Prompt": {
+      "main": [
+        [
+          {
+            "node": "AI Packaging Recommendation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Packaging Recommendation": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Format Report Text",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Supplier Order Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Report Text": {
+      "main": [
+        [
+          {
+            "node": "Send Report Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Supplier Order Payload": {
+      "main": [
+        [
+          {
+            "node": "Place Material Order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
