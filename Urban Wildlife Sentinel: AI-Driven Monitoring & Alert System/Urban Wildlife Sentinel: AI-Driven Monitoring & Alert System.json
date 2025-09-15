@@ -1,0 +1,292 @@
+{
+  "name": "Smart Urban Wildlife Monitoring and Conservation Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "items": [
+            {
+              "hour": 0,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.iotplatform.example.com/data/latest",
+        "jsonParameters": true,
+        "options": {
+          "headers": {
+            "Authorization": "Bearer {{$credentials.iotApi.apiKey}}"
+          }
+        }
+      },
+      "name": "Fetch IoT Sensor Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        350,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "1",
+          "name": "IoT API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Example logic:\n  - Parse IoT sensor data\n  - Extract wildlife presence signals\n  - Extract habitat condition metrics\n  - Prepare data for AI analysis\n*/\nconst rawData = items[0].json;\n\n// Example extraction (details depend on actual IoT data schema)\nconst wildlifeSignals = rawData.wildlife_signals || [];\nconst habitatConditions = rawData.habitat_conditions || {};\n\nreturn [{\n  json: {\n    wildlifeSignals,\n    habitatConditions\n  }\n}];"
+      },
+      "name": "Parse and Prepare Sensor Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "text-davinci-003",
+        "prompt": "Analyze the following wildlife signals and habitat conditions to detect animal presence, activity patterns, and potential threats such as pollution, habitat degradation, or human interference. Provide a structured JSON output including detected species, threat types, threat severity, and suggested conservation actions.\n\nWildlife Signals:\n{{ $json.wildlifeSignals }}\n\nHabitat Conditions:\n{{ $json.habitatConditions }}\n\nRespond in JSON format only.",
+        "temperature": 0.5,
+        "maxTokens": 512,
+        "topP": 1,
+        "frequencyPenalty": 0,
+        "presencePenalty": 0
+      },
+      "name": "AI Pattern Analysis",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Parse AI JSON output safely\n*/\ntry {\n  const analysis = JSON.parse(items[0].json.text);\n  return [{ json: analysis }];\n} catch (error) {\n  return [{ json: { error: 'Failed to parse AI output', details: error.message } }];\n}"
+      },
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.threats && $json.threats.length > 0}}",
+              "operation": "equal",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "Check for Threats",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "text": "Alert: Threats detected in urban wildlife monitoring.\n\nDetails:\nSpecies: {{$json.species.join(\", \")}}\nThreats: {{$json.threats.map(t => t.type + ' (Severity: ' + t.severity + ')').join('; ')}}\nSuggested Actions: {{$json.suggestedActions.join('; ')}}",
+        "chatId": "={{$credentials.telegram.chatId}}"
+      },
+      "name": "Notify Conservationists",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1650,
+        220
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "2",
+          "name": "Telegram API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "text": "Alert: Threats detected in urban wildlife environment.\n\nPlease review the findings and take appropriate conservation action.\n\nDetails:\nSpecies involved: {{$json.species.join(\", \")}}\nThreat summary: {{$json.threats.map(t => t.type + ' (Severity: ' + t.severity + ')').join('; ')}}",
+        "chatId": "={{$credentials.telegramAuthorities.chatId}}"
+      },
+      "name": "Notify Authorities",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1650,
+        380
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "3",
+          "name": "Telegram Authorities API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Store analyzed results in a database or persistent storage\n  Example: insert or update urban monitoring records\n*/\nreturn [{\n  json: {\n    timestamp: new Date().toISOString(),\n    analysisResult: items[0].json\n  }\n}];"
+      },
+      "name": "Prepare Data for Storage",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "table": "urban_wildlife_monitoring",
+        "schema": "public",
+        "columns": [
+          {
+            "name": "timestamp",
+            "value": "={{$json.timestamp}}"
+          },
+          {
+            "name": "analysis",
+            "value": "={{JSON.stringify($json.analysisResult)}}"
+          }
+        ],
+        "conflictColumns": [
+          "timestamp"
+        ],
+        "returnValues": "NONE"
+      },
+      "name": "Store Analysis Results",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        450
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "4",
+          "name": "PostgresDB"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch IoT Sensor Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch IoT Sensor Data": {
+      "main": [
+        [
+          {
+            "node": "Parse and Prepare Sensor Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse and Prepare Sensor Data": {
+      "main": [
+        [
+          {
+            "node": "AI Pattern Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Pattern Analysis": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Check for Threats",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Data for Storage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check for Threats": {
+      "main": [
+        [
+          {
+            "node": "Notify Conservationists",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Notify Authorities",
+            "type": "main",
+            "index": 1
+          }
+        ],
+        []
+      ]
+    },
+    "Prepare Data for Storage": {
+      "main": [
+        [
+          {
+            "node": "Store Analysis Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
