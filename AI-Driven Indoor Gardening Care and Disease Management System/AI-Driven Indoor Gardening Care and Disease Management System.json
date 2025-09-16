@@ -1,0 +1,330 @@
+{
+  "name": "AI-Powered Smart Home Indoor Gardening Assistant",
+  "nodes": [
+    {
+      "parameters": {
+        "device": "soilMoistureSensor",
+        "interval": 300,
+        "property": "moisture"
+      },
+      "name": "Soil Moisture Sensor",
+      "type": "n8n-nodes-base.iotSensor",
+      "typeVersion": 1,
+      "position": [
+        100,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "device": "lightLevelSensor",
+        "interval": 300,
+        "property": "light"
+      },
+      "name": "Light Level Sensor",
+      "type": "n8n-nodes-base.iotSensor",
+      "typeVersion": 1,
+      "position": [
+        100,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "device": "temperatureSensor",
+        "interval": 300,
+        "property": "temperature"
+      },
+      "name": "Temperature Sensor",
+      "type": "n8n-nodes-base.iotSensor",
+      "typeVersion": 1,
+      "position": [
+        100,
+        550
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const sensorData = {\n  soilMoisture: $json.moisture,\n  lightLevel: $json.light,\n  temperature: $json.temperature\n};\nreturn [{ json: sensorData }];"
+      },
+      "name": "Aggregate Sensor Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        350,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "text",
+        "operation": "chat",
+        "model": "gpt-4",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are a helpful assistant that provides optimal indoor plant care advice based on soil moisture, light, and temperature readings."
+          },
+          {
+            "role": "user",
+            "content": "Given the following sensor data for my indoor plant: Soil Moisture: {{$json.soilMoisture}}, Light Level: {{$json.lightLevel}}, Temperature: {{$json.temperature}} °C. Provide specific watering, lighting, and temperature care recommendations."
+          }
+        ]
+      },
+      "name": "Generate Care Recommendations",
+      "type": "n8n-nodes-base.openaiChat",
+      "typeVersion": 1,
+      "position": [
+        600,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "text",
+        "operation": "chat",
+        "model": "gpt-4",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an assistant that schedules tasks or alert notifications for plant care based on AI recommendations."
+          },
+          {
+            "role": "user",
+            "content": "Based on this care advice: {{$json[\"Generate Care Recommendations\"].choices[0].message.content}}, generate an optimized watering schedule in cron format and indicate if alerts should be set for user."
+          }
+        ]
+      },
+      "name": "Create Watering Schedule and Alerts",
+      "type": "n8n-nodes-base.openaiChat",
+      "typeVersion": 1,
+      "position": [
+        850,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "workflow",
+        "operation": "executeWorkflow",
+        "workflowId": "Watering Workflow"
+      },
+      "name": "Trigger Watering Workflow",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "notification",
+        "operation": "send",
+        "options": {}
+      },
+      "name": "Send Care Alert",
+      "type": "n8n-nodes-base.notification",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "data",
+        "operation": "append",
+        "collection": "plant_health_logs",
+        "dataPropertyName": "healthLog"
+      },
+      "name": "Log Plant Health Data",
+      "type": "n8n-nodes-base.database",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "files",
+        "operation": "upload",
+        "fileParameterName": "image"
+      },
+      "name": "User Upload Plant Image",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        100,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "image",
+        "operation": "analyze",
+        "model": "plant-disease-detection",
+        "imagePropertyName": "binary.data"
+      },
+      "name": "AI Identify Plant Disease",
+      "type": "n8n-nodes-base.customAI",
+      "typeVersion": 1,
+      "position": [
+        350,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "text",
+        "operation": "chat",
+        "model": "gpt-4",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You provide treatment recommendations based on identified plant diseases."
+          },
+          {
+            "role": "user",
+            "content": "Based on the detected disease: {{$json.disease}}, suggest appropriate care and treatment."
+          }
+        ]
+      },
+      "name": "Generate Treatment Suggestions",
+      "type": "n8n-nodes-base.openaiChat",
+      "typeVersion": 1,
+      "position": [
+        600,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "notification",
+        "operation": "send"
+      },
+      "name": "Send Treatment Alert",
+      "type": "n8n-nodes-base.notification",
+      "typeVersion": 1,
+      "position": [
+        850,
+        100
+      ]
+    }
+  ],
+  "connections": {
+    "Soil Moisture Sensor": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Sensor Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Light Level Sensor": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Sensor Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Temperature Sensor": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Sensor Data",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Aggregate Sensor Data": {
+      "main": [
+        [
+          {
+            "node": "Generate Care Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Care Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Create Watering Schedule and Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Watering Schedule and Alerts": {
+      "main": [
+        [
+          {
+            "node": "Trigger Watering Workflow",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Care Alert",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "Log Plant Health Data",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "User Upload Plant Image": {
+      "main": [
+        [
+          {
+            "node": "AI Identify Plant Disease",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Identify Plant Disease": {
+      "main": [
+        [
+          {
+            "node": "Generate Treatment Suggestions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Treatment Suggestions": {
+      "main": [
+        [
+          {
+            "node": "Send Treatment Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
