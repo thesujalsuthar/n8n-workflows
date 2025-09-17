@@ -1,0 +1,346 @@
+{
+  "name": "AI-Powered Sustainable Grocery Assistant",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "suggest-sustainable-products",
+        "options": {},
+        "responseMode": "onReceived",
+        "responseData": "={{$json}}",
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "query",
+              "value": "={{$json.query}}"
+            },
+            {
+              "name": "preferences",
+              "value": "local,organic,sustainable"
+            }
+          ]
+        },
+        "url": "https://api.sustainableproducts.example.com/v1/search",
+        "authentication": "headerAuth"
+      },
+      "name": "Fetch Sustainable Products",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "user": "YOUR_API_KEY"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "/* Filter and prioritize local and organic products from API response */\nreturn items.map(item => {\n  const products = item.json.products || [];\n  const filtered = products.filter(p => p.tags.includes('organic') && p.local);\n  return { json: { filteredProducts: filtered.length ? filtered : products } };\n});"
+      },
+      "name": "Filter Organic Local Products",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/* Generate grocery list from filtered products */\nreturn items.map(item => {\n  const products = item.json.filteredProducts;\n  const list = products.map(p => ({\n    name: p.name,\n    quantity: 1,\n    category: p.category\n  }));\n  return [{ json: { groceryList: list } }];\n});"
+      },
+      "name": "Create Grocery List",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/* Extract product IDs for carbon footprint lookup */\nreturn items.map(item => {\n  const list = item.json.groceryList;\n  const ids = list.map(p => p.id).filter(Boolean);\n  return [{ json: { productIds: ids, groceryList: list } }];\n});"
+      },
+      "name": "Extract Product IDs",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "estimate-carbon-footprint",
+        "options": {},
+        "responseMode": "onReceived",
+        "responseData": "={{$json}}",
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "productIds",
+              "value": "={{$json.productIds}}"
+            }
+          ]
+        },
+        "url": "https://api.carbonfootprint.example.com/v1/estimates",
+        "authentication": "headerAuth"
+      },
+      "name": "Get Carbon Footprint Estimates",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "user": "YOUR_CARBON_API_KEY"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "/* Attach carbon footprint data to grocery list items */\nreturn items.map(item => {\n  const estimates = item.json.estimates || {};\n  const groceryList = item.json.groceryList || [];\n  const listWithCarbon = groceryList.map(product => {\n    const carbon = estimates[product.id] || null;\n    return { ...product, carbonFootprintKgCO2: carbon };\n  });\n  return [{ json: { groceryListWithCarbon: listWithCarbon } }];\n});"
+      },
+      "name": "Attach Carbon Data to List",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "text": "Reminder: Choose reusable bags and buy only what you need to reduce waste. Check your grocery list for more sustainable options today!"
+      },
+      "name": "Prepare Sustainable Shopping Tip",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/* Format message with grocery list and carbon estimates */\nreturn items.map(item => {\n  const list = item.json.groceryListWithCarbon || [];\n  let message = 'Your sustainable grocery list with estimated carbon footprint per item (kg CO2):\\n';\n  list.forEach(product => {\n    const carbon = product.carbonFootprintKgCO2 !== null ? product.carbonFootprintKgCO2.toFixed(2) : 'N/A';\n    message += `- ${product.name}: ${carbon}\\n`;\n  });\n  return [{ json: { message } }];\n});"
+      },
+      "name": "Format Grocery List Message",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "no-reply@sustainablegroceries.example.com",
+        "toEmail": "={{$json.email}}",
+        "subject": "Your Sustainable Grocery List & Tips",
+        "text": "={{$node[\"Format Grocery List Message\"].json[\"message\"] + '\\n\\n' + $node[\"Prepare Sustainable Shopping Tip\"].json[\"text\"]}}"
+      },
+      "name": "Send Grocery List Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1650,
+        300
+      ],
+      "credentials": {
+        "smtp": {
+          "user": "your_smtp_user",
+          "password": "your_smtp_password",
+          "host": "smtp.example.com",
+          "port": 587,
+          "secure": false
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "/* Extract 'query' and 'email' from incoming HTTP request payload */\nreturn [{ json: { query: $json.query || '', email: $json.email || '' } }];"
+      },
+      "name": "Extract Input Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        50,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "interval": 86400,
+        "options": {}
+      },
+      "name": "Daily Reminder Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        1650,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "text": "🌿 Daily Sustainable Shopping Tip: Try to buy seasonal, local produce to lower your carbon footprint and support local farmers."
+      },
+      "name": "Prepare Daily Tip Text",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        1850,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "no-reply@sustainablegroceries.example.com",
+        "toEmail": "user@example.com",
+        "subject": "Your Daily Sustainable Shopping Tip",
+        "text": "={{$json.text}}"
+      },
+      "name": "Send Daily Tip Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        2050,
+        100
+      ],
+      "credentials": {
+        "smtp": {
+          "user": "your_smtp_user",
+          "password": "your_smtp_password",
+          "host": "smtp.example.com",
+          "port": 587,
+          "secure": false
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Extract Input Data": {
+      "main": [
+        [
+          {
+            "node": "Fetch Sustainable Products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Sustainable Products": {
+      "main": [
+        [
+          {
+            "node": "Filter Organic Local Products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Organic Local Products": {
+      "main": [
+        [
+          {
+            "node": "Create Grocery List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Grocery List": {
+      "main": [
+        [
+          {
+            "node": "Extract Product IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Product IDs": {
+      "main": [
+        [
+          {
+            "node": "Get Carbon Footprint Estimates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Carbon Footprint Estimates": {
+      "main": [
+        [
+          {
+            "node": "Attach Carbon Data to List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach Carbon Data to List": {
+      "main": [
+        [
+          {
+            "node": "Format Grocery List Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Grocery List Message": {
+      "main": [
+        [
+          {
+            "node": "Send Grocery List Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Sustainable Shopping Tip": {
+      "main": []
+    },
+    "Daily Reminder Trigger": {
+      "main": [
+        [
+          {
+            "node": "Prepare Daily Tip Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Daily Tip Text": {
+      "main": [
+        [
+          {
+            "node": "Send Daily Tip Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
