@@ -1,0 +1,261 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 9,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Scheduled Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "httpRequest",
+        "url": "https://api.sustainablestyle.com/fashion-items",
+        "responseFormat": "json",
+        "jsonParameters": true,
+        "options": {},
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "category",
+              "value": "outfits"
+            },
+            {
+              "name": "material",
+              "value": "eco-friendly"
+            },
+            {
+              "name": "trending",
+              "value": "true"
+            }
+          ]
+        }
+      },
+      "name": "Fetch Sustainable Fashion Items 1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        550,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "httpRequest",
+        "url": "https://api.greenfashionhub.org/items",
+        "responseFormat": "json",
+        "jsonParameters": true,
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "filter",
+              "value": "eco_materials"
+            },
+            {
+              "name": "sort",
+              "value": "popularity_desc"
+            }
+          ]
+        }
+      },
+      "name": "Fetch Sustainable Fashion Items 2",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        550,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const items1 = items[0].json.items || [];\nconst items2 = items[1].json.data || [];\n\n// Merge and deduplicate by id or name\nconst mergedItems = [...items1, ...items2].reduce((acc, item) => {\n  if (!acc.find(i => i.id === item.id || i.name === item.name)) {\n    acc.push(item);\n  }\n  return acc;\n}, []);\n\nreturn [{ json: { mergedItems } }];"
+      },
+      "name": "Merge & Deduplicate Items",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "temperature": 0.7,
+        "maxTokens": 450,
+        "topP": 1,
+        "frequencyPenalty": 0,
+        "presencePenalty": 0,
+        "stopSequences": [],
+        "prompt": "You are an AI assistant specialized in sustainable fashion. Given the user's preferences and a list of sustainable fashion items, suggest a personalized outfit recommendation emphasizing eco-friendly materials, current trends, and style suitability.\n\nUser Preferences:\n{{ $json.preferences }}\n\nFashion Items:\n{{ JSON.stringify($json.mergedItems) }}\n\nReturn a nicely formatted outfit suggestion including item names, brief descriptions, and why they fit the user and sustainability goals."
+      }
+    },
+    {
+      "name": "AI Recommendation",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [\n  {\n    json: {\n      subject: 'Your Personalized Sustainable Fashion Outfit Suggestion',\n      text: $json.choices[0].message.content\n    }\n  }\n];"
+      },
+      "name": "Format Email Content",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "no-reply@ecofashion.ai",
+        "toEmail": "={{$json.preferences.email}}",
+        "subject": "={{$json.subject}}",
+        "text": "={{$json.text}}"
+      },
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "sendMessage",
+        "message": "={{$json.text}}",
+        "messagingPlatform": "telegram",
+        "chatId": "={{$json.preferences.telegramChatId}}"
+      },
+      "name": "Send Telegram Message",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: { preferences: { email: 'user@example.com', telegramChatId: '', style: 'bohemian', size: 'M', preferredColors: ['green', 'earth tones'], occasion: 'casual' } } }];"
+      },
+      "name": "Get User Preferences",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        400,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Scheduled Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get User Preferences",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get User Preferences": {
+      "main": [
+        [
+          {
+            "node": "Fetch Sustainable Fashion Items 1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Sustainable Fashion Items 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Sustainable Fashion Items 1": {
+      "main": [
+        [
+          {
+            "node": "Merge & Deduplicate Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Sustainable Fashion Items 2": {
+      "main": [
+        [
+          {
+            "node": "Merge & Deduplicate Items",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge & Deduplicate Items": {
+      "main": [
+        [
+          {
+            "node": "AI Recommendation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Recommendation": {
+      "main": [
+        [
+          {
+            "node": "Format Email Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Email Content": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Telegram Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
