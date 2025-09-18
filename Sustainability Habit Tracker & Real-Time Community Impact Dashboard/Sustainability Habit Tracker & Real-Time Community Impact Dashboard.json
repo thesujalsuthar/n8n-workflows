@@ -1,0 +1,249 @@
+{
+  "name": "AI-Driven Personalized Sustainability Habit Tracker and Community Impact Dashboard",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "log-habit",
+        "responseMode": "lastNode",
+        "responseData": "firstNode",
+        "options": {}
+      },
+      "name": "User Habit Submission",
+      "type": "n8n-nodes-base.httpTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const habits = items[0].json;\n\n// Simple validation\nif (!habits.userId || !habits.habit || !habits.date) {\n  throw new Error('Missing required fields: userId, habit, or date');\n}\n\nreturn items;"
+      },
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": "public",
+        "table": "user_habits",
+        "columns": [
+          "userId",
+          "habit",
+          "date",
+          "details"
+        ],
+        "values": "={{[$json[\"userId\"], $json[\"habit\"], $json[\"date\"], $json[\"details\"] || null]}}",
+        "returnFields": "*"
+      },
+      "name": "Save Habit Data",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ],
+      "credentials": {
+        "postgres": "Postgres - SustainabilityDB"
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT habit, COUNT(*) as count FROM user_habits WHERE userId = $1 AND date >= CURRENT_DATE - INTERVAL '30 days' GROUP BY habit",
+        "queryParams": [
+          "={{$json[\"userId\"]}}"
+        ]
+      },
+      "name": "Fetch User Recent Habits",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ],
+      "credentials": {
+        "postgres": "Postgres - SustainabilityDB"
+      }
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an AI assistant that analyzes sustainability habits and provides personalized tips for improvement."
+          },
+          {
+            "role": "user",
+            "content": "Analyze the following user's sustainability habits and provide 3 personalized tips to improve their sustainability practices:\n\n{{ $json[\"result\"] }}"
+          }
+        ],
+        "temperature": 0.7,
+        "max_tokens": 300
+      },
+      "name": "AI Generate Tips",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ],
+      "credentials": {
+        "openAIApi": "OpenAI API"
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT habit, COUNT(*) AS total_count FROM user_habits GROUP BY habit"
+      },
+      "name": "Fetch Community Data",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        650,
+        600
+      ],
+      "credentials": {
+        "postgres": "Postgres - SustainabilityDB"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const communityHabits = items[0].json;\n\n// Aggregate impact calculations (example):\nconst impactValues = {\n  \"recycling\": 1,\n  \"reducing-plastic\": 2,\n  \"using-public-transport\": 3,\n  \"energy-saving\": 2.5,\n  \"water-saving\": 2\n};\n\nlet totalImpact = 0;\ncommunityHabits.forEach(habit => {\n  const habitKey = habit.habit.toLowerCase().replace(/ /g, '-');\n  const impact = impactValues[habitKey] || 1;\n  totalImpact += impact * parseInt(habit.total_count, 10);\n});\n\nreturn [{ json: { totalCommunityImpactScore: totalImpact, habits: communityHabits } }];"
+      },
+      "name": "Calculate Community Impact",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "channel": "community-impact",
+        "data": "={{$json}}"
+      },
+      "name": "Broadcast Impact Real-Time",
+      "type": "n8n-nodes-base.socketIO",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        600
+      ],
+      "credentials": {
+        "socketIOApi": "Socket.IO Server Credentials"
+      }
+    },
+    {
+      "parameters": {
+        "operation": "respondToUser",
+        "responseBody": {
+          "success": true,
+          "savedHabit": "={{$json}}",
+          "personalizedTips": "={{$json[\"choices\"][0][\"message\"][\"content\"]}}"
+        }
+      },
+      "name": "HTTP Response",
+      "type": "n8n-nodes-base.httpResponse",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "User Habit Submission": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Save Habit Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Habit Data": {
+      "main": [
+        [
+          {
+            "node": "Fetch User Recent Habits",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Community Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch User Recent Habits": {
+      "main": [
+        [
+          {
+            "node": "AI Generate Tips",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Generate Tips": {
+      "main": [
+        [
+          {
+            "node": "HTTP Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Community Data": {
+      "main": [
+        [
+          {
+            "node": "Calculate Community Impact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Community Impact": {
+      "main": [
+        [
+          {
+            "node": "Broadcast Impact Real-Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
