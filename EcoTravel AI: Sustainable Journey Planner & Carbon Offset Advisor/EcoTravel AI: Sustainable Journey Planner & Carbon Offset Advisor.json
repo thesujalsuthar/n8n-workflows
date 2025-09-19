@@ -1,0 +1,142 @@
+{
+  "name": "EcoTravel AI: Sustainable Itinerary & Carbon Offset Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "functionCode": "/*\n  Input: {\n    travelPreferences: { origin, destination, departureDate, returnDate, transportModes, budget }\n  }\n  Output: travelOptions array with segments and details fetched from Travel APIs\n*/\n\nconst preferences = $json.travelPreferences;\n\n// Mock API call - replace with actual API integration\n// Example: Fetch travel options from transport providers API\n// For demo, create dummy data:\n\nconst travelOptions = [\n  {\n    id: \"option1\",\n    segments: [\n      {\n        mode: \"train\",\n        from: preferences.origin,\n        to: preferences.destination,\n        departure: preferences.departureDate,\n        arrival: preferences.departureDate,\n        distance_km: 300\n      }\n    ],\n    cost: 50,\n    estimatedDurationHours: 4\n  },\n  {\n    id: \"option2\",\n    segments: [\n      {\n        mode: \"bus\",\n        from: preferences.origin,\n        to: preferences.destination,\n        departure: preferences.departureDate,\n        arrival: preferences.departureDate,\n        distance_km: 320\n      }\n    ],\n    cost: 30,\n    estimatedDurationHours: 6\n  },\n  {\n    id: \"option3\",\n    segments: [\n      {\n        mode: \"flight\",\n        from: preferences.origin,\n        to: preferences.destination,\n        departure: preferences.departureDate,\n        arrival: preferences.departureDate,\n        distance_km: 600\n      }\n    ],\n    cost: 200,\n    estimatedDurationHours: 1.5\n  }\n];\n\nreturn [{ json: { travelOptions } }];"
+      },
+      "name": "Fetch Travel Options",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Input: travelOptions array with each option containing segments and distances\n  Use emission factors (kg CO2e per km) per transport mode to calculate carbon footprint\n  Output: travelOptions array enriched with carbonEmissionsKg\n*/\n\nconst emissionFactors = {\n  flight: 0.254, // kg CO2e per km (average short-haul flight)\n  train: 0.041,  // kg CO2e per km\n  bus: 0.105,\n  car: 0.192\n};\n\nconst travelOptions = $json.travelOptions;\n\nfor (const option of travelOptions) {\n  let totalEmissions = 0;\n  for (const segment of option.segments) {\n    const factor = emissionFactors[segment.mode] || 0.2; // default factor if unknown\n    totalEmissions += segment.distance_km * factor;\n  }\n  option.carbonEmissionsKg = parseFloat(totalEmissions.toFixed(2));\n}\n\nreturn [{ json: { travelOptions } }];"
+      },
+      "name": "Calculate Carbon Emissions",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        520,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Input: travelOptions array with carbon emissions\n  Output: carbonOffsetRecommendations array based on total emissions\n  For demo, use static carbon offset programs\n*/\n\nconst carbonOffsetPrograms = [\n  {\n    name: \"Cool Effect - Reforestation Project\",\n    description: \"Supports reforestation to absorb CO2.\",\n    url: \"https://www.cooleffect.org/\"\n  },\n  {\n    name: \"Terrapass - Renewable Energy\",\n    description: \"Invest in renewable energy projects globally.\",\n    url: \"https://www.terrapass.com/\"\n  },\n  {\n    name: \"Myclimate - Clean Cooking\",\n    description: \"Advancing clean cookstoves to reduce emissions.\",\n    url: \"https://www.myclimate.org/\"\n  }\n];\n\nconst travelOptions = $json.travelOptions;\n\n// Suggest offsets covering 110% of emissions for each travel option\nconst results = travelOptions.map(option => {\n  const offsetKg = option.carbonEmissionsKg * 1.1;\n  return {\n    optionId: option.id,\n    carbonEmissionsKg: option.carbonEmissionsKg,\n    recommendedOffsetKg: parseFloat(offsetKg.toFixed(2)),\n    suggestedPrograms: carbonOffsetPrograms\n  };\n});\n\nreturn [{ json: { carbonOffsetRecommendations: results } }];"
+      },
+      "name": "Recommend Carbon Offsets",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Provide sustainable travel tips and reminders\n*/\n\nconst tips = [\n  \"Pack light to reduce fuel consumption.\",\n  \"Use reusable water bottles and avoid single-use plastics.\",\n  \"Choose public transport or bike rentals at the destination.\",\n  \"Support local businesses and eco-friendly accommodations.\",\n  \"Avoid unnecessary flights and consider trains or buses.\",\n  \"Offset your carbon footprint through certified programs.\",\n  \"Conserve water and electricity during your stay.\"\n];\n\nreturn [{ json: { sustainableTravelTips: tips } }];"
+      },
+      "name": "Sustainable Travel Tips",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        520,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "passThrough"
+      },
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [
+        80,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "passThrough"
+      },
+      "name": "End",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1070,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Fetch Travel Options",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Travel Options": {
+      "main": [
+        [
+          {
+            "node": "Calculate Carbon Emissions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Carbon Emissions": {
+      "main": [
+        [
+          {
+            "node": "Recommend Carbon Offsets",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Sustainable Travel Tips",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recommend Carbon Offsets": {
+      "main": [
+        [
+          {
+            "node": "End",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sustainable Travel Tips": {
+      "main": [
+        [
+          {
+            "node": "End",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
