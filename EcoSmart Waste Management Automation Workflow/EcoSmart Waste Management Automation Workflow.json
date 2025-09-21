@@ -1,0 +1,176 @@
+{
+  "name": "EcoSmart Waste Management Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "waste-data",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "name": "Webhook Receive Waste Data",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        250
+      ],
+      "webhookId": "ec1d9f0b-433b-4e08-9ee3-2a1ee4a6a4b7"
+    },
+    {
+      "parameters": {
+        "functionCode": "const data = $json;\n\n// Sample data analysis simulation\n// Extract key metrics such as waste volume and recycling rate\nconst wasteVolume = data.volume || 0;\nconst recyclingRate = data.recyclingRate || 0;\n\n// AI-driven scoring logic (mocked)\n// Lower recyclingRate or higher volume triggers attention\nlet alertLevel = 'Normal';\nif (recyclingRate < 30) {\n  alertLevel = 'High';\n} else if (wasteVolume > 500) {\n  alertLevel = 'Medium';\n}\n\nreturn [{\n  json: {\n    wasteVolume,\n    recyclingRate,\n    alertLevel,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "name": "Analyze Waste Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json[\"alertLevel\"]}}",
+              "operation": "notEqual",
+              "value2": "Normal"
+            }
+          ]
+        }
+      },
+      "name": "Check Alert Level",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        700,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "alerts@ecosmartwaste.com",
+        "toEmail": "operations@ecosmartwaste.com",
+        "subject": "Urgent: Waste Management Alert - {{$json[\"alertLevel\"]}} Level",
+        "text": "Alert Level: {{$json[\"alertLevel\"]}}\nWaste Volume: {{$json[\"wasteVolume\"]}} kg\nRecycling Rate: {{$json[\"recyclingRate\"]}}%\nTimestamp: {{$json[\"timestamp\"]}}\n\nPlease take immediate action to optimize waste management and increase recycling efficiency."
+      },
+      "name": "Send Alert Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        900,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{\n  json: {\n    message: 'Waste data remains within normal operating parameters.',\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "name": "Normal Operation Log",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "append",
+        "sheetId": "1a2b3c4d5e6f7g8h9i0j", 
+        "range": "Sheet1!A:E",
+        "valueInputMode": "RAW",
+        "options": {},
+        "values": [
+          [
+            "={{$json[\"timestamp\"]}}",
+            "={{$json[\"wasteVolume\"]}}",
+            "={{$json[\"recyclingRate\"]}}",
+            "={{$json[\"alertLevel\"]}}",
+            "={{$json[\"message\"] || ''}}"
+          ]
+        ]
+      },
+      "name": "Record Data to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        275
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": "Google Sheets OAuth2 Credential"
+      }
+    }
+  ],
+  "connections": {
+    "Webhook Receive Waste Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze Waste Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Waste Data": {
+      "main": [
+        [
+          {
+            "node": "Check Alert Level",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Alert Level": {
+      "main": [
+        [
+          {
+            "node": "Send Alert Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Normal Operation Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Alert Email": {
+      "main": [
+        [
+          {
+            "node": "Record Data to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normal Operation Log": {
+      "main": [
+        [
+          {
+            "node": "Record Data to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
