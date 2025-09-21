@@ -1,0 +1,343 @@
+{
+  "name": "AI-Powered Sustainable Packaging Recommendation & Order Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "analyze-packaging",
+        "options": {},
+        "responseMode": "ON_RECEIVE",
+        "jsonParameters": true,
+        "bodyParametersJson": "{{$json}}"
+      },
+      "name": "Receive Packaging Requirements",
+      "type": "n8n-nodes-base.httpTrigger",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "await",
+        "functionCode": "const packagingData = items[0].json;\n// Prepare prompt for AI with packaging requirements\nconst prompt = `Analyze the following packaging requirements and recommend 3 sustainable packaging options including material, size, and cost estimate:\n\n${JSON.stringify(packagingData)}\n\nReturn results as a JSON array with fields: material, size, costEstimate, sustainabilityScore.`;\n\nreturn [{ json: { prompt } }];"
+      },
+      "name": "Prepare AI Prompt",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        320,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "text",
+        "operation": "chatCompletion",
+        "model": "gpt-4",
+        "messages": [
+          {
+            "role": "user",
+            "content": "={{$json.prompt}}"
+          }
+        ],
+        "options": {
+          "max_tokens": 500
+        }
+      },
+      "name": "AI: Packaging Recommendation",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        540,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const text = items[0].json.choices[0].message.content;\ntry {\n  const recommendations = JSON.parse(text);\n  return recommendations.map(rec => ({ json: rec }));\n} catch (error) {\n  throw new Error('Failed to parse AI response: ' + error.message);\n}"
+      },
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        760,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.sustainable-packaging-db.com/v1/options/search",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={{ {\n  \"material\": $json.material,\n  \"size\": $json.size\n} }}"
+      },
+      "name": "Query Packaging Database",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        980,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "packagingApiCredentialId"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.map(item => ({ json: {\n  recommendedOption: item.json,\n  orderDetails: {\n    supplierId: item.json.supplierId,\n    packagingId: item.json.id,\n    quantity: 100,\n    address: {\n      name: 'Company Warehouse',\n      street: '123 Business Rd',\n      city: 'Industry City',\n      state: 'CA',\n      zip: '90001',\n      country: 'USA'\n    }\n  }\n}}));"
+      },
+      "name": "Prepare Order Details",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.ordersystem.com/v2/orders",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={{$json.orderDetails}}"
+      },
+      "name": "Place Order",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1420,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "orderManagementApiCredentialId"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.map(item => ({ json: {\n  orderConfirmation: item.json,\n  emailContent: `Order Confirmation:\\nOrder ID: ${item.json.orderId}\\nMaterial: ${item.json.material}\\nQuantity: ${item.json.quantity}\\nExpected Delivery: ${item.json.estimatedDelivery}`\n}}));"
+      },
+      "name": "Generate Confirmation Email Content",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1640,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "orders@company.com",
+        "toEmail": "supplychain@company.com",
+        "subject": "Packaging Order Confirmation - {{$json.orderConfirmation.orderId}}",
+        "text": "={{$json.emailContent}}"
+      },
+      "name": "Send Order Confirmation Notification",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1860,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.ordersystem.com/v2/orders/{{$json.orderConfirmation.orderId}}/tracking",
+        "method": "GET",
+        "jsonParameters": false,
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Get Delivery Tracking",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        2080,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "orderManagementApiCredentialId"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.map(item => ({ json: {\n  trackingInfo: item.json,\n  notifyText: `Delivery Tracking Update for Order ID: ${item.json.orderId}\\nStatus: ${item.json.status}\\nExpected Delivery: ${item.json.estimatedDelivery}`\n}}));"
+      },
+      "name": "Prepare Delivery Notification",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        2300,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "orders@company.com",
+        "toEmail": "supplychain@company.com",
+        "subject": "Delivery Tracking Update - {{$json.trackingInfo.orderId}}",
+        "text": "={{$json.notifyText}}"
+      },
+      "name": "Send Delivery Tracking Notification",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        2520,
+        300
+      ]
+    },
+    {
+      "parameters": {},
+      "name": "Wait for Delivery Update Interval",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        2700,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Receive Packaging Requirements": {
+      "main": [
+        [
+          {
+            "node": "Prepare AI Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare AI Prompt": {
+      "main": [
+        [
+          {
+            "node": "AI: Packaging Recommendation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI: Packaging Recommendation": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Query Packaging Database",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Packaging Database": {
+      "main": [
+        [
+          {
+            "node": "Prepare Order Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Order Details": {
+      "main": [
+        [
+          {
+            "node": "Place Order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Place Order": {
+      "main": [
+        [
+          {
+            "node": "Generate Confirmation Email Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Confirmation Email Content": {
+      "main": [
+        [
+          {
+            "node": "Send Order Confirmation Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Wait for Delivery Update Interval",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Wait for Delivery Update Interval": {
+      "main": [
+        [
+          {
+            "node": "Get Delivery Tracking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Delivery Tracking": {
+      "main": [
+        [
+          {
+            "node": "Prepare Delivery Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Delivery Notification": {
+      "main": [
+        [
+          {
+            "node": "Send Delivery Tracking Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
