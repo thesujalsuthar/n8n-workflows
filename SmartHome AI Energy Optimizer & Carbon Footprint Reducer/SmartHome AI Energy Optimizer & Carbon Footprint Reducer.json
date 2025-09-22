@@ -1,0 +1,149 @@
+{
+  "name": "AI-Powered Smart Home Energy Optimizer and Carbon Footprint Reduction System",
+  "nodes": [
+    {
+      "parameters": {
+        "resource": "deviceStatus",
+        "operation": "getRealTimeConsumption",
+        "deviceIds": []
+      },
+      "name": "Get Real-Time Energy Consumption",
+      "type": "n8n-nodes-base.smartHomeDevice",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "renewableEnergy",
+        "operation": "getLocalAvailability",
+        "location": "={{$json[\"homeLocation\"]}}"
+      },
+      "name": "Get Local Renewable Energy Data",
+      "type": "n8n-nodes-base.apiRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const consumptionData = $items(\"Get Real-Time Energy Consumption\")[0].json;\nconst renewableData = $items(\"Get Local Renewable Energy Data\")[0].json;\n\n// Placeholder for optimization logic\n// Example: Adjust schedules to maximize renewable energy usage and minimize peak consumption\n\nconst optimizedSchedule = {\n  \"livingRoomLight\": { \"start\": \"18:00\", \"end\": \"22:00\" },\n  \"HVAC\": { \"start\": \"06:00\", \"end\": \"09:00\" },\n  \"washingMachine\": { \"start\": \"14:00\", \"end\": \"16:00\" }\n};\n\nreturn [{ json: { optimizedSchedule } }];"
+      },
+      "name": "Optimize Device Usage Schedules",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        600,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "prompt": "You are an AI assistant specialized in sustainable home energy management.\nBased on the user's home energy consumption and local renewable energy availability, generate personalized tips to reduce the carbon footprint effectively.\n\nInput JSON:\nConsumption Data: {{$json[\"consumptionData\"]}}\nRenewable Energy Data: {{$json[\"renewableData\"]}}",
+        "temperature": 0.7,
+        "maxTokens": 250,
+        "user": "homeowner"
+      },
+      "name": "Generate Carbon Footprint Reduction Tips",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "deviceControl",
+        "operation": "updateSchedule",
+        "deviceId": "={{Object.keys($json[\"optimizedSchedule\"])[0]}}",
+        "schedule": "={{Object.values($json[\"optimizedSchedule\"])[0]}}"
+      },
+      "name": "Apply Optimized Schedule to Devices",
+      "type": "n8n-nodes-base.smartHomeDevice",
+      "typeVersion": 1,
+      "position": [
+        850,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "toEmail": "={{$json[\"homeownerEmail\"]}}",
+        "subject": "Smart Home Energy Optimization Report and Tips",
+        "text": "Your smart home energy consumption has been optimized for better efficiency.\n\nOptimized Device Schedule:\n{{$json[\"optimizedSchedule\"]}}\n\nCarbon Footprint Reduction Tips:\n{{$json[\"choices\"][0][\"message\"][\"content\"]}}"
+      },
+      "name": "Send Report and Alerts to Homeowner",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Get Real-Time Energy Consumption": {
+      "main": [
+        [
+          {
+            "node": "Optimize Device Usage Schedules",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate Carbon Footprint Reduction Tips",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Local Renewable Energy Data": {
+      "main": [
+        [
+          {
+            "node": "Optimize Device Usage Schedules",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "Generate Carbon Footprint Reduction Tips",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Optimize Device Usage Schedules": {
+      "main": [
+        [
+          {
+            "node": "Apply Optimized Schedule to Devices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Carbon Footprint Reduction Tips": {
+      "main": [
+        [
+          {
+            "node": "Send Report and Alerts to Homeowner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
