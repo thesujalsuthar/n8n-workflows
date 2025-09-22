@@ -1,0 +1,346 @@
+{
+  "name": "GreenCommute Carbon Savings & Impact Tracker",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 9,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        150,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM commute_logs WHERE DATE(timestamp) = CURDATE();"
+      },
+      "name": "Fetch Today Commute Logs",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        400,
+        300
+      ],
+      "credentials": {
+        "postgres": "Postgres DB Credentials"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const logs = items[0].json;\n\n// Aggregate total kilometers by commute mode\nlet totalDistance = { bike: 0, walk: 0, transit: 0 };\nfor (const log of logs) {\n  const { mode, distance_km } = log;\n  if (totalDistance[mode] !== undefined) {\n    totalDistance[mode] += distance_km;\n  }\n}\n\nreturn [{ json: { totalDistance } }];"
+      },
+      "name": "Calculate Total Distance By Mode",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nCarbon emission factors in kg CO2e per km\nData approximate:\n- bike: 0 (considered carbon neutral)\n- walk: 0 (carbon neutral)\n- transit: 0.089 (average bus/train)\n- car: 0.271 (average car, for comparison)\n*/\n\nconst factors = { bike: 0, walk: 0, transit: 0.089 };\nconst { totalDistance } = items[0].json;\n\nlet totalEmissions = 0;\nfor (const mode in totalDistance) {\n  totalEmissions += totalDistance[mode] * factors[mode];\n}\n\n// Estimation of car emissions for same distances\nlet carEmissions = 0;\nfor (const mode in totalDistance) {\n  carEmissions += totalDistance[mode] * 0.271;\n}\n\nconst savedEmissions = carEmissions - totalEmissions;\n\nreturn [{ json: { totalEmissions, carEmissions, savedEmissions, totalDistance } }];"
+      },
+      "name": "Calculate Carbon Savings",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": "public",
+        "table": "carbon_impact_summaries",
+        "columns": [
+          "date",
+          "total_distance_bike",
+          "total_distance_walk",
+          "total_distance_transit",
+          "emissions_actual_kg",
+          "emissions_car_kg",
+          "emissions_saved_kg"
+        ],
+        "values": [
+          "={{ $now.toISOString().slice(0,10) }}",
+          "={{ $json.totalDistance.bike }}",
+          "={{ $json.totalDistance.walk }}",
+          "={{ $json.totalDistance.transit }}",
+          "={{ $json.totalEmissions.toFixed(3) }}",
+          "={{ $json.carEmissions.toFixed(3) }}",
+          "={{ $json.savedEmissions.toFixed(3) }}"
+        ]
+      },
+      "name": "Store Daily Summary",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        300
+      ],
+      "credentials": {
+        "postgres": "Postgres DB Credentials"
+      }
+    },
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 10,
+              "minute": 0,
+              "dayOfWeek": [
+                "mon"
+              ]
+            }
+          ]
+        }
+      },
+      "name": "Weekly Report Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        150,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT date, total_distance_bike, total_distance_walk, total_distance_transit, emissions_actual_kg, emissions_car_kg, emissions_saved_kg FROM carbon_impact_summaries WHERE date >= current_date - interval '7 days';"
+      },
+      "name": "Fetch Last 7 Days Summaries",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        400,
+        100
+      ],
+      "credentials": {
+        "postgres": "Postgres DB Credentials"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const records = items[0].json;\n\nconst summary = {\n  total_bike: 0,\n  total_walk: 0,\n  total_transit: 0,\n  emissions_actual: 0,\n  emissions_car: 0,\n  emissions_saved: 0\n};\n\nfor (const day of records) {\n  summary.total_bike += parseFloat(day.total_distance_bike || 0);\n  summary.total_walk += parseFloat(day.total_distance_walk || 0);\n  summary.total_transit += parseFloat(day.total_distance_transit || 0);\n  summary.emissions_actual += parseFloat(day.emissions_actual_kg || 0);\n  summary.emissions_car += parseFloat(day.emissions_car_kg || 0);\n  summary.emissions_saved += parseFloat(day.emissions_saved_kg || 0);\n}\n\n// Generate suggestions based on usage\nconst suggestions = [];\nif (summary.total_bike < 10) suggestions.push('Try biking more to increase your carbon savings.');\nif (summary.total_walk < 5) suggestions.push('Consider walking for short trips to reduce your footprint.');\nif (summary.total_transit < 15) suggestions.push('Using public transit more frequently can greatly help.');\nif (suggestions.length === 0) suggestions.push('Great job maintaining good green commuting habits!');\n\nconst report = `GreenCommute Weekly Impact Summary:\\n` +\n  `Biking distance: ${summary.total_bike.toFixed(1)} km\\n` +\n  `Walking distance: ${summary.total_walk.toFixed(1)} km\\n` +\n  `Public transit distance: ${summary.total_transit.toFixed(1)} km\\n` +\n  `Actual emissions: ${summary.emissions_actual.toFixed(2)} kg CO2e\\n` +\n  `Car emissions equivalent: ${summary.emissions_car.toFixed(2)} kg CO2e\\n` +\n  `Carbon saved: ${summary.emissions_saved.toFixed(2)} kg CO2e\\n\\n` +\n  `Suggestions:\\n- ${suggestions.join('\\n- ')}`;\n\nreturn [{ json: { report } }];"
+      },
+      "name": "Compile Weekly Report",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "no-reply@greencommute.example",
+        "toEmail": "={{ $json.userEmail || \"user@example.com\" }}",
+        "subject": "Your GreenCommute Weekly Carbon Impact Report",
+        "text": "={{ $json.report }}"
+      },
+      "name": "Send Weekly Email Report",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        900,
+        100
+      ],
+      "credentials": {
+        "smtp": "SMTP Credentials"
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, mode, distance_km, start_location, end_location, timestamp FROM commute_logs WHERE timestamp >= NOW() - INTERVAL '1 day';"
+      },
+      "name": "Fetch Recent Commute Logs",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        400,
+        500
+      ],
+      "credentials": {
+        "postgres": "Postgres DB Credentials"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nHere we simulate an API call to a route tracking/carbon footprint estimation API\nwhich could calculate precise routes and update distance or suggest improvements\nFor demo, we just pass through data.\n*/\nreturn items;"
+      },
+      "name": "Simulate Route & Carbon API",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const logs = items[0].json;\n\nconst suggestions = [];\nconst totalBike = logs.filter(l => l.mode === 'bike').reduce((sum, l) => sum + parseFloat(l.distance_km), 0);\nconst totalWalk = logs.filter(l => l.mode === 'walk').reduce((sum, l) => sum + parseFloat(l.distance_km), 0);\nconst totalTransit = logs.filter(l => l.mode === 'transit').reduce((sum, l) => sum + parseFloat(l.distance_km), 0);\n\nif (totalBike < 2) suggestions.push('Consider adding short bike trips to your commute.');\nif (totalWalk < 1) suggestions.push('Try walking for last-mile connections to reduce emissions.');\nif (totalTransit < 5) suggestions.push('Using more public transit can boost your green impact.');\n\nreturn [{ json: { suggestions } }];"
+      },
+      "name": "Generate Daily Suggestions",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "message": "={{ $json.suggestions.join('\\n- ') || 'Keep up the eco-friendly commuting!'}}",
+        "type": "info"
+      },
+      "name": "Send Daily Suggestion Notification",
+      "type": "n8n-nodes-base.pushbullet",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        500
+      ],
+      "credentials": {
+        "pushbulletApi": "Pushbullet API"
+      }
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Today Commute Logs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Today Commute Logs": {
+      "main": [
+        [
+          {
+            "node": "Calculate Total Distance By Mode",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Total Distance By Mode": {
+      "main": [
+        [
+          {
+            "node": "Calculate Carbon Savings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Carbon Savings": {
+      "main": [
+        [
+          {
+            "node": "Store Daily Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Weekly Report Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Last 7 Days Summaries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Last 7 Days Summaries": {
+      "main": [
+        [
+          {
+            "node": "Compile Weekly Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compile Weekly Report": {
+      "main": [
+        [
+          {
+            "node": "Send Weekly Email Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Recent Commute Logs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Recent Commute Logs": {
+      "main": [
+        [
+          {
+            "node": "Simulate Route & Carbon API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simulate Route & Carbon API": {
+      "main": [
+        [
+          {
+            "node": "Generate Daily Suggestions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Daily Suggestions": {
+      "main": [
+        [
+          {
+            "node": "Send Daily Suggestion Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
