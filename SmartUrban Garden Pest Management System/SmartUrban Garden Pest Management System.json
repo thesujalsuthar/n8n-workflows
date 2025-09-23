@@ -1,0 +1,214 @@
+{
+  "name": "AI-Powered Smart Urban Garden AI Pest Detection & Eco-Friendly Treatment Scheduler",
+  "nodes": [
+    {
+      "parameters": {
+        "webhookUri": "pest_detection_image_upload",
+        "httpMethod": "POST",
+        "responseMode": "onReceived"
+      },
+      "id": "Webhook1",
+      "name": "Image Upload Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ],
+      "webhookId": "pest_detection_image_upload"
+    },
+    {
+      "parameters": {
+        "operation": "detectObjects",
+        "model": "ai-pest-detection-model",
+        "image": "={{$json[\"body\"][\"imageBase64\"]}}"
+      },
+      "id": "AI1",
+      "name": "AI Pest Detection",
+      "type": "n8n-nodes-base.imageRecognition",
+      "typeVersion": 1,
+      "position": [
+        550,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const pestsDetected = items[0].json.detections.filter(detection => detection.label === 'pest' && detection.confidence > 0.7);\nif (pestsDetected.length > 0) {\n  return [{ json: { pestsDetected: pestsDetected, pestCount: pestsDetected.length, alert: true } }];\n} else {\n  return [{ json: { pestsDetected: [], pestCount: 0, alert: false } }];\n}"
+      },
+      "id": "Function1",
+      "name": "Evaluate Pest Detection",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json[\"alert\"]}}",
+              "operation": "equal",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "IF1",
+      "name": "Check If Pest Detected",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "garden.ai.alerts@example.com",
+        "toEmail": "gardener@example.com",
+        "subject": "Alert: Pest Detected in Your Urban Garden",
+        "text": "Dear Gardener,\n\nOur AI system has detected {{ $json.pestCount }} pest(s) in your urban garden. Please review the image and scheduled eco-friendly treatments.\n\nBest regards,\nSmart Urban Garden AI"
+      },
+      "id": "Email1",
+      "name": "Send Pest Alert Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const treatments = items[0].json.pestsDetected.map(pest => {\n  // Simple eco-friendly treatment mapping\n  const pestType = pest.label;\n  if (pestType === 'aphid') return { type: 'Neem Oil Spray', schedule: new Date(Date.now() + 24*60*60*1000).toISOString() };\n  if (pestType === 'whitefly') return { type: 'Insecticidal Soap', schedule: new Date(Date.now() + 48*60*60*1000).toISOString() };\n  if (pestType === 'caterpillar') return { type: 'BT Bacteria Spray', schedule: new Date(Date.now() + 72*60*60*1000).toISOString() };\n  return { type: 'General Eco-Friendly Treatment', schedule: new Date(Date.now() + 24*60*60*1000).toISOString() };\n});\nreturn [{ json: { treatments } }];"
+      },
+      "id": "Function2",
+      "name": "Schedule Eco-Friendly Treatments",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "calendar",
+        "operation": "createEvent",
+        "calendarId": "primary",
+        "summary": "Eco-Friendly Treatment: {{$json[\"type\"]}}",
+        "description": "Scheduled automatic treatment for detected pest.",
+        "start": "={{ $json[\"schedule\"] }}",
+        "end": "={{ new Date(new Date($json[\"schedule\"]).getTime() + 60*60*1000).toISOString() }}"
+      },
+      "id": "GoogleCalendar1",
+      "name": "Create Treatment Event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1,
+      "position": [
+        1550,
+        400
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": "Google Calendar Account"
+      }
+    },
+    {
+      "parameters": {
+        "text": "Alert: Pests detected ({{$json.pestCount}}) in your garden. Scheduled eco-friendly treatments applied."
+      },
+      "id": "Telegram1",
+      "name": "Send Telegram Notification",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1550,
+        250
+      ],
+      "credentials": {
+        "telegramApi": "Telegram Bot API"
+      }
+    }
+  ],
+  "connections": {
+    "Webhook1": {
+      "main": [
+        [
+          {
+            "node": "AI1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI1": {
+      "main": [
+        [
+          {
+            "node": "Function1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Function1": {
+      "main": [
+        [
+          {
+            "node": "IF1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF1": {
+      "main": [
+        [
+          {
+            "node": "Email1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Function2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Function2": {
+      "main": [
+        [
+          {
+            "node": "GoogleCalendar1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email1": {
+      "main": [
+        [
+          {
+            "node": "Telegram1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "id": "1"
+}
