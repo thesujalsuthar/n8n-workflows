@@ -1,0 +1,184 @@
+{
+  "name": "Personalized Real-Time AI Air Quality Health Advisory System",
+  "nodes": [
+    {
+      "parameters": {
+        "requestMethod": "GET",
+        "url": "https://api.openaq.org/v2/latest",
+        "options": {
+          "queryParameters": [
+            {
+              "name": "city",
+              "value": "={{$json[\"userCity\"] || $json[\"defaultCity\"] || \"San Francisco\"}}"
+            },
+            {
+              "name": "limit",
+              "value": "1"
+            }
+          ]
+        }
+      },
+      "name": "Fetch Real-Time Air Quality Data",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const userConditions = $json.userConditions || {\n  asthma: false,\n  heartDisease: false,\n  allergies: false,\n  age: 30\n};\nconst airQualityData = $items(\"Fetch Real-Time Air Quality Data\")[0].json;\n\n// Extract PM2.5 and O3 values if available\nconst measurements = airQualityData.results && airQualityData.results[0] && airQualityData.results[0].measurements ? airQualityData.results[0].measurements : [];\nconst pm25 = measurements.find(m => m.parameter === 'pm25');\nconst o3 = measurements.find(m => m.parameter === 'o3');\n\n// Define thresholds for health impact\nfunction healthImpact(pm25Val, o3Val, conditions) {\n  let alerts = [];\n\n  if (pm25Val !== undefined) {\n    if (pm25Val > 35) {\n      alerts.push('High PM2.5 levels detected - increased risk for respiratory issues.');\n      if (conditions.asthma) alerts.push('As you have asthma, avoid outdoor activities.');\n      if (conditions.age > 65) alerts.push('Older adults should limit exposure.');\n    } else if (pm25Val > 12) {\n      alerts.push('Moderate PM2.5 levels. Sensitive groups should reduce prolonged exertion.');\n    } else {\n      alerts.push('PM2.5 levels are good.');\n    }\n  }\n\n  if (o3Val !== undefined) {\n    if (o3Val > 70) {\n      alerts.push('Elevated ozone levels detected - may affect sensitive individuals.');\n      if (conditions.asthma) alerts.push('Asthma patients should avoid outdoor exercise.');\n      if (conditions.heartDisease) alerts.push('Heart disease patients should be cautious.');\n    } else {\n      alerts.push('Ozone levels are within normal range.');\n    }\n  }\n\n  return alerts;\n}\n\nconst pm25Val = pm25 ? pm25.value : undefined;\nconst o3Val = o3 ? o3.value : undefined;\nconst advisoryMessages = healthImpact(pm25Val, o3Val, userConditions);\n\nreturn [{\n  json: {\n    advisory: advisoryMessages.join(' '),\n    airQualityDetails: {\n      pm25: pm25Val || 'N/A',\n      o3: o3Val || 'N/A'\n    },\n    userConditions: userConditions\n  }\n}];"
+      },
+      "name": "Analyze Health Impact",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        550,
+        300
+      ],
+      "notes": "Analyzes air quality data with user conditions to create personalized advisory"
+    },
+    {
+      "parameters": {
+        "fromEmail": "alerts@aqhealthadvisor.com",
+        "toEmail": "={{$json[\"userEmail\"] || \"user@example.com\"}}",
+        "subject": "Personalized Air Quality Health Advisory",
+        "text": "={{$json[\"advisory\"] + '\\nAir Quality Details: PM2.5: ' + $json[\"airQualityDetails\"].pm25 + ', O3: ' + $json[\"airQualityDetails\"].o3}}"
+      },
+      "name": "Send Email Notification",
+      "type": "emailSend",
+      "typeVersion": 1,
+      "position": [
+        850,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "to": "={{$json[\"userPhone\"] || \"+1234567890\"}}",
+        "message": "={{$json[\"advisory\"]}} Air Quality PM2.5: {{$json[\"airQualityDetails\"].pm25}}, O3: {{$json[\"airQualityDetails\"].o3}}"
+      },
+      "name": "Send SMS Notification",
+      "type": "twilio",
+      "typeVersion": 1,
+      "position": [
+        850,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "device": "={{$json[\"userPushDeviceId\"] || \"device123\"}}",
+        "title": "Air Quality Advisory",
+        "message": "={{$json[\"advisory\"]}}",
+        "data": {
+          "pm25": "={{$json[\"airQualityDetails\"].pm25}}",
+          "o3": "={{$json[\"airQualityDetails\"].o3}}"
+        }
+      },
+      "name": "Send Push Notification",
+      "type": "pushover",
+      "typeVersion": 1,
+      "position": [
+        850,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "duration": 3600000,
+        "options": {}
+      },
+      "name": "Wait 1 Hour",
+      "type": "wait",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Fetch Real-Time Air Quality Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze Health Impact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Health Impact": {
+      "main": [
+        [
+          {
+            "node": "Send Email Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send SMS Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Push Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email Notification": {
+      "main": [
+        [
+          {
+            "node": "Wait 1 Hour",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send SMS Notification": {
+      "main": [
+        [
+          {
+            "node": "Wait 1 Hour",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Push Notification": {
+      "main": [
+        [
+          {
+            "node": "Wait 1 Hour",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 1 Hour": {
+      "main": [
+        [
+          {
+            "node": "Fetch Real-Time Air Quality Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "id": "1"
+}
