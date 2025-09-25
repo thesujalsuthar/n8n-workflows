@@ -1,0 +1,191 @@
+{
+  "workflow_title": "AI-Powered Personalized Sustainable Travel Planner & Carbon Offset Advisor",
+  "description": "Helps users plan eco-friendly trips by suggesting travel options, accommodations, and activities that minimize carbon footprints, calculates estimated carbon emissions, and provides carbon offset recommendations with integration of relevant APIs.",
+  "steps": [
+    {
+      "step_id": "1",
+      "name": "User Trip Input",
+      "description": "Collect user trip details including origin, destination(s), travel dates, preferred travel modes, accommodation preferences, and activity interests.",
+      "actions": [
+        {
+          "action_type": "form_input",
+          "fields": [
+            "origin",
+            "destination",
+            "travel_dates",
+            "preferred_travel_modes",
+            "accommodation_preferences",
+            "activity_interests"
+          ]
+        }
+      ]
+    },
+    {
+      "step_id": "2",
+      "name": "Fetch Travel Options",
+      "description": "Call travel data APIs to retrieve eco-friendly travel options (e.g., trains, buses, direct flights) filtering for minimal carbon footprint.",
+      "api_integrations": [
+        {
+          "api_name": "TravelDataAPI",
+          "endpoint": "/search/travel-options",
+          "parameters": [
+            "origin",
+            "destination",
+            "travel_dates",
+            "preferred_travel_modes"
+          ],
+          "output": "available_travel_options"
+        }
+      ]
+    },
+    {
+      "step_id": "3",
+      "name": "Fetch Accommodations",
+      "description": "Query accommodation booking APIs to retrieve eco-certified lodging options based on user preferences.",
+      "api_integrations": [
+        {
+          "api_name": "AccommodationBookingAPI",
+          "endpoint": "/search/accommodations",
+          "parameters": [
+            "destination",
+            "travel_dates",
+            "accommodation_preferences",
+            "eco_certified_only": true
+          ],
+          "output": "available_accommodations"
+        }
+      ]
+    },
+    {
+      "step_id": "4",
+      "name": "Fetch Eco-friendly Activities",
+      "description": "Use activity suggestion APIs to find sustainable and low-impact activities aligned with user interests.",
+      "api_integrations": [
+        {
+          "api_name": "ActivitySuggestionAPI",
+          "endpoint": "/search/eco_activities",
+          "parameters": [
+            "destination",
+            "travel_dates",
+            "activity_interests"
+          ],
+          "output": "suggested_activities"
+        }
+      ]
+    },
+    {
+      "step_id": "5",
+      "name": "Calculate Carbon Emissions",
+      "description": "Estimate the carbon footprint for chosen travel, accommodation, and activities using carbon calculation API or model.",
+      "actions": [
+        {
+          "action_type": "carbon_calculation",
+          "input_data": [
+            "selected_travel_options",
+            "selected_accommodations",
+            "selected_activities"
+          ],
+          "output": "total_estimated_carbon_emissions_kg"
+        }
+      ]
+    },
+    {
+      "step_id": "6",
+      "name": "Fetch Carbon Offset Programs",
+      "description": "Query carbon offset verification APIs to retrieve credible offset programs appropriate for user's emissions amount.",
+      "api_integrations": [
+        {
+          "api_name": "CarbonOffsetVerificationAPI",
+          "endpoint": "/offset/programs",
+          "parameters": [
+            "emission_amount_kg"
+          ],
+          "output": "recommended_offset_programs"
+        }
+      ]
+    },
+    {
+      "step_id": "7",
+      "name": "Generate Personalized Itinerary",
+      "description": "Generate a user-friendly itinerary including travel plans, accommodations, and activities emphasizing sustainability.",
+      "actions": [
+        {
+          "action_type": "itinerary_generation",
+          "input_data": [
+            "selected_travel_options",
+            "selected_accommodations",
+            "selected_activities"
+          ],
+          "output": "personalized_itinerary"
+        }
+      ]
+    },
+    {
+      "step_id": "8",
+      "name": "Send Carbon Impact Report and Recommendations",
+      "description": "Notify users with detailed carbon impact report alongside recommended carbon offset programs.",
+      "notifications": [
+        {
+          "type": "email",
+          "content": {
+            "carbon_report": "total_estimated_carbon_emissions_kg",
+            "offset_recommendations": "recommended_offset_programs",
+            "itinerary": "personalized_itinerary"
+          }
+        }
+      ]
+    },
+    {
+      "step_id": "9",
+      "name": "Confirm Offset Purchase",
+      "description": "Facilitate purchase or commitment to carbon offset programs and confirm transactions with the user.",
+      "actions": [
+        {
+          "action_type": "offset_purchase",
+          "input_data": [
+            "user_selected_offset_program",
+            "amount_to_offset"
+          ],
+          "output": "offset_purchase_confirmation"
+        }
+      ],
+      "notifications": [
+        {
+          "type": "email",
+          "content": {
+            "offset_purchase_confirmation": "offset_purchase_confirmation"
+          }
+        }
+      ]
+    }
+  ],
+  "integrations": [
+    {
+      "name": "TravelDataAPI",
+      "description": "Provides travel options and modes with carbon footprint data."
+    },
+    {
+      "name": "AccommodationBookingAPI",
+      "description": "Provides eco-certified accommodation options and booking capabilities."
+    },
+    {
+      "name": "ActivitySuggestionAPI",
+      "description": "Suggests sustainable and low-impact activities."
+    },
+    {
+      "name": "CarbonOffsetVerificationAPI",
+      "description": "Offers verified carbon offset programs and calculates emissions."
+    }
+  ],
+  "notifications": {
+    "methods_supported": [
+      "email",
+      "push_notifications"
+    ],
+    "content_types": [
+      "personalized_itinerary",
+      "carbon_impact_report",
+      "offset_purchase_confirmation"
+    ]
+  }
+}
