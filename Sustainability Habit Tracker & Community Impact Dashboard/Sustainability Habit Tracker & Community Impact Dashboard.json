@@ -1,0 +1,259 @@
+{
+  "name": "AI-Powered Sustainability Habit Tracker & Real-Time Community Impact Dashboard",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "url": "https://api.habitica.com/api/v3/tasks/user",
+        "options": {},
+        "queryParametersUi": {
+          "parameter": []
+        },
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "x-api-user",
+              "value": "={{$credentials.habiticaApi.userId}}"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{$credentials.habiticaApi.apiKey}}"
+            }
+          ]
+        }
+      },
+      "name": "Fetch Habit Data from Habitica",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ],
+      "credentials": {
+        "habiticaApi": {
+          "id": "1",
+          "name": "Habitica API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const habits = items[0].json.data.filter(task => task.type === 'habit');\nconst today = new Date().toISOString().split('T')[0];\n\nconst trackedHabits = habits.map(habit => {\n  return {\n    name: habit.text,\n    completed: habit.isCompleted || false,\n    date: today\n  };\n});\n\nreturn [{ json: { trackedHabits } }];"
+      },
+      "name": "Process Habit Data",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "prompt": "You are an AI assistant helping users develop sustainable habits. Based on the following tracked habits for today, generate personalized sustainability tips to help the user improve or maintain these habits. Return the tips as an array of strings.\n\nHabits:\n{{ $json.trackedHabits }}\n\nRespond ONLY with a JSON object: { \"tips\": [\"tip1\", \"tip2\", ...] }",
+        "options": {}
+      },
+      "name": "Generate Personalized Tips",
+      "type": "openAi",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const tips = JSON.parse(items[0].json.choices[0].message.content).tips;\nreturn tips.map(tip => ({ json: { tip } }));"
+      },
+      "name": "Extract Tips",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "database": "sustainability_community",
+        "operation": "upsert",
+        "collection": "habit_logs",
+        "query": "={ \"date\": $json.date, \"userId\": $credentials.user.id, \"habitName\": $json.name }",
+        "upsertData": "={ $json }"
+      },
+      "name": "Upsert Habit Log to DB",
+      "type": "mongodb",
+      "typeVersion": 1,
+      "position": [
+        650,
+        500
+      ],
+      "credentials": {
+        "mongoDb": {
+          "id": "2",
+          "name": "MongoDB Community DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "database": "sustainability_community",
+        "operation": "aggregate",
+        "collection": "habit_logs",
+        "aggregationPipeline": [
+          {
+            "$group": {
+              "_id": "$habitName",
+              "totalCompleted": { "$sum": { "$cond": ["$completed", 1, 0] } },
+              "totalLogs": { "$sum": 1 }
+            }
+          },
+          {
+            "$project": {
+              "habitName": "$_id",
+              "completionRate": { "$multiply": [{ "$divide": ["$totalCompleted", "$totalLogs"] }, 100] },
+              "_id": 0
+            }
+          }
+        ]
+      },
+      "name": "Aggregate Community Impact Data",
+      "type": "mongodb",
+      "typeVersion": 1,
+      "position": [
+        850,
+        500
+      ],
+      "credentials": {
+        "mongoDb": {
+          "id": "2",
+          "name": "MongoDB Community DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const communityData = items[0].json;\n// Prepare data for visualization, for example as a bar chart data structure\nconst chartData = {\n  labels: communityData.map(entry => entry.habitName),\n  datasets: [\n    {\n      label: 'Community Completion Rate (%)',\n      data: communityData.map(entry => entry.completionRate),\n      backgroundColor: 'rgba(75, 192, 192, 0.6)'\n    }\n  ]\n};\nreturn [{ json: { chartData } }];"
+      },
+      "name": "Prepare Visualization Data",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "update",
+        "path": "dashboard/communityImpactChart",
+        "dataPropertyName": "chartData"
+      },
+      "name": "Update Dashboard Visualization",
+      "type": "n8n-nodes-base.dashboard",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        500
+      ]
+    },
+    {
+      "parameters": {},
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [
+        50,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Fetch Habit Data from Habitica",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Habit Data from Habitica": {
+      "main": [
+        [
+          {
+            "node": "Process Habit Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Habit Data": {
+      "main": [
+        [
+          {
+            "node": "Generate Personalized Tips",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Upsert Habit Log to DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Personalized Tips": {
+      "main": [
+        [
+          {
+            "node": "Extract Tips",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Habit Log to DB": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Community Impact Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Community Impact Data": {
+      "main": [
+        [
+          {
+            "node": "Prepare Visualization Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Visualization Data": {
+      "main": [
+        [
+          {
+            "node": "Update Dashboard Visualization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
