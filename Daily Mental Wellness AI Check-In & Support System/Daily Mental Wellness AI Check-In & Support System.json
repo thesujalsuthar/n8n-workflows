@@ -1,0 +1,330 @@
+{
+  "name": "Automated Daily Mental Wellness Check-in & Personalized Support System",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 9,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "survey",
+        "operation": "create",
+        "title": "Daily Mood Survey",
+        "questions": {
+          "question": [
+            {
+              "type": "singleChoice",
+              "question": "How are you feeling today?",
+              "choices": [
+                "Very Happy",
+                "Happy",
+                "Neutral",
+                "Sad",
+                "Very Sad",
+                "Anxious",
+                "Stressed"
+              ],
+              "isRequired": true
+            },
+            {
+              "type": "text",
+              "question": "Would you like to share more about how you’re feeling?",
+              "isRequired": false
+            }
+          ]
+        }
+      },
+      "name": "Create Mood Survey",
+      "type": "n8n-nodes-base.googleForms",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 20,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Evening Data Collection Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "response",
+        "operation": "getAll",
+        "surveyId": "={{$node[\"Create Mood Survey\"].json[\"formId\"]}}",
+        "options": {
+          "returnAll": true,
+          "filters": {
+            "createdAfter": "={{new Date(new Date().setHours(0,0,0,0)).toISOString()}}",
+            "createdBefore": "={{new Date(new Date().setHours(23,59,59,999)).toISOString()}}"
+          }
+        }
+      },
+      "name": "Get Survey Responses",
+      "type": "n8n-nodes-base.googleForms",
+      "typeVersion": 1,
+      "position": [
+        500,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "passThrough",
+        "functionCode": "const responses = items.map(item => item.json);\n\n// Extract textual responses for sentiment\nconst texts = responses.map(r => r['Would you like to share more about how you’re feeling?'] || '');\n\nreturn texts.map(text => ({ json: { text }}));"
+      },
+      "name": "Extract Sentiment Text",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        700,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "prompt": "Analyze the sentiment and mental health signals of the following user entry:\n\n\"{{$json[\"text\"]}}\"\n\nReturn a JSON object with fields: sentiment (positive, neutral, negative), indicators (list of detected signs like anxiety, stress, depression), and severity (low, medium, high)."
+      },
+      "name": "AI Sentiment & Mental Health Analysis",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        900,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const results = items.map(item => {\n  try {\n    const analysis = JSON.parse(item.json.choices[0].message.content);\n    return {\n      json: {\n        sentiment: analysis.sentiment || 'neutral',\n        indicators: analysis.indicators || [],\n        severity: analysis.severity || 'low'\n      }\n    };\n  } catch(e) {\n    return { json: { sentiment: 'neutral', indicators: [], severity: 'low' } };\n  }\n});\nreturn results;"
+      },
+      "name": "Parse AI Analysis",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const combinedIndicators = items.map(i => i.json.indicators).flat();\nconst severityLevels = items.map(i => i.json.severity);\n\nlet maxSeverity = 'low';\nif (severityLevels.includes('high')) maxSeverity = 'high';\nelse if (severityLevels.includes('medium')) maxSeverity = 'medium';\n\nreturn [{ json: { combinedIndicators, maxSeverity }}];"
+      },
+      "name": "Aggregate Indicators and Severity",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const indicators = items[0].json.combinedIndicators;\nconst severity = items[0].json.maxSeverity;\n\nlet recommendation = 'Keep monitoring your mood daily and take time for self-care.';\nlet resources = [];\n\nif (severity === 'high') {\n  recommendation = 'It looks like you might need immediate support. Consider contacting a mental health professional or reaching out to a trusted person.';\n  resources = [\n    { name: 'National Suicide Prevention Lifeline', url: 'https://suicidepreventionlifeline.org/' },\n    { name: 'Crisis Text Line', url: 'https://www.crisistextline.org/' }\n  ];\n} else if (severity === 'medium') {\n  recommendation = 'You seem to be experiencing some difficulties. Here are some helpful resources and mindfulness exercises.';\n  resources = [\n    { name: 'Mindfulness Exercises', url: 'https://www.mindful.org/mindfulness-how-to-do-it/' },\n    { name: 'Anxiety Management Tips', url: 'https://adaa.org/tips' }\n  ];\n}\n\nreturn [{ json: { recommendation, resources, severity, indicators } }];"
+      },
+      "name": "Generate Personalized Recommendations",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1650,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "message": "Daily Mental Wellness Check-in Summary:\n\nSeverity Level: {{$json[\"severity\"]}}\nIndicators: {{$json[\"indicators\"].join(\", \")}}\n\nRecommendations:\n{{$json[\"recommendation\"]}}\n\nHelpful Resources:\n{{$json[\"resources\"].map(r => `- ${r.name}: ${r.url}`).join(\"\\n\")}}",
+        "title": "Mental Wellness Alert",
+        "priority": "normal"
+      },
+      "name": "Send Notification Alert",
+      "type": "n8n-nodes-base.pushbullet",
+      "typeVersion": 1,
+      "position": [
+        1900,
+        600
+      ],
+      "credentials": {
+        "pushbulletApi": "Pushbullet Account"
+      }
+    },
+    {
+      "parameters": {
+        "resource": "survey",
+        "operation": "update",
+        "surveyId": "={{$node[\"Create Mood Survey\"].json[\"formId\"]}}",
+        "title": "Daily Mood Survey",
+        "questions": {
+          "question": [
+            {
+              "type": "singleChoice",
+              "question": "How are you feeling today?",
+              "choices": [
+                "Very Happy",
+                "Happy",
+                "Neutral",
+                "Sad",
+                "Very Sad",
+                "Anxious",
+                "Stressed"
+              ],
+              "isRequired": true
+            },
+            {
+              "type": "text",
+              "question": "Would you like to share more about how you’re feeling?",
+              "isRequired": false
+            },
+            {
+              "type": "info",
+              "question": "This survey and recommendations are customizable in the workflow."
+            }
+          ]
+        }
+      },
+      "name": "Update Survey Customization",
+      "type": "n8n-nodes-base.googleForms",
+      "typeVersion": 1,
+      "position": [
+        500,
+        450
+      ]
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Create Mood Survey",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Update Survey Customization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Mood Survey": {
+      "main": [
+        [
+          {
+            "node": "Update Survey Customization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evening Data Collection Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Survey Responses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Survey Responses": {
+      "main": [
+        [
+          {
+            "node": "Extract Sentiment Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Sentiment Text": {
+      "main": [
+        [
+          {
+            "node": "AI Sentiment & Mental Health Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Sentiment & Mental Health Analysis": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Analysis": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Indicators and Severity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Indicators and Severity": {
+      "main": [
+        [
+          {
+            "node": "Generate Personalized Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Personalized Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Send Notification Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {}
+}
