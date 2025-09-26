@@ -1,0 +1,189 @@
+{
+  "name": "AI-Powered Local Food Donation Optimization and Notification System",
+  "nodes": [
+    {
+      "parameters": {
+        "query": "SELECT business_id, business_name, surplus_food_estimate, location FROM local_businesses WHERE surplus_food_estimate > 0"
+      },
+      "name": "Fetch Surplus Food Donations",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ],
+      "credentials": {
+        "postgres": "PostgreSQL_LocalDB"
+      }
+    },
+    {
+      "parameters": {
+        "operation": "predictDonationAmount",
+        "inputData": "={{ $json }}"
+      },
+      "name": "AI Predict Donation Amount",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "user": "api_user",
+          "password": "api_password"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "This node calls an AI API to predict more accurate donation amounts based on past data."
+    },
+    {
+      "parameters": {
+        "query": "SELECT shelter_id, name, address, capacity, current_demand FROM food_banks_shelters WHERE capacity > current_demand"
+      },
+      "name": "Fetch Available Food Banks and Shelters",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        200,
+        600
+      ],
+      "credentials": {
+        "postgres": "PostgreSQL_LocalDB"
+      }
+    },
+    {
+      "parameters": {
+        "operation": "forecastDemand",
+        "inputData": "={{ $json }}"
+      },
+      "name": "AI Forecast Demand",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        450,
+        600
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "user": "api_user",
+          "password": "api_password"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "This node calls an AI API to forecast demand at each shelter or food bank."
+    },
+    {
+      "parameters": {
+        "functionCode": "const donations = items[0].json;\nconst shelters = items[1].json;\n\n// Simple logistics optimization: match donation to nearest shelter with capacity\n\nfunction calculateDistance(loc1, loc2) {\n  const toRad = v => v * Math.PI / 180;\n  const R = 6371; // km\n  const dLat = toRad(loc2.lat - loc1.lat);\n  const dLon = toRad(loc2.lon - loc1.lon);\n  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +\n            Math.cos(toRad(loc1.lat)) * Math.cos(toRad(loc2.lat)) *\n            Math.sin(dLon/2) * Math.sin(dLon/2);\n  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));\n  return R * c;\n}\n\nconst assignments = [];\n\nfor (const donation of donations) {\n  const businessLoc = {\n    lat: donation.location.latitude,\n    lon: donation.location.longitude\n  };\n\n  // Filter shelters able to accept donation\n  const availableShelters = shelters.filter(s => s.current_demand < s.capacity);\n\n  if (availableShelters.length === 0) continue;\n\n  // Find nearest shelter\n  let nearestShelter = null;\n  let minDist = Infinity;\n  for (const shelter of availableShelters) {\n    const shelterLoc = {\n      lat: shelter.address.latitude,\n      lon: shelter.address.longitude\n    };\n    const dist = calculateDistance(businessLoc, shelterLoc);\n    if (dist < minDist) {\n      minDist = dist;\n      nearestShelter = shelter;\n    }\n  }\n\n  if (nearestShelter) {\n    assignments.push({\n      donationId: donation.business_id,\n      businessName: donation.business_name,\n      donationAmount: donation.surplus_food_estimate,\n      shelterId: nearestShelter.shelter_id,\n      shelterName: nearestShelter.name,\n      shelterAddress: nearestShelter.address.full,\n      distanceKm: minDist\n    });\n\n    // Update shelter demand\n    nearestShelter.current_demand += donation.surplus_food_estimate;\n  }\n}\n\nreturn assignments.map(a => ({json: a}));"
+      },
+      "name": "Optimize Distribution Logistics",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        700,
+        450
+      ],
+      "notesInFlow": true,
+      "notes": "Assign each donation to the closest food bank or shelter with capacity."
+    },
+    {
+      "parameters": {
+        "fromEmail": "noreply@localfoodnetwork.org",
+        "toEmail": "={{$json.shelterName}}@coordinator.localfoodnetwork.org",
+        "subject": "New Pickup Assignment: Donation to {{$json.shelterName}}",
+        "text": "Dear Coordinator,\n\nA new food donation pickup has been assigned:\n\nBusiness: {{$json.businessName}}\nDonation Amount (estimated): {{$json.donationAmount}}\nDelivery Location: {{$json.shelterName}} - {{$json.shelterAddress}}\nDistance: {{$json.distanceKm.toFixed(2)}} km\n\nPlease coordinate pickup and delivery with volunteers accordingly.\n\nBest regards,\nLocal Food Donation System"
+      },
+      "name": "Send Email Notifications",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        950,
+        450
+      ],
+      "credentials": {
+        "smtp": "SMTP_LocalFoodNetwork"
+      }
+    },
+    {
+      "parameters": {
+        "resource": "chat.postMessage",
+        "operation": "send",
+        "channel": "coordinators_channel",
+        "text": "New Food Donation Pickup Assigned:\nBusiness: {{$json.businessName}}\nAmount: {{$json.donationAmount}}\nDelivery Location: {{$json.shelterName}}\nDistance: {{$json.distanceKm.toFixed(2)}} km\nPlease coordinate scheduling."
+      },
+      "name": "Send Messaging Platform Notifications",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        950,
+        600
+      ],
+      "credentials": {
+        "slackApi": "Slack_Coordinators_Channel"
+      }
+    }
+  ],
+  "connections": {
+    "Fetch Surplus Food Donations": {
+      "main": [
+        [
+          {
+            "node": "AI Predict Donation Amount",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Predict Donation Amount": {
+      "main": [
+        [
+          {
+            "node": "Optimize Distribution Logistics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Available Food Banks and Shelters": {
+      "main": [
+        [
+          {
+            "node": "AI Forecast Demand",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Forecast Demand": {
+      "main": [
+        [
+          {
+            "node": "Optimize Distribution Logistics",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Optimize Distribution Logistics": {
+      "main": [
+        [
+          {
+            "node": "Send Email Notifications",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Messaging Platform Notifications",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  }
+}
