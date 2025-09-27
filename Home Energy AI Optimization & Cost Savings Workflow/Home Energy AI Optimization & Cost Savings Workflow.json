@@ -1,0 +1,208 @@
+{
+  "name": "AI-Powered Personalized Home Energy Consumption Optimizer and Cost Reduction Advisor",
+  "nodes": [
+    {
+      "parameters": {
+        "type": "webhook",
+        "httpMethod": "GET",
+        "path": "energy-data-webhook",
+        "responseMode": "onReceived",
+        "responseData": "Data received"
+      },
+      "name": "Receive Energy Data Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "={{`https://api.smartmeterprovider.com/latest-consumption?meterId=${$json[\"meterId\"]}`}}",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_SMART_METER_API_TOKEN"
+            }
+          ]
+        }
+      },
+      "name": "Fetch Smart Meter Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        550,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const applianceList = ['fridge', 'washingMachine', 'oven', 'ac', 'heater'];\nconst results = [];\nfor (const appliance of applianceList) {\n  results.push(this.helpers.httpRequest({\n    url: `https://api.smartapplianceprovider.com/appliances/${appliance}/consumption?user=${$json[\"userId\"]}`,\n    method: 'GET',\n    headers: { Authorization: 'Bearer YOUR_SMART_APPLIANCE_API_TOKEN' }\n  }, {}));\n}\nreturn results;"
+      },
+      "name": "Fetch Appliances Energy Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        550,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/* Combine meter and appliance data into single dataset */\nconst meterData = $items(\"Fetch Smart Meter Data\")[0].json;\nconst applianceData = $items(\"Fetch Appliances Energy Data\").map(item => item.json);\n\nreturn [{\n  json: {\n    meterData,\n    applianceData\n  }\n}];"
+      },
+      "name": "Combine Energy Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nUse AI service to analyze combined energy data and generate insights & recommendations.\n*/\nconst openAiApiKey = $credentials.openAiApi.apiKey;\nconst inputData = JSON.stringify($json);\n\nconst axios = require('axios');\n\nreturn axios.post('https://api.openai.com/v1/chat/completions', {\n  model: 'gpt-4',\n  messages: [\n    { role: 'system', content: 'You are an AI assistant specialized in home energy optimization. Analyze the provided energy consumption data, identify inefficiencies, and provide personalized recommendations to reduce energy costs.' },\n    { role: 'user', content: `Analyze this data and provide actionable energy savings tips and cost reduction advice:\\n${inputData}` }\n  ],\n  max_tokens: 500\n}, {\n  headers: {\n    'Authorization': `Bearer ${openAiApiKey}`,\n    'Content-Type': 'application/json'\n  }\n}).then(response => {\n  return [{ json: { recommendations: response.data.choices[0].message.content } }];\n}).catch(error => {\n  return [{ json: { error: error.message } }];\n});"
+      },
+      "name": "AI Analyze & Recommend",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ],
+      "credentials": {
+        "openAiApi": {
+          "apiKey": "YOUR_OPENAI_API_KEY"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "energy-advisor@yourdomain.com",
+        "toEmail": "={{$json[\"userEmail\"]}}",
+        "subject": "Your Personalized Home Energy Optimization Report",
+        "text": "={{$json[\"recommendations\"]}}"
+      },
+      "name": "Send Email Alerts",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "chatMessage",
+        "operation": "send",
+        "chatId": "={{$json[\"userChatId\"]}}",
+        "text": "={{$json[\"recommendations\"]}}"
+      },
+      "name": "Send Messaging Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        350
+      ],
+      "credentials": {
+        "telegramApi": {
+          "botToken": "YOUR_TELEGRAM_BOT_TOKEN"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "time",
+        "time": "07:00",
+        "weekDay": [
+          "mon",
+          "tue",
+          "wed",
+          "thu",
+          "fri"
+        ]
+      },
+      "name": "Schedule Daily Optimization",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        50,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule Daily Optimization": {
+      "main": [
+        [
+          {
+            "node": "Fetch Smart Meter Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Appliances Energy Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Smart Meter Data": {
+      "main": [
+        [
+          {
+            "node": "Combine Energy Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Appliances Energy Data": {
+      "main": [
+        [
+          {
+            "node": "Combine Energy Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine Energy Data": {
+      "main": [
+        [
+          {
+            "node": "AI Analyze & Recommend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Analyze & Recommend": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alerts",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Messaging Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {}
+}
