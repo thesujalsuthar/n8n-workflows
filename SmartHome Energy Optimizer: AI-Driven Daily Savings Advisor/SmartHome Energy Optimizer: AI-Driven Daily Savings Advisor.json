@@ -1,0 +1,236 @@
+{
+  "name": "Next-Gen AI-Powered Home Energy Savings Advisor",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "mode": "everyDay",
+          "atTimes": [
+            {
+              "hour": 6,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.smartmeter.example.com/v1/energy-consumption",
+        "method": "GET",
+        "responseFormat": "json",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$json[\"smartMeterApiKey\"]}}"
+            }
+          ]
+        }
+      },
+      "name": "Get Energy Consumption",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        350,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.weather.com/v3/wx/forecast/daily/5day",
+        "method": "GET",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "geocode",
+              "value": "{{$json[\"userLocation\"]}}"
+            },
+            {
+              "name": "format",
+              "value": "json"
+            },
+            {
+              "name": "language",
+              "value": "en-US"
+            },
+            {
+              "name": "apiKey",
+              "value": "{{$json[\"weatherApiKey\"]}}"
+            }
+          ]
+        },
+        "responseFormat": "json"
+      },
+      "name": "Get Weather Forecast",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        350,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n * This function simulates fetching and analyzing user habits.\n * In practice, it could pull data from user profiles or activity logs.\n */\n\nconst habits = {\n  peakUsageHours: [18, 19, 20],\n  preferredTempRange: {\n    heating: 68,\n    cooling: 75\n  },\n  devices: {\n    acUnit: true,\n    heater: true,\n    smartLights: true\n  }\n};\n\nreturn [{ json: habits }];"
+      },
+      "name": "Analyze User Habits",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        600,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n * This node generates personalized energy-saving recommendations\n * based on energy consumption, weather forecast, and user habits.\n */\n\nconst energyData = items[0].json;\nconst weatherData = items[1].json;\nconst userHabits = items[2].json;\n\nconst recommendations = [];\n\n// Example logic for recommendations\nif (energyData.currentUsage > energyData.averageUsage) {\n  recommendations.push('Reduce usage during peak hours to save energy.');\n}\n\nconst todayForecast = weatherData['dayOfWeek'] ? weatherData : weatherData['forecasts'] ? weatherData['forecasts'][0] : null;\n\nif (todayForecast) {\n  const highTemp = todayForecast.temperatureMax || todayForecast.temp_max || null;\n  const lowTemp = todayForecast.temperatureMin || todayForecast.temp_min || null;\n\n  if (highTemp && highTemp > userHabits.preferredTempRange.cooling) {\n    recommendations.push('Consider using smart AC settings to maintain comfort while saving energy.');\n  }\n\n  if (lowTemp && lowTemp < userHabits.preferredTempRange.heating) {\n    recommendations.push('Use smart heater scheduling to optimize energy consumption.');\n  }\n}\n\n// Include device-specific recommendations\nif (userHabits.devices.smartLights) {\n  recommendations.push('Use motion sensors or timers to automate lighting.');\n}\n\nreturn [{ json: { recommendations } }];"
+      },
+      "name": "Generate Recommendations",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "email",
+        "operation": "send",
+        "toEmail": "={{$json[\"userEmail\"]}}",
+        "subject": "Daily Energy Savings Recommendations",
+        "text": "Hello,\n\nHere are your personalized energy-saving recommendations for today:\n\n{{$json[\"recommendations\"].map((rec, i) => (i+1) + \". \" + rec).join('\\n')}}\n\nStay energy smart!"
+      },
+      "name": "Send Email Report",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "device",
+        "operation": "control",
+        "deviceId": "={{$json[\"smartDevices\"].acUnitId}}",
+        "command": "adjustTemperature",
+        "parameters": {
+          "temperature": 75,
+          "mode": "eco"
+        },
+        "condition": "={{$json[\"recommendations\"].includes('Consider using smart AC settings to maintain comfort while saving energy.')}}"
+      },
+      "name": "Control Smart AC Unit",
+      "type": "n8n-nodes-base.smartDeviceControl",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "device",
+        "operation": "control",
+        "deviceId": "={{$json[\"smartDevices\"].heaterUnitId}}",
+        "command": "scheduleOnOff",
+        "parameters": {
+          "schedule": "optimized"
+        },
+        "condition": "={{$json[\"recommendations\"].includes('Use smart heater scheduling to optimize energy consumption.')}}"
+      },
+      "name": "Control Smart Heater",
+      "type": "n8n-nodes-base.smartDeviceControl",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Energy Consumption",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Weather Forecast",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Energy Consumption": {
+      "main": [
+        [
+          {
+            "node": "Analyze User Habits",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Weather Forecast": {
+      "main": [
+        [
+          {
+            "node": "Analyze User Habits",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Analyze User Habits": {
+      "main": [
+        [
+          {
+            "node": "Generate Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Send Email Report",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Control Smart AC Unit",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Control Smart Heater",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
