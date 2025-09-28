@@ -1,0 +1,330 @@
+{
+  "name": "AI-Powered Local Renewable Energy Grid Optimization and Demand Forecasting",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "none",
+        "url": "https://api.localrenewabledata.com/solar",
+        "options": {},
+        "responseFormat": "json",
+        "headerParametersUi": {
+          "parameter": []
+        },
+        "queryParametersUi": {
+          "parameter": []
+        }
+      },
+      "name": "Get Solar Data",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        150,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "none",
+        "url": "https://api.localrenewabledata.com/wind",
+        "options": {},
+        "responseFormat": "json",
+        "headerParametersUi": {
+          "parameter": []
+        },
+        "queryParametersUi": {
+          "parameter": []
+        }
+      },
+      "name": "Get Wind Data",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        150,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "none",
+        "url": "https://api.localrenewabledata.com/storage",
+        "options": {},
+        "responseFormat": "json",
+        "headerParametersUi": {
+          "parameter": []
+        },
+        "queryParametersUi": {
+          "parameter": []
+        }
+      },
+      "name": "Get Storage Status",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        150,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "none",
+        "url": "https://api.localweather.com/current",
+        "options": {},
+        "responseFormat": "json",
+        "headerParametersUi": {
+          "parameter": []
+        },
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "location",
+              "value": "local_area"
+            }
+          ]
+        }
+      },
+      "name": "Get Weather Data",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        150,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "none",
+        "url": "https://api.localconsumption.com/consumption",
+        "options": {},
+        "responseFormat": "json",
+        "headerParametersUi": {
+          "parameter": []
+        },
+        "queryParametersUi": {
+          "parameter": []
+        }
+      },
+      "name": "Get Consumption Data",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        150,
+        750
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const solar = items[0].json;\nconst wind = items[1].json;\nconst storage = items[2].json;\nconst weather = items[3].json;\nconst consumption = items[4].json;\n\n// Aggregate and prepare data for AI\nreturn [{\n  json: {\n    solarData: solar,\n    windData: wind,\n    storageStatus: storage,\n    weatherData: weather,\n    consumptionData: consumption\n  }\n}];"
+      },
+      "name": "Aggregate Data",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        400,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "temperature": 0.3,
+        "maxTokens": 500,
+        "topP": 1,
+        "frequencyPenalty": 0,
+        "presencePenalty": 0,
+        "stopSequences": [],
+        "prompt": "You are an AI specialized in renewable energy grid optimization and forecasting.\n\nInput JSON contains solarData, windData, storageStatus, weatherData, and consumptionData.\n\nAnalyze the data to forecast next 24-hour energy demand and renewable supply, optimize grid balancing and storage management recommendations, and identify energy optimization opportunities.\n\nReturn a JSON with forecastDemand, forecastSupply, storageRecommendations, gridBalanceActions, and alerts."
+      },
+      "name": "AI Forecast & Optimization",
+      "type": "openai",
+      "typeVersion": 1,
+      "position": [
+        650,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const response = items[0].json;\n\nreturn [{\n  json: {\n    forecastDemand: response.forecastDemand,\n    forecastSupply: response.forecastSupply,\n    storageRecommendations: response.storageRecommendations,\n    gridBalanceActions: response.gridBalanceActions,\n    alerts: response.alerts\n  }\n}];"
+      },
+      "name": "Parse AI Response",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "send",
+        "subject": "Renewable Energy Grid Optimization Alerts",
+        "message": "The following alerts have been generated based on the latest AI analysis:\n\n{{$json[\"alerts\"]}}",
+        "toEmail": "grid_management@localenergy.org"
+      },
+      "name": "Send Alert Email",
+      "type": "emailSend",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        550
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Prepare commands for grid balancing and storage based on AI recommendations.\nconst gridActions = items[0].json.gridBalanceActions;\nconst storageActions = items[0].json.storageRecommendations;\n\n// Example: Format commands for automation API calls\nreturn [\n  {\n    json: { type: 'gridBalance', actions: gridActions }\n  },\n  {\n    json: { type: 'storageManagement', actions: storageActions }\n  }\n];"
+      },
+      "name": "Prepare Automation Commands",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "none",
+        "url": "https://api.localrenewabledata.com/grid/balance",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={{$json}}"
+      },
+      "name": "Execute Grid Balancing",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "none",
+        "url": "https://api.localrenewabledata.com/storage/manage",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={{$json}}"
+      },
+      "name": "Execute Storage Management",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Get Solar Data": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Wind Data": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Get Storage Status": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Data",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Get Weather Data": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Data",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Get Consumption Data": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Data",
+            "type": "main",
+            "index": 4
+          }
+        ]
+      ]
+    },
+    "Aggregate Data": {
+      "main": [
+        [
+          {
+            "node": "AI Forecast & Optimization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Forecast & Optimization": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Prepare Automation Commands",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Alert Email",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Prepare Automation Commands": {
+      "main": [
+        [
+          {
+            "node": "Execute Grid Balancing",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Execute Storage Management",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  }
+}
