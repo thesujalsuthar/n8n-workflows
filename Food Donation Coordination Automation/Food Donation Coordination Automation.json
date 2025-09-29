@@ -1,0 +1,245 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "food-availability",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Get Food Availability",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Sample transformation to standardize food availability data\n  Input: array of donation entries\n  Output: array of standardized donation objects\n*/\n\nconst standardized = items[0].json.data.map(donation => {\n  return {\n    id: donation.id || donation.donation_id,\n    type: donation.food_type || donation.type,\n    quantity: donation.quantity,\n    expiryDate: donation.expiry_date || donation.expiry,\n    location: donation.pickup_location || donation.location,\n    donorContact: donation.contact || null\n  };\n});\n\nreturn standardized.map(item => ({ json: item }));"
+      },
+      "name": "Standardize Food Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "filters": {
+          "conditions": [
+            [
+              {
+                "value1": "={{ new Date($json.expiryDate).getTime() }}",
+                "operation": ">",
+                "value2": "={{ Date.now() }}"
+              }
+            ]
+          ]
+        }
+      },
+      "name": "Filter Expired Food",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        650,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "local-nonprofits",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Get Local Nonprofits",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nMatch available food donations to nonprofits based on location and food type preference\nReturn matches as an array of objects with donation and nonprofit info\n*/\n\nconst foods = items[0].json;\nconst nonprofits = items[1].json.data;\n\nconst matches = [];\n\nfor (const food of foods) {\n  for (const nonprofit of nonprofits) {\n    // Sample matching condition: nonprofit accepts the food type and is in the same location\n    if (\n      nonprofit.accepted_food_types.includes(food.type) &&\n      nonprofit.service_areas.includes(food.location)\n    ) {\n      matches.push({\n        donationId: food.id,\n        foodType: food.type,\n        quantity: food.quantity,\n        nonprofitId: nonprofit.id,\n        nonprofitName: nonprofit.name,\n        nonprofitContact: nonprofit.contact\n      });\n    }\n  }\n}\n\nreturn matches.map(match => ({ json: match }));"
+      },
+      "name": "Match Donations to Nonprofits",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "channel": "email",
+        "toEmail": "={{ $json.nonprofitContact.email }}",
+        "subject": "New Food Donation Available for Pickup",
+        "text": "Hello {{$json.nonprofitName}},\n\nThere is a new food donation available:\n\n- Type: {{$json.foodType}}\n- Quantity: {{$json.quantity}}\n\nPlease arrange for pickup or let us know if you need assistance.\n\nThank you for your support.",
+        "fromEmail": "donations@localfoodsystem.org"
+      },
+      "name": "Send Notification to Nonprofit",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        850,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nAuto-schedule pickup and delivery based on donation and nonprofit info\nThis is a placeholder logic to create a pickup time 1 day from now\n*/\n\nconst scheduleDate = new Date();\nscheduleDate.setDate(scheduleDate.getDate() + 1);\n\nreturn [{\n  json: {\n    donationId: items[0].json.donationId,\n    nonprofitId: items[0].json.nonprofitId,\n    pickupDate: scheduleDate.toISOString(),\n    deliveryDate: new Date(scheduleDate.getTime() + 2 * 3600 * 1000).toISOString() // 2 hours after pickup\n  }\n}];"
+      },
+      "name": "Schedule Pickup and Delivery",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "calendarEvent",
+        "operation": "create",
+        "calendarId": "primary",
+        "summary": "Food Donation Pickup: {{$json.donationId}} for {{$json.nonprofitId}}",
+        "start": "={{ $json.pickupDate }}",
+        "end": "={{ new Date(new Date($json.pickupDate).getTime() + 30*60000).toISOString() }}",
+        "description": "Pickup scheduled for local food donation. Please coordinate with the nonprofit."
+      },
+      "name": "Create Pickup Calendar Event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        400
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": "Google Calendar Account"
+      }
+    },
+    {
+      "parameters": {
+        "resource": "calendarEvent",
+        "operation": "create",
+        "calendarId": "primary",
+        "summary": "Food Donation Delivery: {{$json.donationId}} for {{$json.nonprofitId}}",
+        "start": "={{ $json.deliveryDate }}",
+        "end": "={{ new Date(new Date($json.deliveryDate).getTime() + 60*60000).toISOString() }}",
+        "description": "Delivery scheduled for local food donation. Please coordinate with the nonprofit."
+      },
+      "name": "Create Delivery Calendar Event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        500
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": "Google Calendar Account"
+      }
+    }
+  ],
+  "connections": {
+    "Get Food Availability": {
+      "main": [
+        [
+          {
+            "node": "Standardize Food Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Standardize Food Data": {
+      "main": [
+        [
+          {
+            "node": "Filter Expired Food",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Expired Food": {
+      "main": [
+        [],
+        []
+      ],
+      "mainFilter": 0
+    },
+    "Get Local Nonprofits": {
+      "main": [
+        []
+      ]
+    },
+    "Filter Expired Food": {
+      "main": [
+        [
+          {
+            "node": "Match Donations to Nonprofits",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Match Donations to Nonprofits": {
+      "main": [
+        [
+          {
+            "node": "Send Notification to Nonprofit",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Schedule Pickup and Delivery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Notification to Nonprofit": {
+      "main": [
+        []
+      ]
+    },
+    "Schedule Pickup and Delivery": {
+      "main": [
+        [
+          {
+            "node": "Create Pickup Calendar Event",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create Delivery Calendar Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Pickup Calendar Event": {
+      "main": [
+        []
+      ]
+    },
+    "Create Delivery Calendar Event": {
+      "main": [
+        []
+      ]
+    }
+  }
+}
