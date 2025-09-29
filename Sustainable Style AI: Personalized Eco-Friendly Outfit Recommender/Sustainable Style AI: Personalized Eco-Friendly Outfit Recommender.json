@@ -1,0 +1,206 @@
+{
+  "name": "AI-Powered Personalized Sustainable Fashion Outfit Recommender",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "none",
+        "httpMethod": "POST",
+        "path": "get-wardrobe",
+        "options": {}
+      },
+      "id": "1",
+      "name": "Receive User Request",
+      "type": "n8n-nodes-base.httpTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "returnAll": true,
+        "filters": {},
+        "resource": "items",
+        "additionalFields": {},
+        "collection": "wardrobe",
+        "database": "user_database"
+      },
+      "id": "2",
+      "name": "Fetch User Wardrobe",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        450,
+        200
+      ],
+      "credentials": {
+        "mongoDb": "User MongoDB Credentials"
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://api.openweathermap.org/data/2.5/onecall",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "lat",
+              "value": "={{$json[\"latitude\"]}}"
+            },
+            {
+              "name": "lon",
+              "value": "={{$json[\"longitude\"]}}"
+            },
+            {
+              "name": "exclude",
+              "value": "minutely,hourly,alerts"
+            },
+            {
+              "name": "units",
+              "value": "metric"
+            },
+            {
+              "name": "appid",
+              "value": "={{$credentials.openWeatherMapApi.apiKey}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "3",
+      "name": "Fetch Weather Forecast",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        650,
+        200
+      ],
+      "credentials": {
+        "openWeatherMapApi": "OpenWeatherMap API Key"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Inputs:\n   - wardrobe (array): list of user clothing items with metadata (type, material, color, ecoScore etc.)\n   - weatherData (object): daily forecasts\n   - sustainabilityPreference (number): user preference weight for sustainability\n  Output:\n   - recommendation (object): recommended outfit with sustainability score\n*/\n\nconst wardrobe = $items(\"Fetch User Wardrobe\")[0].json;\nconst weatherData = $items(\"Fetch Weather Forecast\")[0].json.daily[0];\nconst sustainabilityPreference = $json[\"sustainabilityPreference\"] || 0.7;\n\nconst temp = weatherData.temp.day;\nconst rain = weatherData.pop; // probability of precipitation\n\n// Filter wardrobe items by weather suitability\nfunction suitableForWeather(item) {\n  if (temp > 20) {\n    if (item.type === \"coat\" || item.type === \"sweater\") return false;\n    return true;\n  } else if (temp > 10) {\n    if (item.type === \"tshirt\" || item.type === \"shorts\") return false;\n    return true;\n  } else {\n    if (item.type === \"tshirt\" || item.type === \"shorts\") return false;\n    return true;\n  }\n}\n\n// Calculate sustainability score weighted by user preference\nfunction weightedScore(item) {\n  return item.ecoScore * sustainabilityPreference + (1 - sustainabilityPreference) * 0.5;\n}\n\nconst suitableItems = wardrobe.filter(item => suitableForWeather(item));\n\n// Group items by type\nconst typesNeeded = [\"top\", \"bottom\", \"outerwear\", \"shoes\"];\nlet outfit = {};\n\nfor (const type of typesNeeded) {\n  const candidates = suitableItems.filter(item => item.type === type);\n  if (candidates.length === 0) {\n    outfit[type] = null;\n  } else {\n    // Pick the highest weighted sustainability score\n    candidates.sort((a, b) => weightedScore(b) - weightedScore(a));\n    outfit[type] = candidates[0];\n  }\n}\n\nconst totalEcoScore = Object.values(outfit).reduce((acc, item) => {\n  if (!item) return acc;\n  return acc + item.ecoScore;\n}, 0) / Object.values(outfit).filter(i => i).length;\n\nreturn [{ json: { outfit, totalEcoScore, weatherSummary: weatherData.weather[0].description } }];"
+      },
+      "id": "4",
+      "name": "Generate Outfit Recommendation",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "collection": "user_impact",
+        "database": "user_database",
+        "filter": {
+          "userId": "={{$json[\"userId\"]}}"
+        },
+        "update": {
+          "$inc": {
+            "sustainableOutfits": 1,
+            "ecoPoints": "={{Math.round($json[\"totalEcoScore\"] * 100)}}"
+          },
+          "$setOnInsert": {
+            "userId": "={{$json[\"userId\"]}}"
+          }
+        }
+      },
+      "id": "5",
+      "name": "Update User Impact",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        200
+      ],
+      "credentials": {
+        "mongoDb": "User MongoDB Credentials"
+      }
+    },
+    {
+      "parameters": {
+        "operation": "sendMessage",
+        "message": "={{\n  `Good morning! Your sustainable outfit for today: \\nTop: ${$json[\"outfit\"][\"top\"] ? $json[\"outfit\"][\"top\"].name : \"none\"}\\nBottom: ${$json[\"outfit\"][\"bottom\"] ? $json[\"outfit\"][\"bottom\"].name : \"none\"}\\nOuterwear: ${$json[\"outfit\"][\"outerwear\"] ? $json[\"outfit\"][\"outerwear\"].name : \"none\"}\\nShoes: ${$json[\"outfit\"][\"shoes\"] ? $json[\"outfit\"][\"shoes\"].name : \"none\"}\\nWeather: ${$json[\"weatherSummary\"]}\\nSustainability Score: ${($json[\"totalEcoScore\"] * 100).toFixed(0)} pts \\nRemember to wear ethically and sustainably! 🌿`\n}}",
+        "to": "={{$json[\"userContact\"]}}",
+        "channel": "email"
+      },
+      "id": "6",
+      "name": "Send Daily Notification",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        200
+      ],
+      "credentials": {
+        "smtp": "User SMTP Credentials"
+      }
+    }
+  ],
+  "connections": {
+    "Receive User Request": {
+      "main": [
+        [
+          {
+            "node": "Fetch User Wardrobe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch User Wardrobe": {
+      "main": [
+        [
+          {
+            "node": "Fetch Weather Forecast",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Weather Forecast": {
+      "main": [
+        [
+          {
+            "node": "Generate Outfit Recommendation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Outfit Recommendation": {
+      "main": [
+        [
+          {
+            "node": "Update User Impact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update User Impact": {
+      "main": [
+        [
+          {
+            "node": "Send Daily Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "ai-personalized-sustainable-fashion"
+}
