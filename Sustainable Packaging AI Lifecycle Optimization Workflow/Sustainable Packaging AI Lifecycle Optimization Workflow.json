@@ -1,0 +1,171 @@
+{
+  "name": "AI-Powered Sustainable Packaging Lifecycle Tracker and Optimization Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.example.com/packages/lifecycle/status",
+        "options": {},
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "packageId",
+              "value": "={{$json[\"packageId\"]}}"
+            }
+          ]
+        }
+      },
+      "name": "Get Packaging Lifecycle Data",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const data = items[0].json;\n\n// Example transformation extracting relevant lifecycle stages\nreturn [{\n  json: {\n    packageId: data.packageId,\n    procurement: data.lifecycle.procurement,\n    production: data.lifecycle.production,\n    distribution: data.lifecycle.distribution,\n    usage: data.lifecycle.usage,\n    endOfLife: data.lifecycle.endOfLife\n  }\n}];"
+      },
+      "name": "Transform Lifecycle Data",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "prompt": "You are an AI sustainability expert. Given the packaging lifecycle data including procurement, production, distribution, usage, and end-of-life stages, provide actionable recommendations to minimize the environmental footprint. Reply with a JSON object that includes 'recommendations' as an array of strings and a 'summaryImpactScore' as a number between 0 and 100, where lower is better.\n\nPackaging Data:\n{{ $json | json }}\n\nRecommendations:",
+        "options": {}
+      },
+      "name": "Generate AI Recommendations",
+      "type": "openai",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "table": "sustainability_reports",
+        "columns": [
+          {
+            "name": "package_id",
+            "value": "={{$json[\"packageId\"]}}"
+          },
+          {
+            "name": "recommendations",
+            "value": "={{JSON.stringify($json[\"recommendations\"] || [])}}"
+          },
+          {
+            "name": "impact_score",
+            "value": "={{$json[\"summaryImpactScore\"]}}"
+          },
+          {
+            "name": "last_updated",
+            "value": "={{new Date().toISOString()}}"
+          }
+        ]
+      },
+      "name": "Save Recommendations to DB",
+      "type": "postgres",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ],
+      "credentials": {
+        "postgres": "Postgres Credentials"
+      }
+    },
+    {
+      "parameters": {
+        "channel": "#sustainability-alerts",
+        "text": "={{`Package ID: ${$json[\"packageId\"]}\\nImpact Score: ${$json[\"summaryImpactScore\"]}\\nRecommendations:\\n${$json[\"recommendations\"].join(\"\\n- \")}`}}"
+      },
+      "name": "Notify Team via Slack",
+      "type": "slack",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ],
+      "credentials": {
+        "slackApi": "Slack API"
+      }
+    },
+    {
+      "parameters": {
+        "scheduleTimes": [
+          {
+            "hour": 9,
+            "minute": 0
+          }
+        ],
+        "options": {}
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        50,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Packaging Lifecycle Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Packaging Lifecycle Data": {
+      "main": [
+        [
+          {
+            "node": "Transform Lifecycle Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transform Lifecycle Data": {
+      "main": [
+        [
+          {
+            "node": "Generate AI Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate AI Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Save Recommendations to DB",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Notify Team via Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
