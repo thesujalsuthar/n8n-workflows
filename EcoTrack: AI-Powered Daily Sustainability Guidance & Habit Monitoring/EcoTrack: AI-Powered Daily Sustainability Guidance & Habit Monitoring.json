@@ -1,0 +1,214 @@
+{
+  "name": "AI-Driven Personalized Daily Sustainability Tip Delivery and Habit Tracker",
+  "nodes": [
+    {
+      "parameters": {
+        "functionCode": "const tips = [\n  \"Use a reusable water bottle instead of single-use plastic.\",\n  \"Turn off lights when not in use to save energy.\",\n  \"Opt for public transportation or carpooling.\",\n  \"Reduce food waste by planning meals ahead.\",\n  \"Plant native trees and shrubs in your garden.\",\n  \"Use energy-efficient appliances.\",\n  \"Take shorter showers to conserve water.\",\n  \"Buy locally-produced products to reduce carbon footprint.\",\n  \"Recycle paper, plastic, and glass properly.\",\n  \"Support companies with sustainable practices.\"\n];\n\n// Random daily tip\nconst dailyTip = tips[Math.floor(Math.random() * tips.length)];\n\n// Example personalized suggestions based on user data\nconst userData = $json.userHabitData || {\n  composting: false,\n  recycling: false,\n  reducingPlastic: true,\n  energySaving: false\n};\n\nconst suggestions = [];\n\nif (!userData.composting) suggestions.push(\"Start a compost bin to reduce organic waste.\");\nif (!userData.recycling) suggestions.push(\"Make sure to segregate and recycle household waste.\");\nif (!userData.energySaving) suggestions.push(\"Try using LED bulbs and unplug devices when not in use.\");\n\nreturn {\n  dailyTip,\n  personalizedSuggestions: suggestions.length > 0 ? suggestions : [\"You're doing great! Keep up the sustainable habits!\"],\n  userHabitData: userData\n};"
+      },
+      "name": "Generate Daily Tip and Personalized Suggestions",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        270,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.externalhabittracker.com/user/{{ $json.userId }}/habits/status",
+        "responseFormat": "json",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $credentials.habitTrackerApi.apiKey }}"
+            }
+          ]
+        }
+      },
+      "name": "Get User Habit Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        50,
+        300
+      ],
+      "credentials": {
+        "habitTrackerApi": {
+          "id": "1",
+          "name": "Habit Tracker API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const habits = $json.userHabitData || {};\n\n// Simple progress calculation example: percentage of true habits\nconst totalHabits = Object.keys(habits).length;\nconst completedHabits = Object.values(habits).filter(Boolean).length;\n\nconst adherencePercent = totalHabits === 0 ? 0 : Math.round((completedHabits / totalHabits) * 100);\n\n// Estimate environmental impact saved (mock data)\nconst impactPerHabit = 5; // arbitrary units per habit adhered\nconst totalImpactSaved = completedHabits * impactPerHabit;\n\nreturn {\n  habitAdherence: adherencePercent,\n  environmentalImpactSaved: totalImpactSaved\n};"
+      },
+      "name": "Calculate Habit Progress and Impact",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        490,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "noreply@sustainabilityapp.com",
+        "toEmail": "={{$json.userEmail}}",
+        "subject": "Your Personalized Daily Sustainability Tips and Progress",
+        "text": "Good day!\n\nHere is your daily eco-friendly tip:\n\n{{$json.dailyTip}}\n\nPersonalized sustainability suggestions for today:\n{{#each $json.personalizedSuggestions}}\n- {{this}}\n{{/each}}\n\nYour habit adherence progress: {{$json.habitAdherence}}%\nEstimated environmental impact saved: {{$json.environmentalImpactSaved}} units\n\nKeep up the great work to make a positive difference!\n\nBest regards,\nSustainability Tracker Bot"
+      },
+      "name": "Send Daily Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        670,
+        300
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "2",
+          "name": "SMTP Email"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "={{$json.userMessagingChannel || 'default-channel'}}",
+        "text": "Good day! :seedling:\n\nToday's eco-friendly tip:\n{{$json.dailyTip}}\n\nPersonal tips for you:\n{{#each $json.personalizedSuggestions}}\n- {{this}}\n{{/each}}\n\nHabit adherence: {{$json.habitAdherence}}%\nEnvironmental impact saved: {{$json.environmentalImpactSaved}} units\n\nKeep growing greener every day!"
+      },
+      "name": "Send Message",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        670,
+        420
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "3",
+          "name": "Slack API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return {\n  dashboardSummary: {\n    date: new Date().toISOString().split('T')[0],\n    habitAdherencePercent: $json.habitAdherence,\n    environmentalImpactSavedUnits: $json.environmentalImpactSaved,\n    dailyTip: $json.dailyTip,\n    personalizedSuggestions: $json.personalizedSuggestions\n  }\n};"
+      },
+      "name": "Prepare Dashboard Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        480,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.dashboardservice.com/updateUserDashboard",
+        "method": "POST",
+        "options": {},
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "dashboardSummary",
+              "value": "={{JSON.stringify($json.dashboardSummary)}}"
+            },
+            {
+              "name": "userId",
+              "value": "={{$json.userId}}"
+            }
+          ]
+        },
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $credentials.dashboardApi.apiKey }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        }
+      },
+      "name": "Update User Dashboard",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        670,
+        500
+      ],
+      "credentials": {
+        "dashboardApi": {
+          "id": "4",
+          "name": "Dashboard API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Get User Habit Data": {
+      "main": [
+        [
+          {
+            "node": "Generate Daily Tip and Personalized Suggestions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Daily Tip and Personalized Suggestions": {
+      "main": [
+        [
+          {
+            "node": "Calculate Habit Progress and Impact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Habit Progress and Impact": {
+      "main": [
+        [
+          {
+            "node": "Send Daily Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Message",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "Prepare Dashboard Data",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Prepare Dashboard Data": {
+      "main": [
+        [
+          {
+            "node": "Update User Dashboard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
