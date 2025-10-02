@@ -1,0 +1,265 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "mode": "awaitMessage",
+        "event": "text",
+        "text": "Welcome to EcoTravel AI! Please provide your trip details as a JSON with destinations, dates, and preferences."
+      },
+      "name": "User Input",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const input = $json[\"message\"][\"text\"];\ntry {\n  const data = JSON.parse(input);\n  return [{ json: data }];\n} catch(e) {\n  throw new Error(\"Invalid JSON format for trip details.\");\n}"
+      },
+      "name": "Parse Trip Details",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        300,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.ecotravel.com/sustainable-transport",
+        "method": "POST",
+        "responseFormat": "json",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={ \"destinations\": $json[\"destinations\"], \"preferences\": $json[\"preferences\"] }"
+      },
+      "name": "Fetch Sustainable Transport Options",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        550,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.ecotravel.com/sustainable-accommodations",
+        "method": "POST",
+        "responseFormat": "json",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={ \"destinations\": $json[\"destinations\"], \"dates\": $json[\"dates\"], \"preferences\": $json[\"preferences\"] }"
+      },
+      "name": "Fetch Sustainable Accommodations",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        550,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.ecotravel.com/sustainable-activities",
+        "method": "POST",
+        "responseFormat": "json",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={ \"destinations\": $json[\"destinations\"], \"dates\": $json[\"dates\"], \"preferences\": $json[\"preferences\"] }"
+      },
+      "name": "Fetch Sustainable Activities",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        550,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.carbonfootprint.io/calculate",
+        "method": "POST",
+        "responseFormat": "json",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={ \"transport\": $json[\"transportOptions\"], \"accommodation\": $json[\"accommodationOptions\"], \"activities\": $json[\"activityOptions\"], \"dates\": $json[\"dates\"] }"
+      },
+      "name": "Calculate Carbon Footprint",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        800,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.carbonoffset.com/projects/recommendations",
+        "method": "GET",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Fetch Carbon Offset Projects",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        800,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const transport = $itemsByName[\"Fetch Sustainable Transport Options\"][0].json;\nconst accommodation = $itemsByName[\"Fetch Sustainable Accommodations\"][0].json;\nconst activities = $itemsByName[\"Fetch Sustainable Activities\"][0].json;\nconst carbon = $itemsByName[\"Calculate Carbon Footprint\"][0].json;\nconst carbonOffsets = $itemsByName[\"Fetch Carbon Offset Projects\"][0].json;\n\nconst tripDetails = $itemsByName[\"Parse Trip Details\"][0].json;\n\nconst summary = `EcoTravel AI: Your Sustainable Journey Plan\\n\\nDestinations: ${tripDetails.destinations.join(\", \")}\\nDates: ${tripDetails.dates.start} to ${tripDetails.dates.end}\\n\\nSustainable Transportation Options:\\n${transport.options.map(o => `- ${o.name}: ${o.description} (Book: ${o.bookingLink})`).join('\\n')}\\n\\nSustainable Accommodations:\\n${accommodation.options.map(a => `- ${a.name} (${a.type}): ${a.description} (Book: ${a.bookingLink || a.contact})`).join('\\n')}\\n\\nSustainable Activities:\\n${activities.options.map(act => `- ${act.name}: ${act.description} (More info: ${act.link})`).join('\\n')}\\n\\nEstimated Carbon Footprint: ${carbon.footprint} kg CO2e\\n\\nRecommended Carbon Offset Projects:\\n${carbonOffsets.projects.slice(0,3).map(p => `- ${p.name}: ${p.description} (Support: ${p.url})`).join('\\n')}\\n\\nThank you for choosing EcoTravel AI to plan your sustainable journey!`;\n\nreturn [{ json: { summary, email: tripDetails.email, phone: tripDetails.phone } }];"
+      },
+      "name": "Compile Travel Plan Summary",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "ecotravel@domain.com",
+        "toEmail": "={{$json[\"email\"]}}",
+        "subject": "Your EcoTravel AI Sustainable Journey Plan",
+        "text": "={{$json[\"summary\"]}}"
+      },
+      "name": "Send Email Summary",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        250
+      ],
+      "credentials": {
+        "smtp": "Your SMTP Credentials"
+      }
+    },
+    {
+      "parameters": {
+        "channel": "sms",
+        "phoneNumber": "={{$json[\"phone\"]}}",
+        "message": "={{$json[\"summary\"]}}"
+      },
+      "name": "Send SMS Summary",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        350
+      ],
+      "credentials": {
+        "twilioApi": "Your Twilio API Credentials"
+      }
+    }
+  ],
+  "connections": {
+    "User Input": {
+      "main": [
+        [
+          {
+            "node": "Parse Trip Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Trip Details": {
+      "main": [
+        [
+          {
+            "node": "Fetch Sustainable Transport Options",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Sustainable Accommodations",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Sustainable Activities",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Sustainable Transport Options": {
+      "main": [
+        [
+          {
+            "node": "Calculate Carbon Footprint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Sustainable Accommodations": {
+      "main": [
+        [
+          {
+            "node": "Calculate Carbon Footprint",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch Sustainable Activities": {
+      "main": [
+        [
+          {
+            "node": "Calculate Carbon Footprint",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Calculate Carbon Footprint": {
+      "main": [
+        [
+          {
+            "node": "Fetch Carbon Offset Projects",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Carbon Offset Projects": {
+      "main": [
+        [
+          {
+            "node": "Compile Travel Plan Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compile Travel Plan Summary": {
+      "main": [
+        [
+          {
+            "node": "Send Email Summary",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send SMS Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
