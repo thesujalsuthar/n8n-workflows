@@ -1,0 +1,206 @@
+{
+  "name": "AI-Powered Sustainable Fashion Outfit Recommender",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "user-preferences",
+        "options": {},
+        "responseMode": "lastNode",
+        "responseData": "={{$json}}"
+      },
+      "name": "User Input Trigger",
+      "type": "n8n-nodes-base.httpTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.fashiondata.io/v1/trends/current",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_FASHION_DATA_API_KEY"
+            }
+          ]
+        }
+      },
+      "name": "Fetch Current Fashion Trends",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        650,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.sustainabilitymetrics.com/v1/scores",
+        "options": {},
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "item_ids",
+              "value": "={{JSON.stringify($json['fashionItems'].map(item => item.id))}}"
+            }
+          ]
+        },
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_SUSTAINABILITY_API_KEY"
+            }
+          ]
+        }
+      },
+      "name": "Fetch Sustainability Scores",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        650,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const preferences = items[0].json;\nconst trends = items[1].json;\nconst scores = items[2].json;\n\n// Extract fashion items from trends\nconst fashionItems = trends.items || [];\n\n// Map each fashion item with sustainability score\nconst scoredItems = fashionItems.map(item => {\n  const scoreObj = scores.find(s => s.item_id === item.id) || {};\n  return {\n    ...item,\n    sustainability_score: scoreObj.score || 0\n  };\n});\n\n// Filter items based on user preferences and a minimum sustainability score\nconst filteredItems = scoredItems.filter(item => {\n  const matchesPreference = preferences.style ? item.styles?.includes(preferences.style) : true;\n  const ecoFriendly = item.sustainability_score >= (preferences.minSustainabilityScore || 70);\n  return matchesPreference && ecoFriendly;\n});\n\n// Sort by sustainability score descending\nfilteredItems.sort((a, b) => b.sustainability_score - a.sustainability_score);\n\n// Prepare recommendations\nreturn [{json: {recommendations: filteredItems.slice(0,5)}}];"
+      },
+      "name": "Generate Recommendations",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ],
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "fromEmail": "no-reply@sustainablefashion.ai",
+        "toEmail": "={{$json.email}}",
+        "subject": "Your Sustainable Fashion Outfit Recommendations",
+        "text": "Hello {{$json.name}},\n\nBased on your preferences and the latest trends, here are some sustainable fashion outfit recommendations for you:\n\n{{$json.recommendations.map(item => `- ${item.name} (Sustainability Score: ${item.sustainability_score})`).join('\\n')}}\n\nStay stylish and eco-friendly!\n\nBest regards,\nSustainable Fashion AI Recommender"
+      },
+      "name": "Send Recommendation Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{$json.chatId}}",
+        "text": "Hello {{$json.name}}, here are your sustainable fashion outfit recommendations:\n\n{{$json.recommendations.map(item => `- ${item.name} (Score: ${item.sustainability_score})`).join('\\n')}}\n\nEnjoy your eco-friendly style! 🌿",
+        "options": {}
+      },
+      "name": "Send Recommendations via Chat",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        450
+      ]
+    },
+    {
+      "parameters": {},
+      "name": "Split Based on Communication Preference",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ],
+      "rules": [
+        {
+          "value1": "={{$json.communicationPreference}}",
+          "operation": "equal",
+          "value2": "email"
+        },
+        {
+          "value1": "={{$json.communicationPreference}}",
+          "operation": "equal",
+          "value2": "chat"
+        }
+      ]
+    }
+  ],
+  "connections": {
+    "User Input Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Current Fashion Trends",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Sustainability Scores",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Current Fashion Trends": {
+      "main": [
+        [
+          {
+            "node": "Generate Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Sustainability Scores": {
+      "main": [
+        [
+          {
+            "node": "Generate Recommendations",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Generate Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Split Based on Communication Preference",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Based on Communication Preference": {
+      "main": [
+        [
+          {
+            "node": "Send Recommendation Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Recommendations via Chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
