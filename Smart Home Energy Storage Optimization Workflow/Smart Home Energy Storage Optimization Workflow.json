@@ -1,0 +1,227 @@
+{
+  "name": "AI-Powered Smart Home Energy Storage Optimizer",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.smarthome.local/devices/energy_consumption",
+        "options": {},
+        "authentication": null,
+        "responseFormat": "json",
+        "headerParametersUi": {
+          "parameter": []
+        },
+        "queryParametersUi": {
+          "parameter": []
+        }
+      },
+      "name": "Get Real-Time Energy Consumption",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        250,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.smarthome.local/devices/solar_panels/production",
+        "options": {},
+        "authentication": null,
+        "responseFormat": "json",
+        "headerParametersUi": {
+          "parameter": []
+        },
+        "queryParametersUi": {
+          "parameter": []
+        }
+      },
+      "name": "Get Solar Panel Production",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        250,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.smarthome.local/devices/energy_storage/status",
+        "options": {},
+        "authentication": null,
+        "responseFormat": "json",
+        "headerParametersUi": {
+          "parameter": []
+        },
+        "queryParametersUi": {
+          "parameter": []
+        }
+      },
+      "name": "Get Energy Storage Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        250,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const consumption = items[0].json.consumption_kw || 0;\nconst production = items[1].json.production_kw || 0;\nconst storage = items[2].json.storage_level_percent || 0;\nconst storageCapacity = items[2].json.storage_capacity_kw || 100;\n\nlet action = \"hold\";\nlet chargeKw = 0;\nlet dischargeKw = 0;\n\n// Simple optimization logic:\n// If production exceeds consumption, charge storage if not full\n// If consumption exceeds production, discharge storage if not empty\n\nif (production > consumption) {\n  if (storage < 95) {\n    chargeKw = Math.min(production - consumption, (100 - storage) / 100 * storageCapacity);\n    action = \"charge\";\n  }\n} else if (consumption > production) {\n  if (storage > 5) {\n    dischargeKw = Math.min(consumption - production, storage / 100 * storageCapacity);\n    action = \"discharge\";\n  }\n}\n\nreturn [{\n  json: {\n    action,\n    chargeKw,\n    dischargeKw\n  }\n}];"
+      },
+      "name": "Optimize Energy Usage",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [
+        600,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.smarthome.local/devices/energy_storage/control",
+        "method": "POST",
+        "options": {},
+        "bodyParametersJson": "={\"action\": $json[\"action\"], \"charge_kw\": $json[\"chargeKw\"], \"discharge_kw\": $json[\"dischargeKw\"]}",
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        }
+      },
+      "name": "Control Energy Storage System",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        900,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.utilityprovider.com/energy/prices/realtime",
+        "options": {},
+        "authentication": null,
+        "responseFormat": "json",
+        "headerParametersUi": {
+          "parameter": []
+        },
+        "queryParametersUi": {
+          "parameter": []
+        }
+      },
+      "name": "Get Real-Time Energy Prices",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        250,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const prices = items[0].json;\nconst action = items[1].json.action;\nconst chargeKw = items[1].json.chargeKw;\nconst dischargeKw = items[1].json.dischargeKw;\n\n// Example: Log cost optimization\n\nlet estimatedCostSaving = 0;\n\nif (action === \"charge\" && prices.current_price_per_kw < prices.average_price_per_kw) {\n  estimatedCostSaving = chargeKw * (prices.average_price_per_kw - prices.current_price_per_kw);\n} else if (action === \"discharge\" && prices.current_price_per_kw > prices.average_price_per_kw) {\n  estimatedCostSaving = dischargeKw * (prices.current_price_per_kw - prices.average_price_per_kw);\n}\n\nreturn [{\n  json: {\n    action,\n    chargeKw,\n    dischargeKw,\n    estimatedCostSaving\n  }\n}];"
+      },
+      "name": "Evaluate Cost Savings",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [
+        600,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "chatId": "YOUR_SMART_HOME_ADMIN_CHAT_ID",
+        "text": "Energy Storage Optimization Summary:\\nAction: {{$json[\"action\"]}}\\nCharge Power: {{$json[\"chargeKw\"]}} kW\\nDischarge Power: {{$json[\"dischargeKw\"]}} kW\\nEstimated Cost Saving: ${{$json[\"estimatedCostSaving\"].toFixed(2)}}"
+      },
+      "name": "Notify Smart Home Admin",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        900,
+        800
+      ]
+    }
+  ],
+  "connections": {
+    "Get Real-Time Energy Consumption": {
+      "main": [
+        [
+          {
+            "node": "Optimize Energy Usage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Solar Panel Production": {
+      "main": [
+        [
+          {
+            "node": "Optimize Energy Usage",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Get Energy Storage Status": {
+      "main": [
+        [
+          {
+            "node": "Optimize Energy Usage",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Optimize Energy Usage": {
+      "main": [
+        [
+          {
+            "node": "Control Energy Storage System",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Evaluate Cost Savings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Real-Time Energy Prices": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Cost Savings",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Evaluate Cost Savings": {
+      "main": [
+        [
+          {
+            "node": "Notify Smart Home Admin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
