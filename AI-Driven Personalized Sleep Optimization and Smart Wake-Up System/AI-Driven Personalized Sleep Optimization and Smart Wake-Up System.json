@@ -1,0 +1,189 @@
+{
+  "name": "AI-Powered Personalized Sleep Optimization and Smart Alarm System",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "accessToken",
+        "resource": "activity",
+        "operation": "get",
+        "additionalFields": {},
+        "filters": {
+          "dateFrom": "={{$moment().subtract(7, 'days').format('YYYY-MM-DD')}}",
+          "dateTo": "={{$moment().format('YYYY-MM-DD')}}"
+        }
+      },
+      "name": "Fetch Sleep Data",
+      "type": "n8n-nodes-base.fitbit",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "credentials": {
+        "fitbitApi": {
+          "id": "YOUR_FITBIT_CREDENTIALS_ID"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nAnalyze sleep patterns from fetched data.\nExpecting input to contain an array of sleep segments with timestamps and stages.\nReturns average sleep duration, time in each sleep stage, and sleep quality metrics.\n*/\nconst sleepData = items[0].json.sleep || [];\n\nif (!sleepData.length) {\n  return [{ json: { error: 'No sleep data available' } }];\n}\n\nlet totalSleepMinutes = 0;\nconst stageDurations = {};\n\nsleepData.forEach(segment => {\n  const stage = segment.level || 'unknown';\n  const duration = (segment.end - segment.start) / 60000; // ms to minutes\n  totalSleepMinutes += duration;\n  if (!stageDurations[stage]) {\n    stageDurations[stage] = 0;\n  }\n  stageDurations[stage] += duration;\n});\n\n// Calculate sleep efficiency (simplified)\nconst timeInBed = 8 * 60; // assume 8 hours in bed\nconst sleepEfficiency = (totalSleepMinutes / timeInBed) * 100;\n\nreturn [{\n  json: {\n    totalSleepMinutes,\n    stageDurations,\n    sleepEfficiency\n  }\n}];"
+      },
+      "name": "Analyze Sleep Patterns",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nGenerate personalized sleep improvement recommendations based on analyzed patterns.\n*/\nconst { totalSleepMinutes, stageDurations, sleepEfficiency } = items[0].json;\n\nconst recommendations = [];\n\nif (totalSleepMinutes < 420) {\n  recommendations.push('Try to increase total sleep duration to at least 7 hours');\n}\n\nif ((stageDurations.deep || 0) < 60) {\n  recommendations.push('Increase deep sleep time by reducing caffeine and stress');\n}\n\nif (sleepEfficiency < 85) {\n  recommendations.push('Improve sleep efficiency by maintaining consistent bedtimes and minimizing disruptions');\n}\n\nif (recommendations.length === 0) {\n  recommendations.push('Your sleep patterns look good! Keep up the good habits');\n}\n\nreturn [{ json: { recommendations } }];"
+      },
+      "name": "Generate Sleep Recommendations",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        720,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "script",
+        "operation": "run",
+        "script": "const fetch = require('node-fetch');\n\n// Determine optimal wake-up time during light sleep phase\nconst sleepSegments = $items('Fetch Sleep Data')[0].json.sleep || [];\nconst now = Date.now();\n\nfunction isLightSleep(segment) {\n  return segment.level === 'light';\n}\n\n// Find next light sleep window in the next hour\nconst nextHour = now + 3600000;\n\nconst upcomingLightSleep = sleepSegments.filter(segment =>\n  isLightSleep(segment) && segment.start >= now && segment.start <= nextHour\n);\n\nlet wakeUpTime = now + 3600000; // fallback 1 hour from now\nif (upcomingLightSleep.length) {\n  wakeUpTime = upcomingLightSleep[0].start;\n}\n\n// Format ISO\nconst wakeUpISO = new Date(wakeUpTime).toISOString();\n\nreturn [{ json: { wakeUpTime: wakeUpISO } }];"
+      },
+      "name": "Determine Optimal Wake-up Time",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        960,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "device": "SmartLight",
+        "command": {
+          "type": "turnOn",
+          "brightness": 100
+        },
+        "scheduleTime": "={{$json[\"wakeUpTime\"]}}"
+      },
+      "name": "Schedule Smart Light On",
+      "type": "n8n-nodes-base.smartHome",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        250
+      ],
+      "credentials": {
+        "smartHomeApi": {
+          "id": "YOUR_SMART_HOME_CREDENTIALS_ID"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "device": "SmartSpeaker",
+        "command": {
+          "type": "playSound",
+          "soundId": "alarm_sound"
+        },
+        "scheduleTime": "={{$json[\"wakeUpTime\"]}}"
+      },
+      "name": "Schedule Smart Alarm",
+      "type": "n8n-nodes-base.smartHome",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        350
+      ],
+      "credentials": {
+        "smartHomeApi": {
+          "id": "YOUR_SMART_HOME_CREDENTIALS_ID"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "notification",
+        "operation": "send",
+        "message": "Your personalized sleep recommendations:\n{{$json[\"recommendations\"].join('\\n- ')}}"
+      },
+      "name": "Send Recommendations Notification",
+      "type": "n8n-nodes-base.pushNotification",
+      "typeVersion": 1,
+      "position": [
+        960,
+        400
+      ],
+      "credentials": {
+        "pushNotificationApi": {
+          "id": "YOUR_PUSH_NOTIFICATION_CREDENTIALS_ID"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Fetch Sleep Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze Sleep Patterns",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Determine Optimal Wake-up Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Sleep Patterns": {
+      "main": [
+        [
+          {
+            "node": "Generate Sleep Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Sleep Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Send Recommendations Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Determine Optimal Wake-up Time": {
+      "main": [
+        [
+          {
+            "node": "Schedule Smart Light On",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Schedule Smart Alarm",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "ai_personalized_sleep_optimization_smart_alarm"
+}
