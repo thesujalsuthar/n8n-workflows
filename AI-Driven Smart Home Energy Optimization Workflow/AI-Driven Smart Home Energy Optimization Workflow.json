@@ -1,0 +1,139 @@
+{
+  "name": "AI-Powered Smart Home Energy Saver",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.smartmeter.example.com/v1/consumption/realtime",
+        "options": {}
+      },
+      "name": "Fetch Smart Meter Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const consumptionData = items[0].json;\n\n// Simulated AI analysis logic\n// In production, this might call an external AI service or run complex algorithms\n\n// Example: Identify peak consumption hours and suggest adjustments\nconst consumptionPattern = {\n  peakHours: [],\n  averageConsumption: 0,\n  recommendedAdjustments: []\n};\n\nlet total = 0;\nlet count = 0;\n\nfor (const record of consumptionData.hourly || []) {\n  total += record.consumption_kwh;\n  count++;\n  if (record.consumption_kwh > 1.5) {\n    consumptionPattern.peakHours.push(record.hour);\n    consumptionPattern.recommendedAdjustments.push({ device: 'HVAC', action: 'decrease_temperature', value: 2 });\n  }\n}\n\nconsumptionPattern.averageConsumption = count ? total / count : 0;\n\nreturn [{ json: consumptionPattern }];"
+      },
+      "name": "Analyze Consumption with AI",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const adjustments = items[0].json.recommendedAdjustments || [];\n\n// Format the commands for smart devices\nconst deviceCommands = adjustments.map(adj => {\n  return {\n    deviceId: adj.device,\n    action: adj.action,\n    value: adj.value\n  };\n});\n\nreturn deviceCommands.map(cmd => ({ json: cmd }));"
+      },
+      "name": "Prepare Device Commands",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "url": "https://api.smartdevices.example.com/v1/device/control",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={\n  \"deviceId\": $json[\"deviceId\"],\n  \"action\": $json[\"action\"],\n  \"value\": $json[\"value\"]\n}"
+      },
+      "name": "Send Commands to Smart Devices",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const pattern = items[0].json;\n\nlet alertMessage = `Energy Consumption Report:\\nAverage Consumption: ${pattern.averageConsumption.toFixed(2)} kWh`;\n\nif (pattern.peakHours.length > 0) {\n  alertMessage += `\\nPeak Hours Detected: ${pattern.peakHours.join(\", \")}`;\n  alertMessage += `\\nRecommended Adjustments have been applied.`;\n} else {\n  alertMessage += `\\nNo peak consumption hours detected.`;\n}\n\nreturn [{ json: { message: alertMessage } }];"
+      },
+      "name": "Generate Alert Message",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "toEmail": "={{$userEmail}}",
+        "subject": "Smart Home Energy Consumption Report",
+        "text": "={{$json[\"message\"]}}"
+      },
+      "name": "Send Email Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        750,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "Fetch Smart Meter Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze Consumption with AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Consumption with AI": {
+      "main": [
+        [
+          {
+            "node": "Prepare Device Commands",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate Alert Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Device Commands": {
+      "main": [
+        [
+          {
+            "node": "Send Commands to Smart Devices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Alert Message": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "ai-powered-smart-home-energy-saver"
+}
