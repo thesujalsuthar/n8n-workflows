@@ -1,0 +1,249 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "webhookId": "ai_privacy_incident_incoming_data",
+        "path": "privacy-incident-monitor",
+        "httpMethod": "POST",
+        "responseMode": "onReceived"
+      },
+      "name": "Incoming Data Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "options": {},
+        "prompt": {
+          "type": "string",
+          "string": "You are an AI system that analyzes incoming JSON data streams to detect potential personal data privacy incidents. Analyze the following data and return either 'No Incident Detected' or a detailed incident report including type, severity, and affected data:\n\n{{ $json.data }}"
+        }
+      },
+      "name": "Analyze for Privacy Incidents",
+      "type": "n8n-nodes-base.openAI",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const analysisText = items[0].json.choices[0].message.content.trim();\nif (analysisText === 'No Incident Detected') {\n  return [];\n} else {\n  return items;\n}"
+      },
+      "name": "Filter No Incident",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "text": "Privacy Incident Detected:\n\n{{ $json.choices[0].message.content }}\n\nImmediate action is required."
+      },
+      "name": "Generate User Alert Message",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        900,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "subject": "Urgent: Personal Privacy Incident Detected",
+        "text": "{{$node[\"Generate User Alert Message\"].json.text}}",
+        "toEmail": "={{$json.userEmail || $env.USER_EMAIL}}"
+      },
+      "name": "Send User Alert Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        200
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "1",
+          "name": "User Email SMTP"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "record",
+        "operation": "create",
+        "collection": "privacy_incidents",
+        "data": "={{ { incidentReport: $json.choices[0].message.content, receivedAt: new Date().toISOString() } }}"
+      },
+      "name": "Log Incident to DB",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        380
+      ],
+      "credentials": {
+        "mongoDb": {
+          "id": "2",
+          "name": "MongoDB Incident Log"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "options": {},
+        "prompt": {
+          "type": "string",
+          "string": "As an AI consultant for personal privacy, based on the following detected incident, suggest a set of personalized privacy measures and automated response actions suitable for the user:\n\n{{ $json.choices[0].message.content }}"
+        }
+      },
+      "name": "Generate Personalized Privacy Measures",
+      "type": "n8n-nodes-base.openAI",
+      "typeVersion": 1,
+      "position": [
+        900,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "url": "https://example-authority-notify.org/api/report",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={ \"incidentReport\": $json.choices[0].message.content, \"timestamp\": new Date().toISOString(), \"userContact\": $json.userEmail || $env.USER_EMAIL }"
+      },
+      "name": "Notify Authorities",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "text": "Suggested Personalized Privacy Measures and Automated Response Actions:\n\n{{ $json.choices[0].message.content }}"
+      },
+      "name": "Generate Privacy Suggestion Message",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "subject": "Privacy Measures Recommended",
+        "text": "{{$node[\"Generate Privacy Suggestion Message\"].json.text}}",
+        "toEmail": "={{$json.userEmail || $env.USER_EMAIL}}"
+      },
+      "name": "Send Privacy Measures Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        400
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "1",
+          "name": "User Email SMTP"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Incoming Data Webhook": {
+      "main": [
+        [
+          {
+            "node": "Analyze for Privacy Incidents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze for Privacy Incidents": {
+      "main": [
+        [
+          {
+            "node": "Filter No Incident",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter No Incident": {
+      "main": [
+        [
+          {
+            "node": "Generate User Alert Message",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log Incident to DB",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate Personalized Privacy Measures",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Notify Authorities",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate User Alert Message": {
+      "main": [
+        [
+          {
+            "node": "Send User Alert Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Personalized Privacy Measures": {
+      "main": [
+        [
+          {
+            "node": "Generate Privacy Suggestion Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Privacy Suggestion Message": {
+      "main": [
+        [
+          {
+            "node": "Send Privacy Measures Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
