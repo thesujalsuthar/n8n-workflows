@@ -1,0 +1,209 @@
+{
+  "name": "Personalized Automated Learning Scheduler",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 7,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "calendarEvent",
+        "operation": "getAll",
+        "options": {
+          "timeMin": "={{$today.toISOString()}}",
+          "timeMax": "={{$today.setDate($today.getDate()+7) && $today.toISOString()}}"
+        }
+      },
+      "name": "Get Calendar Events",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1,
+      "position": [
+        520,
+        300
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": "Google Calendar Account"
+      }
+    },
+    {
+      "parameters": {
+        "resource": "task",
+        "operation": "getAll",
+        "additionalFields": {
+          "dueAfter": "={{$today.toISOString()}}",
+          "dueBefore": "={{$today.setDate($today.getDate()+7) && $today.toISOString()}}"
+        }
+      },
+      "name": "Get Task Reminders",
+      "type": "n8n-nodes-base.todoist",
+      "typeVersion": 1,
+      "position": [
+        520,
+        450
+      ],
+      "credentials": {
+        "todoistApi": "Todoist Account"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const calendarEvents = items[0].json;\nconst tasks = items[1].json;\n\n// Flatten lists\nconst eventsList = calendarEvents ? (Array.isArray(calendarEvents) ? calendarEvents : [calendarEvents]) : [];\nconst tasksList = tasks ? (Array.isArray(tasks) ? tasks : [tasks]) : [];\n\n// Aggregate all learning-related items\nconst learningItems = [];\n\n// Filter calendar events with keyword 'learning' or 'study' in title or description\nfor (const event of eventsList) {\n  const title = (event.summary || '').toLowerCase();\n  const description = (event.description || '').toLowerCase();\n  if (title.includes('learning') || title.includes('study') || description.includes('learning') || description.includes('study')) {\n    learningItems.push({\n      type: 'Event',\n      title: event.summary,\n      start: event.start.dateTime || event.start.date,\n      end: event.end.dateTime || event.end.date,\n      id: event.id\n    });\n  }\n}\n\n// Filter tasks with labels or content indicating learning\nfor (const task of tasksList) {\n  const content = (task.content || '').toLowerCase();\n  if (content.includes('learn') || content.includes('study') || content.includes('course') || content.includes('read')) {\n    learningItems.push({\n      type: 'Task',\n      title: task.content,\n      due: task.due ? task.due.date : null,\n      id: task.id\n    });\n  }\n}\n\nreturn learningItems.map(item => ({ json: item }));"
+      },
+      "name": "Filter Learning Items",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        780,
+        370
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "responseFormat": "json",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={\n  \"model\": \"gpt-4\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are an expert learning scheduler AI. You will analyze the user's learning events and tasks and recommend an optimized personalized schedule for the next week, considering progress, focus areas, and balancing study times.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Analyze these learning items and provide a recommended schedule with time slots and priorities: \" + JSON.stringify($json)\n    }\n  ],\n  \"temperature\": 0.7\n}"
+      },
+      "name": "AI Recommendation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        370
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const response = items[0].json;\n\nconst recommendation = response.choices && response.choices[0] && response.choices[0].message && response.choices[0].message.content ? response.choices[0].message.content : 'No recommendations available.';\n\nreturn [{ json: { recommendation } }];"
+      },
+      "name": "Parse Recommendation",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1280,
+        370
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "calendarEvent",
+        "operation": "create",
+        "fields": {
+          "summary": "Personalized Learning Session",
+          "description": "={{ $json.recommendation }}",
+          "start": {
+            "dateTime": "={{ new Date().toISOString() }}"
+          },
+          "end": {
+            "dateTime": "={{ new Date(new Date().getTime() + 3600000).toISOString() }}"
+          }
+        }
+      },
+      "name": "Create Scheduled Event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1,
+      "position": [
+        1520,
+        370
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": "Google Calendar Account"
+      }
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Calendar Events",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Task Reminders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Calendar Events": {
+      "main": [
+        [
+          {
+            "node": "Filter Learning Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Task Reminders": {
+      "main": [
+        [
+          {
+            "node": "Filter Learning Items",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Filter Learning Items": {
+      "main": [
+        [
+          {
+            "node": "AI Recommendation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Recommendation": {
+      "main": [
+        [
+          {
+            "node": "Parse Recommendation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Recommendation": {
+      "main": [
+        [
+          {
+            "node": "Create Scheduled Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
