@@ -1,0 +1,160 @@
+{
+  "name": "AI-Powered Personal Finance & Budget Optimization Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "sheets",
+        "operation": "read",
+        "sheetId": "your-google-sheet-id",
+        "range": "Income!A1:C",
+        "options": {}
+      },
+      "name": "Read Income Data",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": "Google Sheets Account"
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "sheets",
+        "operation": "read",
+        "sheetId": "your-google-sheet-id",
+        "range": "Expenses!A1:D",
+        "options": {}
+      },
+      "name": "Read Expenses Data",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [
+        200,
+        500
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": "Google Sheets Account"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const incomes = items[0].json.data;\nconst expenses = items[1].json.data;\n\n// Parse incomes and expenses\nconst parsedIncomes = incomes.map(i => ({\n  date: new Date(i.date),\n  amount: parseFloat(i.amount),\n  source: i.source\n}));\n\nconst parsedExpenses = expenses.map(e => ({\n  date: new Date(e.date),\n  amount: parseFloat(e.amount),\n  category: e.category,\n  description: e.description\n}));\n\n// Calculate total income\nconst totalIncome = parsedIncomes.reduce((sum, i) => sum + i.amount, 0);\n// Calculate total expenses\nconst totalExpenses = parsedExpenses.reduce((sum, e) => sum + e.amount, 0);\n\n// Aggregate expenses by category\nconst categorySums = parsedExpenses.reduce((acc, e) => {\n  acc[e.category] = (acc[e.category] || 0) + e.amount;\n  return acc;\n}, {});\n\nreturn [{\n  json: {\n    totalIncome,\n    totalExpenses,\n    savings: totalIncome - totalExpenses,\n    categorySums\n  }\n}];"
+      },
+      "name": "Analyze Financial Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        600,
+        400
+      ],
+      "notesInFlow": true,
+      "notes": "Processes income and expense data to calculate totals and categorize expenses.",
+      "alwaysOutputData": true,
+      "inputData": {
+        "items": [
+          {},
+          {}
+        ]
+      }
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are a financial advisor bot that provides personalized budget recommendations based on income, expenses, and spending habits."
+          },
+          {
+            "role": "user",
+            "content": "Given the user's total income of {{$json.totalIncome}}, total expenses of {{$json.totalExpenses}}, savings of {{$json.savings}}, and expense breakdown by category: {{$json.categorySums}}, generate personalized budget recommendations, tips to optimize spending, and alerts for categories where expenses are unusually high."
+          }
+        ],
+        "temperature": 0.7,
+        "maxTokens": 500
+      },
+      "name": "Generate Budget Recommendations",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        900,
+        400
+      ],
+      "credentials": {
+        "openAiApi": "OpenAI API Key"
+      }
+    },
+    {
+      "parameters": {
+        "toEmail": "={{$json.email}}",
+        "subject": "Your Personalized Budget Recommendations",
+        "text": "={{$json.text}}"
+      },
+      "name": "Send Recommendations Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        400
+      ],
+      "credentials": {
+        "smtp": "SMTP Email Account"
+      }
+    }
+  ],
+  "connections": {
+    "Read Income Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze Financial Data",
+            "type": "main",
+            "index": 0,
+            "inputIndex": 0
+          }
+        ]
+      ]
+    },
+    "Read Expenses Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze Financial Data",
+            "type": "main",
+            "index": 0,
+            "inputIndex": 1
+          }
+        ]
+      ]
+    },
+    "Analyze Financial Data": {
+      "main": [
+        [
+          {
+            "node": "Generate Budget Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Budget Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Send Recommendations Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {}
+}
