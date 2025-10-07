@@ -1,0 +1,319 @@
+{
+  "name": "AI-Driven Personalized Sustainable Travel and Carbon Offset Planner",
+  "nodes": [
+    {
+      "parameters": {
+        "functionCode": "const tripDetails = $json;\n\n// Extract travel parameters\nconst { origin, destination, travelDates, preferences } = tripDetails;\n\n// Prepare query for travel options API\nreturn {\n  url: `https://api.sustainable-travel.com/v1/travel-options?origin=${origin}&destination=${destination}&departure=${travelDates.start}&return=${travelDates.end}&preferences=${encodeURIComponent(JSON.stringify(preferences))}`,\n  method: 'GET',\n  headers: {\n    'Authorization': `Bearer ${this.getCredentials('SustainableTravelAPI').apiKey}`\n  }\n};"
+      },
+      "name": "Prepare Travel Options Request",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        250,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$json.url}}",
+        "options": {},
+        "headers": {
+          "Authorization": "={{$json.headers.Authorization}}"
+        },
+        "jsonParameters": true,
+        "queryParametersUi": {
+          "parameter": []
+        },
+        "responseFormat": "json",
+        "method": "GET"
+      },
+      "name": "Get Sustainable Travel Options",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        450,
+        250
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "SustainableTravelAPI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const travelOptions = $json.data.options;\n\n// Format travel options for further processing\nreturn travelOptions.map(option => {\n  return {\n    json: {\n      method: option.method,\n      vehicleType: option.vehicleType,\n      duration: option.duration,\n      cost: option.cost,\n      emissionsEstimate: option.emissionsEstimate // optional if already available\n    }\n  };\n});"
+      },
+      "name": "Format Travel Options",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const travelOption = $json;\n\n// Prepare request payload for carbon footprint API\nconst payload = {\n  mode: travelOption.method,\n  distance_km: travelOption.distance_km || 0,\n  vehicle_type: travelOption.vehicleType || null\n};\n\nreturn {\n  url: 'https://api.carbonfootprint.com/v1/calculate',\n  method: 'POST',\n  headers: {\n    'Content-Type': 'application/json',\n    'Authorization': `Bearer ${this.getCredentials('CarbonFootprintAPI').apiKey}`\n  },\n  body: JSON.stringify(payload)\n};"
+      },
+      "name": "Prepare Carbon Footprint Request",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$json.url}}",
+        "options": {},
+        "headers": {
+          "Authorization": "={{$json.headers.Authorization}}",
+          "Content-Type": "application/json"
+        },
+        "jsonParameters": true,
+        "bodyParametersJson": "={{$json.body}}",
+        "responseFormat": "json",
+        "method": "POST"
+      },
+      "name": "Get Carbon Footprint Estimate",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        1050,
+        250
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "CarbonFootprintAPI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const footprintResponse = $json;\n\nreturn {\n  json: {\n    method: footprintResponse.method || $json.method || null,\n    emissions_kgCO2: footprintResponse.emissions_kgCO2 || footprintResponse.data?.emissions_kgCO2 || 0\n  }\n};"
+      },
+      "name": "Extract Carbon Footprint Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const tripDetails = $items(\"Prepare Travel Options Request\")[0].json;\nconst totalEmissions = items.reduce((sum, item) => sum + (item.json.emissions_kgCO2 || 0), 0);\n\nreturn [{\n  json: {\n    origin: tripDetails.origin,\n    destination: tripDetails.destination,\n    travelDates: tripDetails.travelDates,\n    totalEmissions_kgCO2: totalEmissions\n  }\n}];"
+      },
+      "name": "Summarize Total Carbon Footprint",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const summary = $json;\nconst offsetThreshold = 10; // kg CO2 threshold to suggest offsets\n\nif (summary.totalEmissions_kgCO2 < offsetThreshold) {\n  return [{\n    json: {\n      message: 'Carbon footprint is low, offsetting may not be necessary.',\n      recommendedProjects: []\n    }\n  }];\n}\n\nreturn {\n  url: `https://api.carbonoffsetprojects.com/v1/projects?minOffset=${summary.totalEmissions_kgCO2}&location=${encodeURIComponent(summary.destination)}`,\n  method: 'GET',\n  headers: {\n    'Authorization': `Bearer ${this.getCredentials('CarbonOffsetAPI').apiKey}`\n  }\n};"
+      },
+      "name": "Prepare Carbon Offset Projects Request",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1650,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$json.url}}",
+        "options": {},
+        "headers": {
+          "Authorization": "={{$json.headers.Authorization}}"
+        },
+        "jsonParameters": true,
+        "queryParametersUi": {
+          "parameter": []
+        },
+        "responseFormat": "json",
+        "method": "GET"
+      },
+      "name": "Get Recommended Carbon Offset Projects",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        1850,
+        250
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "CarbonOffsetAPI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "if ($json.message) {\n  return [$json];\n}\n\nconst projects = $json.data.projects || [];\n\nreturn projects.map(project => {\n  return {\n    json: {\n      projectId: project.id,\n      name: project.name,\n      description: project.description,\n      offsetAmount_kgCO2: project.offsetAmount_kgCO2,\n      url: project.url\n    }\n  };\n});"
+      },
+      "name": "Format Carbon Offset Projects",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        2050,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const travelItems = $items(\"Format Travel Options\");\nconst emissionsItems = $items(\"Extract Carbon Footprint Data\");\nconst offsetProjects = $items(\"Format Carbon Offset Projects\");\n\nconst itinerary = travelItems.map((item, index) => {\n  return {\n    mode: item.json.method,\n    vehicleType: item.json.vehicleType,\n    duration: item.json.duration,\n    estimatedEmissions_kgCO2: emissionsItems[index]?.json.emissions_kgCO2 || null\n  };\n});\n\nconst totalEmissions = emissionsItems.reduce((sum, item) => sum + (item.json.emissions_kgCO2 || 0), 0);\n\nconst recommendedProjects = offsetProjects.map(item => item.json);\n\nreturn [{\n  json: {\n    itinerary,\n    totalEmissions_kgCO2: totalEmissions,\n    recommendedCarbonOffsetProjects: recommendedProjects\n  }\n}];"
+      },
+      "name": "Generate Personalized Sustainable Itinerary",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        2250,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "text": "Trip from {{$json.origin}} to {{$json.destination}} ({{$json.travelDates.start}} to {{$json.travelDates.end}}):\n\nTotal estimated carbon emissions: {{$json.totalEmissions_kgCO2}} kg CO2\n\nItinerary:\n{{$json.itinerary.map(item => `- ${item.mode} (${item.vehicleType}), Duration: ${item.duration}, Emissions: ${item.estimatedEmissions_kgCO2 || 'N/A'} kg CO2`).join('\\n')}}\n\nRecommended Carbon Offset Projects:\n{{$json.recommendedCarbonOffsetProjects.length > 0 ? $json.recommendedCarbonOffsetProjects.map(p => `- ${p.name}: ${p.description} (Offsets up to ${p.offsetAmount_kgCO2} kg CO2) - More info: ${p.url}`).join('\\n') : 'No offset projects suggested.'}}"
+      },
+      "name": "Create Summary Message",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        2450,
+        250
+      ]
+    }
+  ],
+  "connections": {
+    "Prepare Travel Options Request": {
+      "main": [
+        [
+          {
+            "node": "Get Sustainable Travel Options",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Sustainable Travel Options": {
+      "main": [
+        [
+          {
+            "node": "Format Travel Options",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Travel Options": {
+      "main": [
+        [
+          {
+            "node": "Prepare Carbon Footprint Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Carbon Footprint Request": {
+      "main": [
+        [
+          {
+            "node": "Get Carbon Footprint Estimate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Carbon Footprint Estimate": {
+      "main": [
+        [
+          {
+            "node": "Extract Carbon Footprint Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Carbon Footprint Data": {
+      "main": [
+        [
+          {
+            "node": "Summarize Total Carbon Footprint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize Total Carbon Footprint": {
+      "main": [
+        [
+          {
+            "node": "Prepare Carbon Offset Projects Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Carbon Offset Projects Request": {
+      "main": [
+        [
+          {
+            "node": "Get Recommended Carbon Offset Projects",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Recommended Carbon Offset Projects": {
+      "main": [
+        [
+          {
+            "node": "Format Carbon Offset Projects",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Carbon Offset Projects": {
+      "main": [
+        [
+          {
+            "node": "Generate Personalized Sustainable Itinerary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Personalized Sustainable Itinerary": {
+      "main": [
+        [
+          {
+            "node": "Create Summary Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
