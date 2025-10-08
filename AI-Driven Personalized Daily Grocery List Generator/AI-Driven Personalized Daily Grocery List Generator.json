@@ -1,0 +1,181 @@
+{
+  "name": "AI-Powered Personalized Grocery Shopping List Generator with Nutrition and Budget Optimization",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "time": "07:00"
+            }
+          ]
+        }
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.timeTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "raw",
+        "options": {},
+        "requestMethod": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$credentials.openaiApi.key}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "model",
+              "value": "gpt-4"
+            },
+            {
+              "name": "messages",
+              "value": "=\n[\n  {\n    \"role\": \"system\",\n    \"content\": \"You are an AI assistant that generates a personalized grocery shopping list optimized for nutrition and budget based on user preferences.\"\n  },\n  {\n    \"role\": \"user\",\n    \"content\": \"Generate a personalized grocery shopping list. Here are the details:\\n- Dietary Preferences: {{$json.dietaryPreferences}}\\n- Nutrition Goals: {{$json.nutritionGoals}}\\n- Budget (USD): {{$json.budget}}\"\n  }\n]"
+            },
+            {
+              "name": "temperature",
+              "value": "0.7"
+            },
+            {
+              "name": "max_tokens",
+              "value": "600"
+            }
+          ]
+        },
+        "responseFormat": "json"
+      },
+      "name": "Generate Grocery List",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        650,
+        300
+      ],
+      "credentials": {
+        "openaiApi": {
+          "id": "1",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{\n  json: {\n    groceryList: JSON.parse(items[0].json.body).choices[0].message.content\n  }\n}];"
+      },
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        950,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "subject": "Your Personalized Grocery Shopping List",
+        "text": "Hello,\n\nHere is your personalized grocery shopping list optimized according to your dietary preferences, nutrition goals, and budget:\n\n{{$json.groceryList}}\n\nHappy Shopping!",
+        "toEmail": "={{$json.email}}"
+      },
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "dietaryPreferences",
+              "value": "vegetarian, gluten-free"
+            },
+            {
+              "name": "nutritionGoals",
+              "value": "high protein, low carb"
+            },
+            {
+              "name": "budget",
+              "value": "50"
+            },
+            {
+              "name": "email",
+              "value": "user@example.com"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set User Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Set User Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set User Input": {
+      "main": [
+        [
+          {
+            "node": "Generate Grocery List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Grocery List": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
