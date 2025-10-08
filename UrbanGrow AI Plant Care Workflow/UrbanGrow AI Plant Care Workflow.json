@@ -1,0 +1,259 @@
+{
+  "name": "SmartUrban Garden AI Assistant",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "upload-plant-image",
+        "options": {}
+      },
+      "id": "1",
+      "name": "Receive Plant Image",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "ai",
+        "operation": "textGeneration",
+        "model": "gpt-4",
+        "prompt": "You are an AI assistant specialized in urban garden plant care.\n\nBased on the following plant image analysis and environmental data, provide detailed plant care recommendations including watering, fertilization, sunlight, and pest control advice:\n\nPlant Image Analysis Result: {{$json[\"plantAnalysis\"]}}\nEnvironmental Data: {{$json[\"environment\"]}}\n\nResponse format:\n- Care Recommendations:\n- Pest Detection:\n- Watering Schedule:\n\nProvide the advice in clear bullet points.",
+        "additionalOptions": {}
+      },
+      "id": "2",
+      "name": "AI Plant Care Recommendations",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        700,
+        300
+      ],
+      "credentials": {
+        "openAiApi": "OpenAI API"
+      }
+    },
+    {
+      "parameters": {
+        "resource": "vision",
+        "operation": "detectObjects",
+        "imageUrl": "{{$node[\"Receive Plant Image\"].json[\"imageUrl\"]}}"
+      },
+      "id": "3",
+      "name": "Pest Detection",
+      "type": "n8n-nodes-base.microsoftComputerVision",
+      "typeVersion": 1,
+      "position": [
+        480,
+        300
+      ],
+      "credentials": {
+        "microsoftComputerVisionApi": "Microsoft Computer Vision API"
+      }
+    },
+    {
+      "parameters": {
+        "resource": "iot",
+        "operation": "deviceStatus",
+        "deviceId": "garden-sensor-001"
+      },
+      "id": "4",
+      "name": "Get Environmental Data",
+      "type": "n8n-nodes-base.iot",
+      "typeVersion": 1,
+      "position": [
+        250,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "dataservice",
+        "operation": "get",
+        "url": "http://garden-smart-sensor.local/api/data",
+        "responseFormat": "json",
+        "jsonParameters": true
+      },
+      "id": "5",
+      "name": "Fetch Sensor Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        480,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{\n  json: {\n    plantAnalysis: $node[\"Pest Detection\"].json,\n    environment: $node[\"Fetch Sensor Data\"].json\n  }\n}];"
+      },
+      "id": "6",
+      "name": "Aggregate Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        600,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "calendar",
+        "operation": "create",
+        "calendarId": "garden-watering",
+        "title": "Watering Reminder",
+        "start": "={{$json[\"wateringSchedule\"][0].start}}",
+        "end": "={{$json[\"wateringSchedule\"][0].end}}",
+        "description": "Automated watering reminder from SmartUrban Garden AI Assistant"
+      },
+      "id": "7",
+      "name": "Schedule Watering Reminder",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1,
+      "position": [
+        900,
+        420
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": "Google Calendar OAuth2"
+      }
+    },
+    {
+      "parameters": {
+        "channel": "#garden-alerts",
+        "text": "{{$json[\"careRecommendations\"]}}",
+        "options": {}
+      },
+      "id": "8",
+      "name": "Send Slack Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ],
+      "credentials": {
+        "slackApi": "Slack API"
+      }
+    },
+    {
+      "parameters": {
+        "resource": "messaging",
+        "operation": "send",
+        "phoneNumber": "={{$json[\"userPhoneNumber\"]}}",
+        "message": "Reminder: Time to water your plants according to your SmartUrban Garden schedule."
+      },
+      "id": "9",
+      "name": "Send SMS Reminder",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        420
+      ],
+      "credentials": {
+        "twilioApi": "Twilio API"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const recommendations = $node[\"AI Plant Care Recommendations\"].json[\"choices\"][0][\"message\"][\"content\"];\n\nconst careRecommendationsMatch = recommendations.match(/- Care Recommendations:\\s*([\\s\\S]*?)(?=- Pest Detection:|$)/i);\nconst pestDetectionMatch = recommendations.match(/- Pest Detection:\\s*([\\s\\S]*?)(?=- Watering Schedule:|$)/i);\nconst wateringScheduleMatch = recommendations.match(/- Watering Schedule:\\s*([\\s\\S]*?)/i);\n\nconst careRecommendations = careRecommendationsMatch ? careRecommendationsMatch[1].trim() : \"\";\nconst pestDetection = pestDetectionMatch ? pestDetectionMatch[1].trim() : \"\";\nconst wateringScheduleRaw = wateringScheduleMatch ? wateringScheduleMatch[1].trim() : \"\";\n\n// parse watering schedule to structured data, e.g. [{start: '2024-05-01T07:00:00Z', end: '2024-05-01T07:15:00Z'}]\n// For this example, assume it's JSON embedded or simple text - simplify as text\n\nreturn [{\n  json: {\n    careRecommendations,\n    pestDetection,\n    wateringSchedule: [{\n      start: new Date().toISOString(),\n      end: new Date(Date.now() + 15 * 60 * 1000).toISOString()\n    }]\n  }\n}];"
+      },
+      "id": "10",
+      "name": "Parse AI Output",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        830,
+        350
+      ]
+    }
+  ],
+  "connections": {
+    "Receive Plant Image": {
+      "main": [
+        [
+          {
+            "node": "Pest Detection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pest Detection": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Sensor Data": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Data": {
+      "main": [
+        [
+          {
+            "node": "AI Plant Care Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Plant Care Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Output": {
+      "main": [
+        [
+          {
+            "node": "Send Slack Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Schedule Watering Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Watering Reminder": {
+      "main": [
+        [
+          {
+            "node": "Send SMS Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
