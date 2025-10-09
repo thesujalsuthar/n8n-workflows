@@ -1,0 +1,234 @@
+{
+  "name": "SmartHome AI Energy Storage Optimizer",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "energy-data",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "name": "Receive Real-Time Energy Data",
+      "type": "n8n-nodes-base.httpTrigger",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const consumption = parseFloat(items[0].json.consumption);\nconst production = parseFloat(items[0].json.production);\nconst batteryLevel = parseFloat(items[0].json.batteryLevel);\nreturn [{ json: { consumption, production, batteryLevel } }];"
+      },
+      "name": "Parse Energy Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        320,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  This node simulates an AI forecast for next 24 hours consumption and production\n  In a real scenario, it would call an external ML API or embed a model.\n*/\n\nconst currentConsumption = items[0].json.consumption;\nconst currentProduction = items[0].json.production;\n\n// Create simplistic forecast data for 24 hours (hourly)\nconst forecast = [];\nfor(let hour=1;hour<=24;hour++) {\n  forecast.push({\n    hourAhead: hour,\n    consumption: currentConsumption * (0.8 + 0.4 * Math.sin(hour/24 * 2 * Math.PI)),\n    production: currentProduction * (0.5 + 0.5 * Math.cos(hour/24 * 2 * Math.PI))\n  });\n}\n\nreturn [{ json: { forecast }}];"
+      },
+      "name": "Forecast Energy Usage",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        540,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  This function decides battery actions based on forecast and current status.\n  It returns instructions to charge or discharge battery.\n*/\nconst forecast = items[0].json.forecast;\nconst batteryLevel = items[1].json.batteryLevel;\n\n// Constants\nconst BATTERY_CAPACITY = 100; // in kWh, example\nconst MIN_BATTERY_LEVEL = 10; // Do not discharge below 10%\nconst MAX_BATTERY_LEVEL = 90; // Do not charge above 90%\n\n// Calculate net forecast balance for next 24h\nlet netProduction = 0;\nlet netConsumption = 0;\n\nforecast.forEach(hourData => {\n  netProduction += hourData.production;\n  netConsumption += hourData.consumption;\n});\n\nconst netEnergy = netProduction - netConsumption; // Positive means surplus expected\n\nlet action = \"hold\";\nlet chargePower = 0;\n\nif (netEnergy > 0 && batteryLevel < MAX_BATTERY_LEVEL) {\n  // Surplus energy expected, charge battery\n  action = \"charge\";\n  chargePower = Math.min(netEnergy, (MAX_BATTERY_LEVEL - batteryLevel) * BATTERY_CAPACITY / 100);\n} else if (netEnergy < 0 && batteryLevel > MIN_BATTERY_LEVEL) {\n  // Deficit expected, discharge battery to cover\n  action = \"discharge\";\n  chargePower = Math.min(-netEnergy, (batteryLevel - MIN_BATTERY_LEVEL) * BATTERY_CAPACITY / 100);\n}\n\nreturn [{ json: { action, chargePower } }];"
+      },
+      "name": "Decide Battery Action",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 1,
+      "position": [
+        760,
+        300
+      ],
+      "notesInFlow": true,
+      "notes": "Merges forecast and battery status data for decision"
+    },
+    {
+      "parameters": {
+        "functionCode": "return items;"
+      },
+      "name": "Prepare Battery Control Payload",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        980,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://home-energy-mgmt.local/api/battery/control",
+        "options": {},
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "action",
+              "value": "={{$json[\"action\"]}}"
+            },
+            {
+              "name": "power",
+              "value": "={{$json[\"chargePower\"]}}"
+            }
+          ]
+        },
+        "queryParametersUi": {
+          "parameter": []
+        },
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "jsonParameters": true,
+        "responseFormat": "json",
+        "optionsUi": {}
+      },
+      "name": "Control Battery System",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const consumption = items[0].json.consumption;\nconst production = items[0].json.production;\nconst batteryLevel = items[0].json.batteryLevel;\nconst action = items[1].json.action;\nconst chargePower = items[1].json.chargePower;\n\nconst message = `SmartHome Energy Report:\\n- Current Consumption: ${consumption.toFixed(2)} kWh\\n- Current Production: ${production.toFixed(2)} kWh\\n- Battery Level: ${batteryLevel.toFixed(1)} %\\n- Battery Action: ${action}\\n- Power: ${chargePower.toFixed(2)} kWh`;\n\nreturn [{ json: { text: message }}];"
+      },
+      "name": "Create Status Report",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "smarthome@domain.com",
+        "toEmail": "user@domain.com",
+        "subject": "Daily SmartHome Energy Storage Report",
+        "text": "={{$json[\"text\"]}}"
+      },
+      "name": "Send Email Report",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "webhookUri": "https://api.telegram.org/botYOUR_BOT_TOKEN/sendMessage",
+        "options": {}
+      },
+      "name": "Telegram Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        450
+      ]
+    }
+  ],
+  "connections": {
+    "Receive Real-Time Energy Data": {
+      "main": [
+        [
+          {
+            "node": "Parse Energy Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Energy Data": {
+      "main": [
+        [
+          {
+            "node": "Forecast Energy Usage",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Decide Battery Action",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Forecast Energy Usage": {
+      "main": [
+        [
+          {
+            "node": "Decide Battery Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decide Battery Action": {
+      "main": [
+        [
+          {
+            "node": "Prepare Battery Control Payload",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create Status Report",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Prepare Battery Control Payload": {
+      "main": [
+        [
+          {
+            "node": "Control Battery System",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Status Report": {
+      "main": [
+        [
+          {
+            "node": "Send Email Report",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Telegram Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {}
+}
