@@ -1,0 +1,167 @@
+{
+  "name": "AI-Powered Blockchain Voting Integrity Monitoring Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.blockchain.example.com/voting/transactions/latest",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Fetch Blockchain Voting Transactions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const transactions = items[0].json.transactions;\n\n// Format data for AI anomaly detection\nreturn transactions.map(transaction => {\n  return {\n    json: {\n      id: transaction.id,\n      timestamp: transaction.timestamp,\n      voterIdHash: transaction.voterIdHash,\n      voteData: transaction.voteData,\n      signature: transaction.signature\n    }\n  };\n});"
+      },
+      "name": "Prepare Transactions for AI Analysis",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.ai-anomaly.example.com/detect",
+        "options": {},
+        "responseFormat": "json",
+        "method": "POST",
+        "jsonParameters": true,
+        "bodyParametersJson": "={{$json}}",
+        "headerParametersJson": "{\"Authorization\":\"Bearer YOUR_AI_API_KEY\",\"Content-Type\":\"application/json\"}"
+      },
+      "name": "AI Anomaly Detection",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.filter(item => item.json.isSuspicious === true);"
+      },
+      "name": "Filter Suspicious Transactions",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.map(item => {\n  return {\n    json: {\n      alertSubject: `Blockchain Voting Alert: Suspicious Transaction Detected - ID ${item.json.id}`,\n      alertBody: `Potential tampering or irregularity detected in vote transaction ID ${item.json.id} at ${item.json.timestamp}.\n\nDetails:\\nVoter ID Hash: ${item.json.voterIdHash}\\nVote Data: ${JSON.stringify(item.json.voteData)}\\n\nPlease investigate immediately.`\n    }\n  };\n});"
+      },
+      "name": "Generate Alert Messages",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "election.monitor@example.com",
+        "toEmail": "election.officials@example.com",
+        "subject": "={{$json.alertSubject}}",
+        "text": "={{$json.alertBody}}",
+        "options": {}
+      },
+      "name": "Send Email Alerts",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "your_chat_id_here",
+        "text": "={{$json.alertBody}}",
+        "additionalFields": {}
+      },
+      "name": "Send Messaging Platform Alerts",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        350
+      ]
+    }
+  ],
+  "connections": {
+    "Fetch Blockchain Voting Transactions": {
+      "main": [
+        [
+          {
+            "node": "Prepare Transactions for AI Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Transactions for AI Analysis": {
+      "main": [
+        [
+          {
+            "node": "AI Anomaly Detection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Anomaly Detection": {
+      "main": [
+        [
+          {
+            "node": "Filter Suspicious Transactions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Suspicious Transactions": {
+      "main": [
+        [
+          {
+            "node": "Generate Alert Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Alert Messages": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alerts",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Messaging Platform Alerts",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  }
+}
