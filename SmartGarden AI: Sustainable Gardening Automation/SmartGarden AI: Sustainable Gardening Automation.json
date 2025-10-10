@@ -1,0 +1,338 @@
+{
+  "name": "AI-Powered Smart Sustainable Gardening Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 6,
+              "minute": 0,
+              "mode": "everyDay"
+            },
+            {
+              "hour": 18,
+              "minute": 0,
+              "mode": "everyDay"
+            }
+          ]
+        }
+      },
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.exampleai.com/v1/plant-health/detect",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $credentials.aiApi.key }}"
+            }
+          ]
+        },
+        "queryParametersUi": {
+          "parameter": []
+        },
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "image_url",
+              "value": "={{ $json[\"imageUrl\"] }}"
+            }
+          ]
+        },
+        "responseFormat": "json",
+        "jsonParameters": true,
+        "bodyContentType": "json"
+      },
+      "name": "AI Plant Health Monitor",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        550,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.openweathermap.org/data/2.5/onecall",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "lat",
+              "value": "={{$json.latitude}}"
+            },
+            {
+              "name": "lon",
+              "value": "={{$json.longitude}}"
+            },
+            {
+              "name": "exclude",
+              "value": "minutely,hourly,daily,alerts"
+            },
+            {
+              "name": "units",
+              "value": "metric"
+            },
+            {
+              "name": "appid",
+              "value": "={{ $credentials.openWeatherMapApi.key }}"
+            }
+          ]
+        },
+        "responseFormat": "json"
+      },
+      "name": "Get Weather Forecast",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        550,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const plantHealth = $json;\nconst weather = $items(\"Get Weather Forecast\")[0].json;\n\n// Simple logic to assess watering needs\nconst dailyRain = weather.current.rain || 0;\nconst temperature = weather.current.temp;\n\nif (plantHealth.health_status === \"poor\" || dailyRain < 1 && temperature > 15) {\n  return [{ json: { shouldWater: true, reason: \"Plant health poor or low rain with warm temp.\" } }];\n}\nreturn [{ json: { shouldWater: false, reason: \"Conditions do not require watering.\" } }];"
+      },
+      "name": "Watering Decision Logic",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        450
+      ],
+      "actions": {},
+      "notesInFlow": {
+        "note": "Decide if watering is necessary based on plant health and weather."
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.exampleai.com/v1/pest-detection/detect",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $credentials.aiApi.key }}"
+            }
+          ]
+        },
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "image_url",
+              "value": "={{ $json[\"imageUrl\"] }}"
+            }
+          ]
+        },
+        "responseFormat": "json",
+        "jsonParameters": true,
+        "bodyContentType": "json"
+      },
+      "name": "AI Pest Detection",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        550,
+        650
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const pests = $json.detected_pests || [];\nconst ecoFriendlyRecommendations = {\n  aphids: \"Use neem oil spray or ladybugs as biological control.\",\n  spider_mites: \"Introduce predatory mites or use insecticidal soap.\",\n  caterpillars: \"Handpick or use Bacillus thuringiensis (Bt) treatment.\",\n  whiteflies: \"Use yellow sticky traps and insecticidal soap.\",\n  scale: \"Apply horticultural oils or promote natural predators.\"\n};\n\nconst treatments = pests.map(pest => {\n  return {\n    pest: pest,\n    recommendation: ecoFriendlyRecommendations[pest.toLowerCase()] || \"Monitor and apply organic treatments as needed.\"\n  };\n});\n\nreturn [{ json: { treatments } }];"
+      },
+      "name": "Treatment Recommendations",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        650
+      ]
+    },
+    {
+      "parameters": {
+        "channel": "gardening-alerts",
+        "text": "={{\n  \"AI Plant Health Status: \" + $items(\"AI Plant Health Monitor\")[0].json.health_status + \"\\n\" +\n  \"Watering Scheduled: \" + $json.shouldWater + \" (\" + $json.reason + \")\\n\" +\n  \"Pest Treatment Suggestions:\\n\" + $items(\"Treatment Recommendations\")[0].json.treatments.map(t => `- ${t.pest}: ${t.recommendation}`).join('\\n')\n}}",
+        "botToken": "={{ $credentials.slackBotApi.token }}"
+      },
+      "name": "Send Slack Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: {\n  imageUrl: 'https://gardencam.example.com/latest.jpg',\n  latitude: 40.7128,\n  longitude: -74.0060\n}}];"
+      },
+      "name": "Prepare Input Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {},
+      "name": "Water Plants (Conditional)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.yourirrigationsystem.local/water",
+        "method": "POST",
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "duration_minutes",
+              "value": "5"
+            }
+          ]
+        }
+      },
+      "name": "Trigger Watering",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        450
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Prepare Input Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Input Data": {
+      "main": [
+        [
+          {
+            "node": "AI Plant Health Monitor",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Weather Forecast",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "AI Pest Detection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Plant Health Monitor": {
+      "main": [
+        [
+          {
+            "node": "Watering Decision Logic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Weather Forecast": {
+      "main": [
+        [
+          {
+            "node": "Watering Decision Logic",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Watering Decision Logic": {
+      "main": [
+        [
+          {
+            "node": "Water Plants (Conditional)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Slack Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Water Plants (Conditional)": {
+      "main": [
+        [
+          {
+            "node": "Trigger Watering",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Slack Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Pest Detection": {
+      "main": [
+        [
+          {
+            "node": "Treatment Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Treatment Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Send Slack Notification",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
