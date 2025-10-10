@@ -1,0 +1,258 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 7,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "personalAccessToken",
+        "personalAccessToken": "={{$credentials.openaiApi.apiKey}}",
+        "model": "gpt-4",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an AI assistant that generates personalized sustainability habit tips based on user daily inputs."
+          },
+          {
+            "role": "user",
+            "content": "={{`Given the user's daily sustainability data: Energy usage: ${$json.energyUsage} kWh, Waste reduced: ${$json.wasteReduced} kg, Carbon footprint: ${$json.carbonFootprint} kg CO2, provide three personalized tips to improve sustainability practices.`}}"
+          }
+        ]
+      },
+      "name": "Generate AI Tips",
+      "type": "n8n-nodes-base.openAiChat",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.localgov/sustainability/community-impact",
+        "method": "GET",
+        "responseFormat": "json",
+        "jsonParameters": true,
+        "options": {}
+      },
+      "name": "Fetch Community Impact Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        100,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.socialmedia.com/search",
+        "method": "GET",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "q",
+              "value": "local sustainability OR community green initiatives"
+            },
+            {
+              "name": "limit",
+              "value": "10"
+            }
+          ]
+        },
+        "responseFormat": "json"
+      },
+      "name": "Fetch Social Feeds",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        100,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "passThrough"
+      },
+      "name": "Merge Real-time Data",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 1,
+      "position": [
+        400,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const userData = items[0].json;\nconst aiTips = items[1].json.choices[0].message.content;\nconst communityData = items[2].json;\nconst socialFeeds = items[3].json.data ? items[3].json.data : [];\n\nreturn [{\n  json: {\n    dailyUserData: userData,\n    personalizedTips: aiTips,\n    communityImpact: communityData,\n    socialFeeds: socialFeeds\n  }\n}];"
+      },
+      "name": "Combine All Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        700,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "path": "public/sustainability-tracker/dashboard.json",
+        "options": {}
+      },
+      "name": "Save Dashboard Data",
+      "type": "n8n-nodes-base.writeBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        900,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "number": [
+            {
+              "name": "energyUsage",
+              "value": 5.6
+            },
+            {
+              "name": "wasteReduced",
+              "value": 1.2
+            },
+            {
+              "name": "carbonFootprint",
+              "value": 7.8
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "User Daily Data Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        300,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "User Daily Data Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "User Daily Data Input": {
+      "main": [
+        [
+          {
+            "node": "Generate AI Tips",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate AI Tips": {
+      "main": [
+        [
+          {
+            "node": "Combine All Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Community Impact Data": {
+      "main": [
+        [
+          {
+            "node": "Merge Real-time Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Social Feeds": {
+      "main": [
+        [
+          {
+            "node": "Merge Real-time Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Real-time Data": {
+      "main": [
+        [
+          {
+            "node": "Combine All Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Combine All Data": {
+      "main": [
+        [
+          {
+            "node": "Save Dashboard Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Community Impact Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Social Feeds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
