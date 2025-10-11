@@ -1,0 +1,227 @@
+{
+  "name": "GreenCommute AI Scheduler",
+  "nodes": [
+    {
+      "parameters": {
+        "functionCode": "const userInput = $json;\n\nconst commuteDetails = {\n  origin: userInput.origin,\n  destination: userInput.destination,\n  preferredModes: userInput.preferredModes || ['public_transit', 'bike_share', 'ev_charging'],\n  departureTime: userInput.departureTime || new Date().toISOString()\n};\n\nreturn [{ json: commuteDetails }];"
+      },
+      "name": "Extract User Input",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.publictransit.example.com/routes",
+        "options": {},
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "origin",
+              "value": "={{$json.origin}}"
+            },
+            {
+              "name": "destination",
+              "value": "={{$json.destination}}"
+            },
+            {
+              "name": "departureTime",
+              "value": "={{$json.departureTime}}"
+            }
+          ]
+        }
+      },
+      "name": "Fetch Public Transit Routes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        550,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.bikeshare.example.com/availability",
+        "options": {},
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "near",
+              "value": "={{$json.origin}}"
+            }
+          ]
+        }
+      },
+      "name": "Fetch Bike Share Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        550,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.evcharging.example.com/stations",
+        "options": {},
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "near",
+              "value": "={{$json.origin}}"
+            }
+          ]
+        }
+      },
+      "name": "Fetch EV Charging Stations",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        550,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const transitRoutes = items[0].json.routes || [];\nconst bikeData = items[1].json.stations || [];\nconst evStations = items[2].json.stations || [];\n\n// Simple scoring function for demo purposes\nfunction scoreRoute(route) {\n  let score = 0;\n  if (route.type === 'bus' || route.type === 'train') score += 10;\n  if (route.durationMinutes) score -= route.durationMinutes;\n  if (route.co2Emission) score -= route.co2Emission;\n  return score;\n}\n\n// Filter and score transit routes\nconst scoredTransit = transitRoutes.map(route => ({ ...route, score: scoreRoute(route) }));\n\n// Filter available bike share stations close to origin\nconst availableBikes = bikeData.filter(station => station.available_bikes > 0);\n\n// Filter EV stations with availability\nconst availableEVStations = evStations.filter(station => station.available_ports > 0);\n\n// Build recommendations\nconst recommendations = [];\n\nif(scoredTransit.length > 0) {\n  const bestTransit = scoredTransit.reduce((a,b) => a.score > b.score ? a : b);\n  recommendations.push({\n    mode: 'public_transit',\n    details: bestTransit\n  });\n}\n\nif(availableBikes.length > 0) {\n  recommendations.push({\n    mode: 'bike_share',\n    details: availableBikes.slice(0,3) // top 3 bike stations\n  });\n}\n\nif(availableEVStations.length > 0) {\n  recommendations.push({\n    mode: 'ev_charging',\n    details: availableEVStations.slice(0,3) // top 3 charging stations\n  });\n}\n\n// Carbon savings calculation example\nconst conventionalCO2 = 10; // baseline CO2 grams per km (example)\nconst recommendedCO2 = recommendations.reduce((acc, rec) => {\n  if(rec.mode === 'public_transit') return acc + (rec.details.co2Emission || 0);\n  if(rec.mode === 'bike_share') return acc + 0;\n  if(rec.mode === 'ev_charging') return acc + 0;\n  return acc;\n}, 0);\n\nconst carbonSavings = conventionalCO2 - recommendedCO2;\n\nreturn [{ json: { recommendations, carbonSavings } }];"
+      },
+      "name": "Process and Score Recommendations",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "toEmail": "={{$json.userEmail || $json.email}}",
+        "subject": "GreenCommute AI Scheduler: Your Daily Commute Recommendations",
+        "text": "Hi,\n\nBased on your commute from {{$json.origin}} to {{$json.destination}}, here are your green travel options:\n\n{{$json.recommendations.map(r => `- ${r.mode}: ${Array.isArray(r.details) ? r.details.length + ' stations available' : r.details.summary || JSON.stringify(r.details)}`).join('\\n')}}\n\nEstimated carbon savings compared to a conventional commute: {{$json.carbonSavings}} grams CO2.\n\nStay eco-friendly and safe travels!\n\n- GreenCommute AI Scheduler"
+      },
+      "name": "Send User Recommendations Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const alerts = [];\n\n// Example check for delays in transit routes\nconst transit = $json.recommendations.find(r => r.mode === 'public_transit');\nif (transit && transit.details.delay && transit.details.delay > 0) {\n  alerts.push(`Alert: Your transit route has a delay of ${transit.details.delay} minutes.`);\n}\n\n// Example check for bike share station availability\nconst bike = $json.recommendations.find(r => r.mode === 'bike_share');\nif (bike && bike.details.length === 0) {\n  alerts.push('Alert: No bikes currently available near your origin.');\n}\n\n// Example alert for EV charging station availability\nconst ev = $json.recommendations.find(r => r.mode === 'ev_charging');\nif (ev && ev.details.length === 0) {\n  alerts.push('Alert: No EV charging stations available near your origin.');\n}\n\nreturn [{ json: { alerts } }];"
+      },
+      "name": "Generate Alerts",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "toEmail": "={{$json.userEmail || $json.email}}",
+        "subject": "GreenCommute AI Scheduler: Alerts Update",
+        "text": "Hi,\n\nHere are the latest alerts regarding your commute:\n\n{{$json.alerts.length > 0 ? $json.alerts.join('\\n') : 'No alerts at this time.'}}\n\nThank you for choosing a greener commute!"
+      },
+      "name": "Send Alert Emails",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "Extract User Input": {
+      "main": [
+        [
+          {
+            "node": "Fetch Public Transit Routes",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Bike Share Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch EV Charging Stations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Public Transit Routes": {
+      "main": [
+        [
+          {
+            "node": "Process and Score Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Bike Share Data": {
+      "main": [
+        [
+          {
+            "node": "Process and Score Recommendations",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch EV Charging Stations": {
+      "main": [
+        [
+          {
+            "node": "Process and Score Recommendations",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Process and Score Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Send User Recommendations Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Alerts": {
+      "main": [
+        [
+          {
+            "node": "Send Alert Emails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
