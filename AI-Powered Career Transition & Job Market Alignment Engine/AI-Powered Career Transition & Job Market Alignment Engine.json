@@ -1,0 +1,247 @@
+{
+  "name": "AI-Powered Personalized Career Transition Planner and Job Market Alignment System",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "detect",
+        "input": "={{$json.skills + ' ' + $json.interests}}"
+      },
+      "name": "Analyze Skills and Interests",
+      "type": "n8n-nodes-base.openai",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ],
+      "credentials": {
+        "openAiApi": "OpenAI API"
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://api.adzuna.com/v1/api/jobs/us/search/1",
+        "method": "GET",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "app_id",
+              "value": "={{$credentials.adzuna.appId}}"
+            },
+            {
+              "name": "app_key",
+              "value": "={{$credentials.adzuna.appKey}}"
+            },
+            {
+              "name": "results_per_page",
+              "value": "10"
+            },
+            {
+              "name": "what",
+              "value": "={{$json.job_keywords}}"
+            },
+            {
+              "name": "where",
+              "value": "={{$json.location}}"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "responseFormat": "json"
+      },
+      "name": "Fetch Job Opportunities",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "1"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "course",
+        "operation": "search",
+        "search": "={{$json.upskill_topics}}",
+        "limit": 5
+      },
+      "name": "Get Upskilling Courses",
+      "type": "n8n-nodes-base.udemy",
+      "typeVersion": 1,
+      "position": [
+        850,
+        450
+      ],
+      "credentials": {
+        "udemyApi": "Udemy API"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: {\n  job_keywords: items[0].json.keySkills || items[0].json.interests || 'technology',\n  location: items[0].json.preferredLocation || 'remote',\n  upskill_topics: items[0].json.skills || []\n}}];"
+      },
+      "name": "Prepare Query Params",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "text",
+        "prompt": "You are an AI career transition coach. Given the user's current skills and interests: {{$json.skills}} and job market trends, suggest a personalized career transition plan. Provide:\n1. Ideal career paths.\n2. Key skill gaps.\n3. Recommended upskilling courses.\n4. Suggested job opportunities criteria.\n\nRespond in JSON format with keys: careerPaths, skillGaps, upskillTopics, jobKeywords, preferredLocation.",
+        "temperature": 0.7,
+        "maxTokens": 600
+      },
+      "name": "Career Transition Planner (AI)",
+      "type": "n8n-nodes-base.openai",
+      "typeVersion": 1,
+      "position": [
+        400,
+        150
+      ],
+      "credentials": {
+        "openAiApi": "OpenAI API"
+      }
+    },
+    {
+      "parameters": {
+        "resource": "event",
+        "operation": "create",
+        "summary": "Interview / Coaching Session",
+        "startDateTime": "={{$json.suggestedDateTime}}",
+        "endDateTime": "={{new Date(new Date($json.suggestedDateTime).getTime() + 60 * 60 * 1000).toISOString()}}",
+        "description": "Scheduled career coaching or interview session for {{$json.careerPath}}",
+        "timeZone": "America/New_York"
+      },
+      "name": "Schedule Session in Calendar",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        450
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": "Google Calendar OAuth2 API"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: {\n  suggestedDateTime: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),\n  careerPath: $json.careerPaths && $json.careerPaths.length > 0 ? $json.careerPaths[0] : 'Career Coaching Session'\n}}];"
+      },
+      "name": "Generate Session Schedule",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "passThrough"
+      },
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [
+        50,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Analyze Skills and Interests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Skills and Interests": {
+      "main": [
+        [
+          {
+            "node": "Career Transition Planner (AI)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Career Transition Planner (AI)": {
+      "main": [
+        [
+          {
+            "node": "Prepare Query Params",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate Session Schedule",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Query Params": {
+      "main": [
+        [
+          {
+            "node": "Fetch Job Opportunities",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Upskilling Courses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Session Schedule": {
+      "main": [
+        [
+          {
+            "node": "Schedule Session in Calendar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "credentials": {
+    "openAiApi": {
+      "id": "1",
+      "name": "OpenAI API"
+    },
+    "adzuna": {
+      "id": "1",
+      "name": "Adzuna API"
+    },
+    "udemyApi": {
+      "id": "1",
+      "name": "Udemy API"
+    },
+    "googleCalendarOAuth2Api": {
+      "id": "1",
+      "name": "Google Calendar OAuth2 API"
+    }
+  }
+}
