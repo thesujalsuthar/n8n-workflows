@@ -1,0 +1,142 @@
+{
+  "name": "GreenCommute Carbon Impact Monitoring & Engagement Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.transitdata.com/realtime",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Real-Time Transit Data",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const travelData = $json;\n\n// Example travel data structure\n// travelData = [{mode: 'bus', distance_km: 12}, {mode: 'bike', distance_km: 4}]\n\n// Emission factors in kg CO2e per km\nconst emissionFactors = {\n  car: 0.21,\n  bus: 0.1,\n  train: 0.06,\n  bike: 0.0,\n  walk: 0.0,\n  scooter: 0.02\n};\n\nlet totalEmissions = 0;\n\nfor (const trip of travelData) {\n  const factor = emissionFactors[trip.mode.toLowerCase()] ?? 0.2; // default if unknown mode\n  totalEmissions += trip.distance_km * factor;\n}\n\nreturn [{\n  json: {\n    totalEmissionsKg: totalEmissions.toFixed(2),\n    trips: travelData\n  }\n}];"
+      },
+      "name": "Calculate Carbon Emissions",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "channel": "user-notifications",
+        "text": "Your daily commute generated {{ $json[\"totalEmissionsKg\"] }} kg CO2 emissions. Consider these tips: {{ $json[\"tips\"] }}",
+        "title": "GreenCommute Daily Impact Summary"
+      },
+      "name": "Send Impact Notification",
+      "type": "n8n-nodes-base.pushNotification",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const tipsByEmissions = [\n  { max: 0.5, tips: 'Great job! Walking or biking reduces your carbon footprint.' },\n  { max: 2, tips: 'Try using public transit or carpooling for some trips.' },\n  { max: 100, tips: 'Consider shifting to electric or hybrid vehicles.' }\n];\n\nconst emissions = parseFloat($json[\"totalEmissionsKg\"]);\n\nlet selectedTips = '';\nfor (const item of tipsByEmissions) {\n  if (emissions <= item.max) {\n    selectedTips = item.tips;\n    break;\n  }\n}\n\nreturn [{ json: { tips: selectedTips } }];"
+      },
+      "name": "Generate Personalized Tips",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        600,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const shareText = `I just saved {{ $json['totalEmissionsKg'] }} kg CO2 by choosing green commute options today! Join me in reducing our carbon footprint. #GreenCommute`;\nreturn [{ json: { shareText } }];"
+      },
+      "name": "Generate Social Share Text",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        600,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "socialMediaPost",
+        "operation": "create",
+        "content": "={{$json[\"shareText\"]}}"
+      },
+      "name": "Post on Social Media",
+      "type": "n8n-nodes-base.socialMedia",
+      "typeVersion": 1,
+      "position": [
+        800,
+        600
+      ]
+    }
+  ],
+  "connections": {
+    "Real-Time Transit Data": {
+      "main": [
+        [
+          {
+            "node": "Calculate Carbon Emissions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Carbon Emissions": {
+      "main": [
+        [
+          {
+            "node": "Generate Personalized Tips",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Impact Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate Social Share Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Personalized Tips": {
+      "main": [
+        [
+          {
+            "node": "Send Impact Notification",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Generate Social Share Text": {
+      "main": [
+        [
+          {
+            "node": "Post on Social Media",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "greencommute-carbon-impact-monitoring-engagement-workflow"
+}
