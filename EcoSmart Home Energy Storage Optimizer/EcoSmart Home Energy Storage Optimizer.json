@@ -1,0 +1,180 @@
+{
+  "name": "EcoSmart Home Energy Storage Optimizer",
+  "nodes": [
+    {
+      "parameters": {
+        "resource": "SmartMeter",
+        "operation": "getData",
+        "options": {
+          "timeRange": "last_1h"
+        }
+      },
+      "name": "Fetch Smart Meter Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        150,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "SolarPanel",
+        "operation": "getOutput",
+        "options": {
+          "timeRange": "last_1h"
+        }
+      },
+      "name": "Fetch Solar Panel Output",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        150,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "EnergyPricing",
+        "operation": "fetchCurrentPrices",
+        "options": {
+          "regions": [
+            "local"
+          ]
+        }
+      },
+      "name": "Fetch Local Energy Pricing",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        150,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const smartMeterData = items[0].json;\nconst solarOutput = items[1].json;\nconst energyPricing = items[2].json;\n\n/*\n  Simple energy storage and usage optimization logic:\n\n  Goal: Use solar output to charge storage when prices are high,\n  discharge storage to usage when prices are high and usage is high,\n  and avoid grid usage during expensive pricing periods.\n*/\n\nconst currentPrice = energyPricing.currentPrice || 0.15; // $ per kWh\nconst solarGeneration = solarOutput.generation || 0;\nconst homeUsage = smartMeterData.usage || 0;\nconst storageCapacity = 10; // kWh, example storage capacity\nconst storageCurrentLevel = smartMeterData.storageLevel || 5; // kWh\n\nlet chargeStorage = 0;\nlet dischargeStorage = 0;\n\n// Define price thresholds\nconst highPriceThreshold = 0.20;\nconst lowPriceThreshold = 0.10;\n\n// If solar generation is high and price is high, charge storage\nif (solarGeneration > 1 && currentPrice > highPriceThreshold) {\n  chargeStorage = Math.min(solarGeneration, storageCapacity - storageCurrentLevel);\n}\n\n// If usage is high and price is high, discharge storage\nif (homeUsage > 1 && currentPrice > highPriceThreshold && storageCurrentLevel > 1) {\n  dischargeStorage = Math.min(homeUsage, storageCurrentLevel);\n}\n\n// If price is low, prefer grid usage, no discharge\nif (currentPrice < lowPriceThreshold) {\n  dischargeStorage = 0;\n  chargeStorage = 0;\n}\n\nreturn [{\n  json: {\n    chargeStorage,\n    dischargeStorage,\n    currentPrice,\n    solarGeneration,\n    homeUsage,\n    storageCurrentLevel,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "name": "Optimize Energy Storage Usage",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ],
+      "notes": "Determines optimal charge and discharge actions based on inputs"
+    },
+    {
+      "parameters": {
+        "channel": "email",
+        "toEmail": "homeowner@example.com",
+        "subject": "Energy Storage Optimization Alert",
+        "text": "Energy storage optimization executed at {{$json[\"timestamp\"]}}.\n\nCharge storage: {{$json[\"chargeStorage\"]}} kWh\nDischarge storage: {{$json[\"dischargeStorage\"]}} kWh\nCurrent price: ${{$json[\"currentPrice\"]}} per kWh\nSolar generation: {{$json[\"solarGeneration\"]}} kWh\nHome usage: {{$json[\"homeUsage\"]}} kWh\nStorage level: {{$json[\"storageCurrentLevel\"]}} kWh\n\nReview the attached report for details."
+      },
+      "name": "Send Optimization Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        750,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const charge = $json[\"chargeStorage\"] || 0;\nconst discharge = $json[\"dischargeStorage\"] || 0;\nconst price = $json[\"currentPrice\"] || 0.15;\n\nconst costSavings = discharge * price;\n\nreturn [{\n  json: {\n    timestamp: $json[\"timestamp\"],\n    chargeStorage_kWh: charge,\n    dischargeStorage_kWh: discharge,\n    currentPrice_per_kWh: price,\n    estimatedCostSavings: costSavings\n  }\n}];"
+      },
+      "name": "Calculate Cost Savings",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "append",
+        "options": {},
+        "fileName": "EcoSmart_Energy_Usage_Report.csv",
+        "binaryData": false,
+        "content": "timestamp,chargeStorage_kWh,dischargeStorage_kWh,currentPrice_per_kWh,estimatedCostSavings\n{{$json[\"timestamp\"]}},{{$json[\"chargeStorage_kWh\"]}},{{$json[\"dischargeStorage_kWh\"]}},{{$json[\"currentPrice_per_kWh\"]}},{{$json[\"estimatedCostSavings\"]}}\n"
+      },
+      "name": "Append to Usage Report",
+      "type": "n8n-nodes-base.writeBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        950,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Fetch Smart Meter Data": {
+      "main": [
+        [
+          {
+            "node": "Optimize Energy Storage Usage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Solar Panel Output": {
+      "main": [
+        [
+          {
+            "node": "Optimize Energy Storage Usage",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch Local Energy Pricing": {
+      "main": [
+        [
+          {
+            "node": "Optimize Energy Storage Usage",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Optimize Energy Storage Usage": {
+      "main": [
+        [
+          {
+            "node": "Send Optimization Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Calculate Cost Savings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Optimization Alert": {
+      "main": [],
+      "typeOptions": {}
+    },
+    "Calculate Cost Savings": {
+      "main": [
+        [
+          {
+            "node": "Append to Usage Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append to Usage Report": {
+      "main": []
+    }
+  }
+}
