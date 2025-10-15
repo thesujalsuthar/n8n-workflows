@@ -1,0 +1,206 @@
+{
+  "name": "AI-Driven Home Energy Consumption Forecast and Optimization",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.yourweatherprovider.com/v1/forecast",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "location",
+              "value": "Your_Location"
+            },
+            {
+              "name": "units",
+              "value": "metric"
+            }
+          ]
+        },
+        "responseFormat": "json"
+      },
+      "name": "Get Weather Forecast",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.electricitypricingprovider.com/v1/prices/today",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "region",
+              "value": "Your_Region"
+            }
+          ]
+        },
+        "responseFormat": "json"
+      },
+      "name": "Get Electricity Prices",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/* Fetch historical data from an external database via API or internal DB integration. Example uses a HTTPRequest node chaining data here for demo */\nreturn [\n  {\n    json: {\n      historicalEnergyData: [\n        { date: \"2024-04-01\", energy_kWh: 12.5 },\n        { date: \"2024-04-02\", energy_kWh: 13.2 },\n        { date: \"2024-04-03\", energy_kWh: 11.8 },\n        { date: \"2024-04-04\", energy_kWh: 14.1 },\n        { date: \"2024-04-05\", energy_kWh: 13.5 },\n        { date: \"2024-04-06\", energy_kWh: 15.0 },\n        { date: \"2024-04-07\", energy_kWh: 14.7 }\n      ]\n    }\n  }\n];"
+      },
+      "name": "Retrieve Historical Energy Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        250,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n Predict daily and weekly home energy consumption based on historical data, weather forecast, and electricity prices.\n This example uses a simple weighted average and heuristic approach.\n In production, this could be replaced with calls to an ML model API.\n*/\nconst historicalData = items[0].json.historicalEnergyData;\nconst weatherForecast = items[1].json;\nconst electricityPrices = items[2].json;\n\n// Extract average daily consumption from historical data\nconst avgDailyConsumption = historicalData.reduce((acc, day) => acc + day.energy_kWh, 0) / historicalData.length;\n\n// Use weather forecast data (e.g., temperature) to adjust consumption estimate\n// Example: hotter days might increase AC usage\nconst forecastTemp = weatherForecast.daily?.[0]?.temp?.day || 20;\n\nlet tempAdjustmentFactor = 1;\nif (forecastTemp > 25) {\n  tempAdjustmentFactor = 1.1;\n} else if (forecastTemp < 15) {\n  tempAdjustmentFactor = 0.9;\n}\n\n// Incorporate electricity prices to forecast and optimization\nconst currentPrice = electricityPrices.prices?.[0]?.price_per_kwh || 0.15;\n\nconst predictedDailyConsumption = avgDailyConsumption * tempAdjustmentFactor;\n\n// Weekly prediction (sum of daily predictions with simple model of variability)\nconst predictedWeeklyConsumption = predictedDailyConsumption * 7;\n\nreturn [{\n  json: {\n    predictedDailyConsumption: Number(predictedDailyConsumption.toFixed(2)),\n    predictedWeeklyConsumption: Number(predictedWeeklyConsumption.toFixed(2)),\n    tempAdjustmentFactor,\n    currentPrice\n  }\n}];"
+      },
+      "name": "Predict Energy Consumption",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n Decision logic to adjust smart home devices for optimizing energy use while maintaining comfort.\n For example:\n - If predicted consumption is high and price is high, reduce HVAC setpoint or dim lights.\n - If price is low, can preheat or precool home or charge connected devices.\n*/\nconst prediction = items[0].json;\n\nconst adjustments = [];\n\nif(prediction.predictedDailyConsumption > 14 && prediction.currentPrice > 0.20) {\n  adjustments.push({ device: \"HVAC\", action: \"setTemperature\", value: 24 });\n  adjustments.push({ device: \"Lighting\", action: \"setBrightness\", value: 60 });\n} else if(prediction.currentPrice < 0.10) {\n  adjustments.push({ device: \"HVAC\", action: \"setTemperature\", value: 21 });\n  adjustments.push({ device: \"EV Charger\", action: \"startCharging\", value: true });\n} else {\n  adjustments.push({ device: \"HVAC\", action: \"setTemperature\", value: 22 });\n  adjustments.push({ device: \"Lighting\", action: \"setBrightness\", value: 80 });\n}\n\nreturn [{ json: { adjustments } }];"
+      },
+      "name": "Decide Device Adjustments",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "sendCommand",
+        "deviceId": "HVAC_Device_ID",
+        "command": "={{$json[\"adjustments\"].find(adj => adj.device === \"HVAC\")?.action}}",
+        "commandParams": "={{ { \"temperature\": $json[\"adjustments\"].find(adj => adj.device === \"HVAC\")?.value } }}"
+      },
+      "name": "Adjust HVAC",
+      "type": "n8n-nodes-base.smartHome",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "sendCommand",
+        "deviceId": "Lighting_Device_ID",
+        "command": "={{$json[\"adjustments\"].find(adj => adj.device === \"Lighting\")?.action}}",
+        "commandParams": "={{ { \"brightness\": $json[\"adjustments\"].find(adj => adj.device === \"Lighting\")?.value } }}"
+      },
+      "name": "Adjust Lighting",
+      "type": "n8n-nodes-base.smartHome",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "sendCommand",
+        "deviceId": "EVCharger_Device_ID",
+        "command": "={{$json[\"adjustments\"].find(adj => adj.device === \"EV Charger\")?.action}}",
+        "commandParams": "={{ { \"start\": $json[\"adjustments\"].find(adj => adj.device === \"EV Charger\")?.value } }}"
+      },
+      "name": "Adjust EV Charger",
+      "type": "n8n-nodes-base.smartHome",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        420
+      ]
+    }
+  ],
+  "connections": {
+    "Retrieve Historical Energy Data": {
+      "main": [
+        [
+          {
+            "node": "Get Weather Forecast",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Electricity Prices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Weather Forecast": {
+      "main": [
+        [
+          {
+            "node": "Predict Energy Consumption",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Electricity Prices": {
+      "main": [
+        [
+          {
+            "node": "Predict Energy Consumption",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Predict Energy Consumption": {
+      "main": [
+        [
+          {
+            "node": "Decide Device Adjustments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decide Device Adjustments": {
+      "main": [
+        [
+          {
+            "node": "Adjust HVAC",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Adjust Lighting",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Adjust EV Charger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
