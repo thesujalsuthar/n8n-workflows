@@ -1,0 +1,335 @@
+{
+  "name": "AI-Enhanced Smart Home Air Quality Monitoring & Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "event": "onData",
+        "sensorType": "airQuality",
+        "deviceId": "your-sensor-device-id"
+      },
+      "name": "Air Quality Sensor Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const data = items[0].json;\n\nconst cleanData = {\n  pm25: data.pm25 || 0,\n  pm10: data.pm10 || 0,\n  co2: data.co2 || 0,\n  voc: data.voc || 0,\n  temperature: data.temperature || 0,\n  humidity: data.humidity || 0\n};\n\nreturn [{ json: cleanData }];"
+      },
+      "name": "Clean Sensor Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "text-davinci-003",
+        "prompt": "Analyze the following indoor air quality sensor data and identify potential pollutants, hazards, or unhealthy conditions. Provide a summary with any detected pollutants or risks, a health risk level (Low, Moderate, High), and suggestions to improve air quality.\n\nSensor Data:\nPM2.5: {{$json.pm25}}\nPM10: {{$json.pm10}}\nCO2: {{$json.co2}}\nVOC: {{$json.voc}}\nTemperature: {{$json.temperature}}\nHumidity: {{$json.humidity}}\n\nRespond in JSON format:\n{\n  \"summary\": \"...\",\n  \"riskLevel\": \"...\",\n  \"recommendations\": [\"...\", \"...\"]\n}",
+        "options": {},
+        "temperature": 0.7,
+        "maxTokens": 500
+      },
+      "name": "AI Analyze Air Quality",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        740,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const analysis = JSON.parse(items[0].json.choices[0].message.content);\n\nreturn [{ json: analysis }];"
+      },
+      "name": "Parse AI Analysis",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        980,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.riskLevel}}",
+              "operation": "in",
+              "value2": [
+                "Moderate",
+                "High"
+              ]
+            }
+          ]
+        }
+      },
+      "name": "Check Risk Level",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "toEmail": "user@example.com",
+        "subject": "⚠️ Air Quality Alert: {{$json.riskLevel}} Risk Detected",
+        "text": "Alert Summary:\n{{$json.summary}}\n\nRecommendations:\n- {{$json.recommendations.join('\\n- ')}}",
+        "html": "<p><b>Alert Summary:</b><br>{{$json.summary}}</p><p><b>Recommendations:</b><br><ul>{{ $json.recommendations.map(rec => `<li>${rec}</li>`).join('') }}</ul></p>"
+      },
+      "name": "Send Alert Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "deviceId": "your-purifier-device-id",
+        "commands": [
+          {
+            "command": "turnOn"
+          }
+        ]
+      },
+      "name": "Trigger Air Purifier",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        380
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "your-credentials-id",
+          "name": "smartHomeAPI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hours": 8,
+              "minutes": 0
+            }
+          ]
+        }
+      },
+      "name": "Daily Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: { reportDate: new Date().toISOString() } }];"
+      },
+      "name": "Start Report Generation",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.yoursmarthome.com/sensors/airQuality/history?last=24h",
+        "method": "GET",
+        "responseFormat": "json"
+      },
+      "name": "Fetch Last 24h Air Quality Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        740,
+        800
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "your-credentials-id",
+          "name": "smartHomeAPI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const data = items[0].json;\n\n// Calculate averages\nconst avg = {\n  pm25: 0,\n  pm10: 0,\n  co2: 0,\n  voc: 0,\n  temperature: 0,\n  humidity: 0\n};\n\ndata.forEach(entry => {\n  avg.pm25 += entry.pm25 || 0;\n  avg.pm10 += entry.pm10 || 0;\n  avg.co2 += entry.co2 || 0;\n  avg.voc += entry.voc || 0;\n  avg.temperature += entry.temperature || 0;\n  avg.humidity += entry.humidity || 0;\n});\n\nconst count = data.length || 1;\n\nreturn [{ json: {\n  avgPm25: (avg.pm25 / count).toFixed(2),\n  avgPm10: (avg.pm10 / count).toFixed(2),\n  avgCo2: (avg.co2 / count).toFixed(2),\n  avgVoc: (avg.voc / count).toFixed(2),\n  avgTemperature: (avg.temperature / count).toFixed(2),\n  avgHumidity: (avg.humidity / count).toFixed(2)\n}}];"
+      },
+      "name": "Calculate Averages",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        980,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "model": "text-davinci-003",
+        "prompt": "Generate a detailed indoor air quality report based on the following averaged sensor data. Include an assessment of air quality, potential concerns, and specific recommendations to improve the indoor environment.\n\nAverages:\nPM2.5: {{$json.avgPm25}}\nPM10: {{$json.avgPm10}}\nCO2: {{$json.avgCo2}}\nVOC: {{$json.avgVoc}}\nTemperature: {{$json.avgTemperature}}\nHumidity: {{$json.avgHumidity}}\n\nRespond in markdown format.",
+        "options": {},
+        "temperature": 0.7,
+        "maxTokens": 700
+      },
+      "name": "Generate Air Quality Report",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "toEmail": "user@example.com",
+        "subject": "📝 Daily Indoor Air Quality Report - {{$json.reportDate}}",
+        "text": "{{$json.choices[0].message.content}}",
+        "html": "<div>{{$json.choices[0].message.content.replace(/\\n/g, '<br>')}}</div>"
+      },
+      "name": "Send Daily Report Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        800
+      ]
+    }
+  ],
+  "connections": {
+    "Air Quality Sensor Trigger": {
+      "main": [
+        [
+          {
+            "node": "Clean Sensor Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean Sensor Data": {
+      "main": [
+        [
+          {
+            "node": "AI Analyze Air Quality",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Analyze Air Quality": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Analysis": {
+      "main": [
+        [
+          {
+            "node": "Check Risk Level",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Risk Level": {
+      "main": [
+        [
+          {
+            "node": "Send Alert Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Trigger Air Purifier",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Daily Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Start Report Generation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Report Generation": {
+      "main": [
+        [
+          {
+            "node": "Fetch Last 24h Air Quality Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Last 24h Air Quality Data": {
+      "main": [
+        [
+          {
+            "node": "Calculate Averages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Averages": {
+      "main": [
+        [
+          {
+            "node": "Generate Air Quality Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Air Quality Report": {
+      "main": [
+        [
+          {
+            "node": "Send Daily Report Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "ai-enhanced-smart-home-air-quality-monitoring"
+}
