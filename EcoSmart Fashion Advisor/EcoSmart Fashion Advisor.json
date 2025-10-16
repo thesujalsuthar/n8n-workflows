@@ -1,0 +1,145 @@
+{
+  "name": "AI-Powered Sustainable Fashion Outfit Recommender",
+  "nodes": [
+    {
+      "parameters": {
+        "mode": "manual",
+        "output": "list",
+        "options": [
+          {
+            "name": "preferences",
+            "value": "object"
+          },
+          {
+            "name": "weather",
+            "value": "string"
+          },
+          {
+            "name": "occasion",
+            "value": "string"
+          }
+        ]
+      },
+      "name": "User Input",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const clothingItems = [\n  { id: 1, name: 'Organic Cotton T-Shirt', ecoScore: 9, suitableWeather: ['warm'], occasions: ['casual'], type: 'top' },\n  { id: 2, name: 'Recycled Polyester Jacket', ecoScore: 8, suitableWeather: ['cold', 'rainy'], occasions: ['casual', 'outdoor'], type: 'outerwear' },\n  { id: 3, name: 'Hemp Blend Jeans', ecoScore: 7, suitableWeather: ['cool', 'warm'], occasions: ['casual', 'semi-formal'], type: 'bottom' },\n  { id: 4, name: 'Linen Dress', ecoScore: 8, suitableWeather: ['warm'], occasions: ['formal', 'semi-formal'], type: 'dress' },\n  { id: 5, name: 'Tencel Shirt', ecoScore: 9, suitableWeather: ['cool', 'warm'], occasions: ['formal', 'casual'], type: 'top' },\n  { id: 6, name: 'Recycled Wool Sweater', ecoScore: 8, suitableWeather: ['cold'], occasions: ['casual', 'semi-formal'], type: 'top' },\n  { id: 7, name: 'Organic Cotton Shorts', ecoScore: 9, suitableWeather: ['warm'], occasions: ['casual'], type: 'bottom' },\n  { id: 8, name: 'Recycled Nylon Raincoat', ecoScore: 8, suitableWeather: ['rainy'], occasions: ['outdoor'], type: 'outerwear' }\n];\nreturn [{ json: { clothingItems }}];"
+      },
+      "name": "Clothing Items Database",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const preferences = items[0].json.preferences || {};\nconst weather = items[0].json.weather || '';\nconst occasion = items[0].json.occasion || '';\nconst clothingItems = items[1].json.clothingItems;\n\n// Filter items by weather\nconst filteredByWeather = clothingItems.filter(item => item.suitableWeather.includes(weather.toLowerCase()));\n\n// Filter by occasion\nconst filteredByOccasion = filteredByWeather.filter(item => item.occasions.includes(occasion.toLowerCase()));\n\n// Sort by ecoScore descending\nfilteredByOccasion.sort((a, b) => b.ecoScore - a.ecoScore);\n\n// Use user preferences (e.g., preferred types, colors can be expanded)\n// For simplicity, assume preferences has preferredTypes array\nlet preferredTypes = preferences.preferredTypes || [];\nlet finalRecommendations;\n\nif(preferredTypes.length > 0) {\n  finalRecommendations = filteredByOccasion.filter(item => preferredTypes.includes(item.type));\n  if(finalRecommendations.length === 0) {\n    // fallback to filteredByOccasion if no preferred type match\n    finalRecommendations = filteredByOccasion;\n  }\n} else {\n  finalRecommendations = filteredByOccasion;\n}\n\n// Limit recommendations to top 5\nfinalRecommendations = finalRecommendations.slice(0, 5);\n\nreturn [{ json: { recommendations: finalRecommendations }}];"
+      },
+      "name": "Filter and Rank Outfits",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        720,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "temperature": 0.7,
+        "maxTokens": 512,
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are a helpful assistant that generates personalized sustainable fashion outfit recommendations."
+          },
+          {
+            "role": "user",
+            "content": "Based on the following outfit options, generate a friendly and engaging recommendation message highlighting their eco-friendliness and suitability for the user's preferences, weather, and occasion.\n\nOutfit options: {{$json[\"recommendations\"]}}"
+          }
+        ]
+      },
+      "name": "Generate Recommendation Text",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        950,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [\n  {\n    json: {\n      userPreferences: $json[\"preferences\"],\n      weather: $json[\"weather\"],\n      occasion: $json[\"occasion\"],\n      recommendations: $json[\"recommendations\"],\n      message: $json[\"choices\"][0][\"message\"][\"content\"]\n    }\n  }\n];"
+      },
+      "name": "Prepare Output",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1180,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "User Input": {
+      "main": [
+        [
+          {
+            "node": "Clothing Items Database",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Filter and Rank Outfits",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clothing Items Database": {
+      "main": [
+        [
+          {
+            "node": "Filter and Rank Outfits",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Filter and Rank Outfits": {
+      "main": [
+        [
+          {
+            "node": "Generate Recommendation Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Recommendation Text": {
+      "main": [
+        [
+          {
+            "node": "Prepare Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
