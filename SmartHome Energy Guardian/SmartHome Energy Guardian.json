@@ -1,0 +1,161 @@
+{
+  "name": "SmartHome AI Energy Optimizer and Carbon Footprint Reducer",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 7,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "apiKey",
+        "url": "https://api.smarthome.local/energy/consumption",
+        "options": {},
+        "responseFormat": "json",
+        "jsonParameters": false,
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_SMARTHOME_API_TOKEN"
+            }
+          ]
+        }
+      },
+      "name": "Fetch Energy Consumption Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        550,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const consumptionData = items[0].json;\n\n// Example: calculate total energy consumption in kWh\nlet totalConsumption = 0;\n\nif (Array.isArray(consumptionData.readings)) {\n  consumptionData.readings.forEach(reading => {\n    totalConsumption += reading.kWh || 0;\n  });\n}\n\n// Carbon footprint factor example (kg CO2 per kWh)\nconst carbonFactor = 0.233;\nconst totalCarbonFootprint = totalConsumption * carbonFactor;\n\n// Create AI prompt text for optimization suggestions\nconst prompt = `Our smart home consumed ${totalConsumption.toFixed(2)} kWh energy today, resulting in approximately ${totalCarbonFootprint.toFixed(2)} kg CO2 emissions. Provide practical daily actionable insights and strategies to optimize energy consumption and reduce carbon footprint.`;\n\nreturn [{json: { totalConsumption, totalCarbonFootprint, prompt }}];"
+      },
+      "name": "Process Consumption Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "temperature": 0.6,
+        "maxTokens": 500,
+        "messages": [
+          {
+            "role": "user",
+            "content": "={{ $json.prompt }}"
+          }
+        ]
+      },
+      "name": "AI Optimization Suggestions",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "smarthome@yourdomain.com",
+        "toEmail": "user@yourdomain.com",
+        "subject": "Daily SmartHome Energy Optimization and Carbon Footprint Report",
+        "text": "Hello,\n\nHere is your daily SmartHome energy consumption and carbon footprint report:\n\nTotal Energy Consumed: {{$json.totalConsumption.toFixed(2)}} kWh\nEstimated Carbon Footprint: {{$json.totalCarbonFootprint.toFixed(2)}} kg CO2\n\nAI Recommendations:\n{{$json.choices[0].message.content}}\n\nHave a green day!"
+      },
+      "name": "Send Email Report",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "title": "SmartHome Energy Optimization",
+        "text": "Total energy: {{$json.totalConsumption.toFixed(2)}} kWh | Carbon footprint: {{$json.totalCarbonFootprint.toFixed(2)}} kg CO2\nInsights: {{$json.choices[0].message.content}}"
+      },
+      "name": "Send Mobile Notification",
+      "type": "n8n-nodes-base.pushcut",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        450
+      ]
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Energy Consumption Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Energy Consumption Data": {
+      "main": [
+        [
+          {
+            "node": "Process Consumption Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Consumption Data": {
+      "main": [
+        [
+          {
+            "node": "AI Optimization Suggestions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Optimization Suggestions": {
+      "main": [
+        [
+          {
+            "node": "Send Email Report",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Mobile Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "id": "1"
+}
