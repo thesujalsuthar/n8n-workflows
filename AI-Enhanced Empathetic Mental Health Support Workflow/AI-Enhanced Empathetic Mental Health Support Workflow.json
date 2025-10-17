@@ -1,0 +1,263 @@
+{
+  "name": "AI-Powered Mental Health Chatbot Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "chat",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ],
+      "credentials": {}
+    },
+    {
+      "parameters": {
+        "authentication": "none",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={{\n  \"model\": \"gpt-4\",\n  \"messages\": [\n    {\"role\": \"system\", \"content\": \"You are an empathetic mental health assistant. Provide compassionate responses based on user input.\"},\n    {\"role\": \"user\", \"content\": $json.body.message}\n  ],\n  \"temperature\": 0.7\n}}"
+      },
+      "name": "AI Chatbot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        520,
+        300
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "openaiApiKey",
+          "name": "OpenAI API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "none",
+        "url": "https://api.meaningcloud.com/sentiment-2.1",
+        "method": "POST",
+        "jsonParameters": false,
+        "options": {},
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "key",
+              "value": "YOUR_MEANINGCLOUD_API_KEY"
+            },
+            {
+              "name": "txt",
+              "value": "={{$json.body.message}}"
+            },
+            {
+              "name": "lang",
+              "value": "en"
+            }
+          ]
+        }
+      },
+      "name": "Sentiment Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        520,
+        430
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const sentiment = items[0].json.score_tag;\nconst confidence = items[0].json.confidence;\n\nlet emotion = \"neutral\";\nif (sentiment === \"P+\" || sentiment === \"P\") {\n  emotion = \"positive\";\n} else if (sentiment === \"N\" || sentiment === \"N+\") {\n  emotion = \"negative\";\n}\n\nreturn [{\n  json: {\n    sentiment: sentiment,\n    confidence: confidence,\n    emotion: emotion,\n    originalMessage: items[0].json.txt || $json.body.message\n  }\n}];"
+      },
+      "name": "Process Sentiment",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        740,
+        430
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/* Prepare personalized follow-up recommendation based on detected emotion and user preferences */\nconst emotion = items[0].json.emotion;\n\n// Placeholder for user data, ideally fetched securely from credentials or a database\nconst userPrefs = $json.userPreferences || {}; // example: { preferSessions: true, topics: [\"anxiety\", \"stress\"] }\nconst mentalConditions = $json.mentalHealthConditions || [];\n\nlet recommendations = [];\n\nif (emotion === \"negative\") {\n  recommendations.push(\"Consider scheduling a professional counseling session.\");\n  if (userPrefs.preferSessions) {\n    recommendations.push(\"Available slots for next week are open. Would you like to book a session?\");\n  } else {\n    recommendations.push(\"Here are some self-help articles related to stress and anxiety.\");\n  }\n} else if (emotion === \"positive\") {\n  recommendations.push(\"Great to hear you are feeling good! Keep maintaining positive habits.\");\n} else {\n  recommendations.push(\"If you ever feel overwhelmed, remember support is available.\");\n}\n\nreturn [{ json: { recommendations: recommendations, emotion: emotion } }];"
+      },
+      "name": "Generate Recommendations",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        950,
+        430
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "calendar",
+        "operation": "createEvent",
+        "calendarId": "primary",
+        "summary": "Mental health follow-up session",
+        "description": "Scheduled follow-up session based on your conversation with the mental health assistant.",
+        "start": "={{ new Date().toISOString() }}",
+        "end": "={{ new Date(Date.now() + 3600000).toISOString() }}"        
+      },
+      "name": "Schedule Follow-up",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1,
+      "position": [
+        1160,
+        430
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "googleOAuth2",
+          "name": "Google Calendar OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "/* Secure sensitive user data by stripping irrelevant fields before response */\nconst message = $json[\"choices\"] ? $json[\"choices\"][0][\"message\"][\"content\"] : \"\";\nconst recommendations = items.find(item => item.name === 'Generate Recommendations')?.json.recommendations || [];\nconst emotion = items.find(item => item.name === 'Generate Recommendations')?.json.emotion || \"neutral\";\n\nreturn [{\n  json: {\n    reply: message,\n    emotion: emotion,\n    recommendations: recommendations\n  }\n}];"
+      },
+      "name": "Prepare Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1380,
+        430
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "passthrough"
+      },
+      "name": "Respond",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1580,
+        430
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/* Merge all data for contextual use in next nodes */\nreturn [{\n  json: Object.assign({}, $json, {\n    userPreferences: $json.body?.preferences || {},\n    mentalHealthConditions: $json.body?.conditions || []\n  })\n}];"
+      },
+      "name": "Parse User Preferences",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        380,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse User Preferences",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse User Preferences": {
+      "main": [
+        [
+          {
+            "node": "AI Chatbot",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Sentiment Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Chatbot": {
+      "main": [
+        [
+          {
+            "node": "Prepare Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sentiment Analysis": {
+      "main": [
+        [
+          {
+            "node": "Process Sentiment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Sentiment": {
+      "main": [
+        [
+          {
+            "node": "Generate Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Schedule Follow-up",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Follow-up": {
+      "main": [
+        [
+          {
+            "node": "Prepare Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Response": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {}
+}
