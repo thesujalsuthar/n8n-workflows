@@ -1,0 +1,207 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "start-planning",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "name": "Start Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.traveldata.example.com/v1/low-carbon-options",
+        "method": "GET",
+        "queryParameters": [
+          {
+            "name": "from",
+            "value": "={{$json.from}}"
+          },
+          {
+            "name": "to",
+            "value": "={{$json.to}}"
+          },
+          {
+            "name": "date",
+            "value": "={{$json.date}}"
+          }
+        ],
+        "headerParameters": [
+          {
+            "name": "Authorization",
+            "value": "Bearer YOUR_TRAVELDATA_API_KEY"
+          }
+        ]
+      },
+      "name": "Fetch Low-Carbon Transport Options",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const options = items[0].json.options || [];\nreturn options.map(option => ({ json: option }));"
+      },
+      "name": "Split Transport Options",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.carbonfootprint.example.com/v1/calculate",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={\n  \"transportType\": $json.transportType,\n  \"distanceKm\": $json.distanceKm,\n  \"passengerCount\": 1\n}"
+      },
+      "name": "Calculate Carbon Emissions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        950,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.carbonoffsets.example.com/v1/projects",
+        "method": "GET",
+        "queryParameters": [
+          {
+            "name": "location",
+            "value": "={{$json.to}}"
+          },
+          {
+            "name": "category",
+            "value": "travel"
+          }
+        ],
+        "headerParameters": [
+          {
+            "name": "Authorization",
+            "value": "Bearer YOUR_CARBONOFFSET_API_KEY"
+          }
+        ]
+      },
+      "name": "Fetch Local Carbon Offset Projects",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const emissions = items[0].json.emissions || 0;\nconst projects = items[1].json.projects || [];\nconst transportOption = items[0].json.transportType;\n\nreturn [{\n  json: {\n    transportOption,\n    emissions,\n    recommendedOffsets: projects,\n    summary: `Transport: ${transportOption}\\nEstimated Emissions: ${emissions} kg CO2e\\nRecommended Local Carbon Offset Projects: ${projects.length}`\n  }\n}];"
+      },
+      "name": "Compile Summary",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "text": "={{$json.summary}}",
+        "toEmail": "={{$json.email}}",
+        "subject": "Your Sustainable Travel Plan & Carbon Offset Recommendations"
+      },
+      "name": "Send Email Report",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1700,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Start Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Low-Carbon Transport Options",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Low-Carbon Transport Options": {
+      "main": [
+        [
+          {
+            "node": "Split Transport Options",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Transport Options": {
+      "main": [
+        [
+          {
+            "node": "Calculate Carbon Emissions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Carbon Emissions": {
+      "main": [
+        [
+          {
+            "node": "Fetch Local Carbon Offset Projects",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Local Carbon Offset Projects": {
+      "main": [
+        [
+          {
+            "node": "Compile Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compile Summary": {
+      "main": [
+        [
+          {
+            "node": "Send Email Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
