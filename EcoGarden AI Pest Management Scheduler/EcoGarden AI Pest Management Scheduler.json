@@ -1,0 +1,177 @@
+{
+  "name": "SmartUrban Garden AI Pest Insight & Eco-Friendly Treatment Scheduler",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "upload-image",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "name": "Receive Image",
+      "type": "n8n-nodes-base.httpTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "none",
+        "url": "https://api.example-ai-pestdetection.com/detect",
+        "method": "POST",
+        "responseFormat": "json",
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "image",
+              "value": "={{$json[\"body\"]}}"
+            }
+          ]
+        },
+        "options": {
+          "headers": {
+            "Content-Type": "application/json"
+          }
+        }
+      },
+      "name": "AI Pest Detection",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        520,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nReturns eco-friendly treatment recommendations based on detected pests.\nInput: pest list from AI Pest Detection\nOutput: treatment recommendations\n*/\n\nconst pestData = items[0].json;\n\n// Example mapping (this should be maintained according to real data)\nconst treatmentMap = {\n  \"aphids\": [\"introduce ladybugs\", \"spray neem oil\", \"use insecticidal soap\"],\n  \"whiteflies\": [\"yellow sticky traps\", \"introduce parasitic wasps\", \"apply insecticidal soap\"],\n  \"spider mites\": [\"increase humidity\", \"spray miticide\", \"introduce predatory mites\"],\n  \"caterpillars\": [\"handpick\", \"use Bacillus thuringiensis\", \"introduce birds\"]\n};\n\nconst detectedPests = pestData.detectedPests || [];\n\nlet recommendations = [];\n\ndetectedPests.forEach(pest => {\n  const lowerPest = pest.toLowerCase();\n  if(treatmentMap[lowerPest]) {\n    recommendations = recommendations.concat(treatmentMap[lowerPest]);\n  }\n});\n\n// Remove duplicates\nrecommendations = [...new Set(recommendations)];\n\nreturn [{ json: { recommendations } }];"
+      },
+      "name": "Eco-Friendly Treatment Recommender",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nCreates treatment schedule items based on recommendations\nSchedules treatments for the next 7 days, spreading recommendations\n*/\n\nconst recommendations = items[0].json.recommendations || [];\n\nconst schedule = [];\nconst today = new Date();\n\nconst daysToSchedule = 7;\n\nfor(let i = 0; i < recommendations.length; i++) {\n  const treatment = recommendations[i];\n  // Spread evenly across next 7 days\n  const dayOffset = i % daysToSchedule;\n  const treatmentDate = new Date(today);\n  treatmentDate.setDate(today.getDate() + dayOffset);\n  \n  schedule.push({\n    treatment,\n    scheduledDate: treatmentDate.toISOString().split('T')[0],\n    status: \"scheduled\"\n  });\n}\n\nreturn [{ json: { schedule } }];"
+      },
+      "name": "Treatment Scheduler",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "append",
+        "sheetId": "<YOUR_GOOGLE_SHEET_ID>",
+        "range": "Sheet1!A:C",
+        "options": {
+          "valueInputMode": "USER_ENTERED"
+        },
+        "valueUi": {
+          "value": [
+            [
+              "={{$json.schedule[0].scheduledDate}}",
+              "={{$json.schedule[0].treatment}}",
+              "={{$json.schedule[0].status}}"
+            ]
+          ]
+        }
+      },
+      "name": "Log Schedule to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": "<YOUR_GOOGLE_CREDENTIALS>"
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "channel": "garden-care",
+        "text": "New eco-friendly pest treatment schedule created:\n{{$json.schedule.map(event => `${event.scheduledDate}: ${event.treatment}`).join('\\n')}}"
+      },
+      "name": "Notify Team (Slack)",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        300
+      ],
+      "credentials": {
+        "slackApi": "<YOUR_SLACK_CREDENTIALS>"
+      }
+    }
+  ],
+  "connections": {
+    "Receive Image": {
+      "main": [
+        [
+          {
+            "node": "AI Pest Detection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Pest Detection": {
+      "main": [
+        [
+          {
+            "node": "Eco-Friendly Treatment Recommender",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Eco-Friendly Treatment Recommender": {
+      "main": [
+        [
+          {
+            "node": "Treatment Scheduler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Treatment Scheduler": {
+      "main": [
+        [
+          {
+            "node": "Log Schedule to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Schedule to Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Notify Team (Slack)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
