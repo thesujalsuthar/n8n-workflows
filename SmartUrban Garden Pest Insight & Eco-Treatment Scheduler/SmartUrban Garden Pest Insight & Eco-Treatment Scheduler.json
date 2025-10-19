@@ -1,0 +1,249 @@
+{
+  "name": "SmartUrban Garden AI Pest Detection & Eco-Friendly Treatment Scheduler",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "upload-image",
+        "options": {}
+      },
+      "id": "1",
+      "name": "Receive Image Upload",
+      "type": "n8n-nodes-base.httpTrigger",
+      "typeVersion": 1,
+      "position": [
+        150,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const fileData = $json.body?.imageBase64;\nif (!fileData) {\n  throw new Error('No imageBase64 field found in the request body');\n}\nreturn [{ json: { imageBase64: fileData } }];"
+      },
+      "id": "2",
+      "name": "Extract Base64 Image",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        350,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authenticationType": "headerAuth",
+        "url": "https://api.example-ai-image-recognition.com/v1/pest-detection",
+        "options": {},
+        "queryParametersUi": {
+          "parameter": []
+        },
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "image_base64",
+              "value": "={{$json[\"imageBase64\"]}}"
+            }
+          ]
+        },
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_API_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "responseFormat": "json",
+        "optionsUi": {
+          "continueOnFail": false
+        }
+      },
+      "id": "3",
+      "name": "AI Pest Detection API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const detectedPests = $json.detections || [];\n\n// Example pest types with recommended eco-friendly treatments\nconst treatmentMap = {\n  aphids: { treatment: 'Neem oil spray', frequencyDays: 7, note: 'Avoid spraying during midday sun.' },\n  spider_mites: { treatment: 'Insecticidal soap', frequencyDays: 5, note: 'Apply early morning or late evening.' },\n  whiteflies: { treatment: 'Yellow sticky traps', frequencyDays: 10, note: 'Place traps near affected plants.' },\n  caterpillars: { treatment: 'Bt toxin spray', frequencyDays: 14, note: 'Use only on targeted plants.' }\n};\n\nlet treatmentSchedule = [];\ndetectedPests.forEach(pest => {\n  const pestType = pest.type.toLowerCase();\n  if (treatmentMap[pestType]) {\n    treatmentSchedule.push({\n      pest: pestType,\n      treatment: treatmentMap[pestType].treatment,\n      frequencyDays: treatmentMap[pestType].frequencyDays,\n      note: treatmentMap[pestType].note\n    });\n  }\n});\n\nreturn [{ json: { treatmentSchedule } }];"
+      },
+      "id": "4",
+      "name": "Map Pest to Treatment",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authenticationType": "headerAuth",
+        "url": "https://api.openweathermap.org/data/2.5/weather",
+        "options": {},
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "q",
+              "value": "YourCity,YourCountry"
+            },
+            {
+              "name": "appid",
+              "value": "YOUR_OPENWEATHER_API_KEY"
+            },
+            {
+              "name": "units",
+              "value": "metric"
+            }
+          ]
+        },
+        "headerParametersUi": {
+          "parameter": []
+        },
+        "responseFormat": "json"
+      },
+      "id": "5",
+      "name": "Fetch Weather Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Use weather data to decide optimal treatment timing\nconst treatments = $json[\"treatmentSchedule\"] || [];\nconst weather = $items(\"Fetch Weather Data\")[0].json;\n\nconst safeToTreat = weather.weather?.some(w => {\n  // Avoid treatment if raining or high wind\n  return w.main.toLowerCase().includes('rain') || w.main.toLowerCase().includes('storm');\n}) ? false : true;\n\nconst advice = safeToTreat ? 'Weather conditions are suitable for treatment. Apply treatments as scheduled.' : 'Avoid treatments today due to adverse weather conditions (rain or storms).';\n\nreturn [{\n  json: {\n    treatmentSchedule: treatments,\n    safeToTreat,\n    weatherSummary: weather.weather[0]?.description || '',\n    advice\n  }\n}];"
+      },
+      "id": "6",
+      "name": "Evaluate Treatment Timing",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const treatmentSchedule = $json.treatmentSchedule || [];\nconst advice = $json.advice;\nconst safeToTreat = $json.safeToTreat;\n\nconst reminders = treatmentSchedule.map(t => {\n  return `Pest: ${t.pest.charAt(0).toUpperCase() + t.pest.slice(1)}\\nTreatment: ${t.treatment}\\nFrequency: Every ${t.frequencyDays} days\\nNote: ${t.note}`;\n}).join('\\n\\n');\n\nreturn [{ json: { message: `SmartUrban Garden Notification:\\n\\n${reminders}\\n\\nTreatment Advice:\\n${advice}` } }];"
+      },
+      "id": "7",
+      "name": "Compose Notification Message",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "fromEmail": "garden-notifications@smarturban.com",
+        "toEmail": "={{$json[\"gardenerEmail\"] || \"gardener@example.com\"}}",
+        "subject": "SmartUrban Garden Treatment Reminder",
+        "text": "={{$json[\"message\"]}}",
+        "options": {}
+      },
+      "id": "8",
+      "name": "Send Email Notification",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1850,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Receive Image Upload": {
+      "main": [
+        [
+          {
+            "node": "Extract Base64 Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Base64 Image": {
+      "main": [
+        [
+          {
+            "node": "AI Pest Detection API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Pest Detection API": {
+      "main": [
+        [
+          {
+            "node": "Map Pest to Treatment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map Pest to Treatment": {
+      "main": [
+        [
+          {
+            "node": "Fetch Weather Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Weather Data": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Treatment Timing",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Evaluate Treatment Timing": {
+      "main": [
+        [
+          {
+            "node": "Compose Notification Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose Notification Message": {
+      "main": [
+        [
+          {
+            "node": "Send Email Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "smarturban-garden-pest-detection"
+}
