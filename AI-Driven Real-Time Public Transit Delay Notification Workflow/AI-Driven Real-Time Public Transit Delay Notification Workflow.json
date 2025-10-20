@@ -1,0 +1,224 @@
+{
+  "name": "AI-Powered Real-Time Public Transit Delay Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.publictransit.example.com/realtime/vehicle_positions",
+        "options": {
+          "headers": {
+            "Accept": "application/json"
+          }
+        }
+      },
+      "name": "Fetch Real-Time Transit Data",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "continueOnFail": false
+    },
+    {
+      "parameters": {
+        "functionCode": "const transitData = items[0].json;\n\n// Extract delay relevant fields\nconst delays = transitData.vehicles.map(vehicle => {\n  return {\n    id: vehicle.id,\n    route: vehicle.route,\n    delaySeconds: vehicle.delay_seconds,\n    currentStop: vehicle.current_stop,\n    nextStops: vehicle.next_stops\n  };\n});\n\n// Prepare input for AI model\nreturn [\n  {\n    json: {\n      delays\n    }\n  }\n];"
+      },
+      "name": "Extract Delay Data",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "chat/completions",
+        "operation": "create",
+        "model": "gpt-4",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an AI assistant that analyzes public transit delay data and decides if delays are significant and suggests alternative routes if needed."
+          },
+          {
+            "role": "user",
+            "content": "Analyze this delay data and return only a JSON array of alerts where delaySeconds > 120 seconds. For each alert, include: id, route, delaySeconds, currentStop, alternativeRoutes (an array of alternative route suggestions). Use data from nextStops if needed."
+          },
+          {
+            "role": "user",
+            "content": "{{$json.delays}}"
+          }
+        ]
+      },
+      "name": "Analyze Delays with AI",
+      "type": "openaiApi",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const responseText = items[0].json.choices[0].message.content.trim();\n\ntry {\n  const alerts = JSON.parse(responseText);\n  return alerts.map(alert => ({ json: alert }));\n} catch (error) {\n  throw new Error('Failed to parse AI response as JSON: ' + responseText);\n}"
+      },
+      "name": "Parse AI Response",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "splitInBatches",
+        "batchSize": 1
+      },
+      "name": "Split Alerts",
+      "type": "splitInBatches",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "alerts@publictransit.example.com",
+        "toEmail": "={{$json.email || 'commuter@example.com'}}",
+        "subject": "Transit Delay Alert for Route {{$json.route}}",
+        "text": "Delay Alert:\nRoute: {{$json.route}}\nCurrent Delay: {{$json.delaySeconds}} seconds\nCurrent Stop: {{$json.currentStop}}\n\nSuggested Alternative Routes:\n{{$json.alternativeRoutes.join('\\n')}}"
+      },
+      "name": "Send Email Notification",
+      "type": "emailSend",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        200
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "channel": "sms",
+        "to": "={{$json.phone || '+10000000000'}}",
+        "message": "Transit Delay Alert on route {{$json.route}}, delay {{$json.delaySeconds}}s at {{$json.currentStop}}. Alternatives: {{$json.alternativeRoutes.join(', ')}}"
+      },
+      "name": "Send SMS Notification",
+      "type": "twilio",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        400
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {},
+      "name": "No Delay Alerts",
+      "type": "noop",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "if (items.length === 0) {\n  return [];\n}\nreturn items;"
+      },
+      "name": "Check for Alerts",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        450
+      ]
+    }
+  ],
+  "connections": {
+    "Fetch Real-Time Transit Data": {
+      "main": [
+        [
+          {
+            "node": "Extract Delay Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Delay Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze Delays with AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Delays with AI": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "error": [
+        []
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Check for Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "error": [
+        []
+      ]
+    },
+    "Check for Alerts": {
+      "main": [
+        [
+          {
+            "node": "Split Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Alerts": {
+      "main": [
+        [
+          {
+            "node": "Send Email Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send SMS Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
