@@ -1,0 +1,76 @@
+{
+  "workflow": {
+    "title": "AI-Powered Sustainable Urban Mobility Planner",
+    "description": "Leverages real-time data, AI algorithms, and user preferences to optimize and recommend eco-friendly transportation options for daily commuting by integrating public transit data, bike-sharing services, electric vehicle availability, and walking routes.",
+    "steps": [
+      {
+        "id": "1",
+        "name": "User Preferences Collection",
+        "type": "input",
+        "description": "Collect user preferences including preferred transportation modes, maximum walking distance, time constraints, and eco-friendly priorities."
+      },
+      {
+        "id": "2",
+        "name": "Real-Time Data Integration",
+        "type": "data_fetch",
+        "description": "Fetch real-time data from public transit APIs, bike-sharing availability, electric vehicle stations, and traffic conditions.",
+        "sources": [
+          "public_transit_api",
+          "bike_sharing_service_api",
+          "electric_vehicle_availability_api",
+          "traffic_conditions_api"
+        ]
+      },
+      {
+        "id": "3",
+        "name": "Walking Route Calculation",
+        "type": "service",
+        "description": "Compute accessible walking routes within the user's maximum walking distance."
+      },
+      {
+        "id": "4",
+        "name": "AI Route Optimization",
+        "type": "ai_processing",
+        "description": "Apply AI algorithms to combine available transportation modes, user preferences, and real-time data to generate personalized and optimized travel plans with low carbon footprints."
+      },
+      {
+        "id": "5",
+        "name": "Carbon Footprint Estimation",
+        "type": "calculation",
+        "description": "Estimate carbon footprint savings for each recommended travel plan."
+      },
+      {
+        "id": "6",
+        "name": "Route Recommendation",
+        "type": "output",
+        "description": "Present personalized, efficient, and eco-friendly travel options to the user."
+      },
+      {
+        "id": "7",
+        "name": "Automated Notifications Setup",
+        "type": "automation",
+        "description": "Set up automated notifications for transit delays, traffic condition changes, and carbon footprint savings updates."
+      }
+    ],
+    "triggers": [
+      {
+        "id": "t1",
+        "type": "time_based",
+        "description": "Trigger workflow daily at user-defined times for commute planning and updates."
+      },
+      {
+        "id": "t2",
+        "type": "event_based",
+        "description": "Trigger notifications when there are delays, traffic changes, or significant carbon savings updates."
+      }
+    ],
+    "metadata": {
+      "version": "1.0",
+      "author": "AI Urban Mobility Team",
+      "repository_check": {
+        "enabled": true,
+        "criteria": "Topic uniqueness ensured before implementation"
+      }
+    }
+  }
+}
