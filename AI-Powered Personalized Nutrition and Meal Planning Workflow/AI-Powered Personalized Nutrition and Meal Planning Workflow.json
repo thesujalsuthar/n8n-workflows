@@ -1,0 +1,158 @@
+{
+  "name": "AI-Driven Personalized Nutrition and Meal Planning Assistant",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "user-preferences",
+        "options": {}
+      },
+      "name": "User Preferences API",
+      "type": "n8n-nodes-base.httpTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const preferences = $json;\n\n// Validate required fields\nif (!preferences.dietaryPreferences || !preferences.healthGoals || !preferences.allergies) {\n  throw new Error('Missing required user preference fields.');\n}\n\nreturn [{ json: preferences }];"
+      },
+      "name": "Validate Preferences",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "resource": "item",
+        "filters": {
+          "filterType": "And",
+          "filters": [
+            {
+              "field": "category",
+              "operation": "equal",
+              "value": "meals"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Get Meal Options from Nutritional Database",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 1,
+      "position": [
+        650,
+        250
+      ],
+      "credentials": {
+        "airtableApi": {
+          "id": "<AIRTABLE_CREDENTIAL_ID>"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const preferences = $items(\"Validate Preferences\")[0].json;\nconst meals = $items(\"Get Meal Options from Nutritional Database\");\n\n// Filter meals by dietary preferences, allergies, and health goals\nfunction mealMatchesPreferences(meal) {\n  const mealDietTags = meal.json.dietTags || [];\n  const mealIngredients = meal.json.ingredients || [];\n\n  // Check allergies\n  for (const allergen of preferences.allergies) {\n    if (mealIngredients.some(ing => ing.toLowerCase().includes(allergen.toLowerCase()))) {\n      return false;\n    }\n  }\n\n  // Check diet compatibility\n  for (const pref of preferences.dietaryPreferences) {\n    if (!mealDietTags.includes(pref)) {\n      return false;\n    }\n  }\n\n  // Additional filters based on healthGoals could be applied here (e.g. calories, macros)\n  // For demo, assume all meals match health goals\n  return true;\n}\n\nconst filteredMeals = meals.filter(mealMatchesPreferences);\n\n// Simple meal plan: pick 3 meals (e.g. Breakfast, Lunch, Dinner)\nconst mealPlan = filteredMeals.slice(0, 3).map((meal, i) => {\n  return {\n    mealType: ['Breakfast', 'Lunch', 'Dinner'][i],\n    name: meal.json.name,\n    ingredients: meal.json.ingredients,\n    nutrition: meal.json.nutrition\n  };\n});\n\nreturn [{ json: { mealPlan } }];"
+      },
+      "name": "Generate Meal Plan",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const mealPlan = $json.mealPlan;\n\n// Aggregate ingredients into shopping list with quantities\nconst shoppingList = {};\n\nmealPlan.forEach(meal => {\n  meal.ingredients.forEach(ingredient => {\n    const key = ingredient.name.toLowerCase();\n    if (shoppingList[key]) {\n      shoppingList[key].quantity += ingredient.quantity;\n      shoppingList[key].unit = ingredient.unit; // Assuming same unit for simplicity\n    } else {\n      shoppingList[key] = {\n        name: ingredient.name,\n        quantity: ingredient.quantity,\n        unit: ingredient.unit\n      };\n    }\n  });\n});\n\nconst shoppingArray = Object.values(shoppingList);\n\nreturn [{ json: { shoppingList: shoppingArray, mealPlan } }];"
+      },
+      "name": "Create Shopping List",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "send-meal-plan",
+        "options": {}
+      },
+      "name": "Output Meal Plan API",
+      "type": "n8n-nodes-base.httpResponse",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "User Preferences API": {
+      "main": [
+        [
+          {
+            "node": "Validate Preferences",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Preferences": {
+      "main": [
+        [
+          {
+            "node": "Get Meal Options from Nutritional Database",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Meal Options from Nutritional Database": {
+      "main": [
+        [
+          {
+            "node": "Generate Meal Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Meal Plan": {
+      "main": [
+        [
+          {
+            "node": "Create Shopping List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Shopping List": {
+      "main": [
+        [
+          {
+            "node": "Output Meal Plan API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
