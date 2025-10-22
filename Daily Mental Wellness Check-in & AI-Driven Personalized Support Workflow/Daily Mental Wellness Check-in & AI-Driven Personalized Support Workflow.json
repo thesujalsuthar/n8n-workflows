@@ -1,0 +1,271 @@
+{
+  "name": "Automated Daily Mental Wellness Check-in & Personalized Support System",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 9,
+              "minute": 0,
+              "second": 0
+            }
+          ]
+        }
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "contact",
+        "operation": "getAll",
+        "returnAll": true
+      },
+      "name": "Get Users",
+      "type": "n8n-nodes-base.crm",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "sheetId": "your_sheet_id_here",
+        "range": "Users!A2:B",
+        "options": {
+          "useRowNumbers": true
+        }
+      },
+      "name": "Get Users from Spreadsheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 2,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "chatId": "={{$json[\"phoneNumber\"]}}",
+        "text": "Hi {{$json[\"firstName\"]}}, this is your daily mental wellness check-in. How are you feeling today on a scale from 1 (very bad) to 10 (excellent)? Please reply with your rating and a short explanation if you'd like."
+      },
+      "name": "Send Wellness Check-in SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ],
+      "credentials": {
+        "twilioApi": "Twilio API"
+      }
+    },
+    {
+      "parameters": {
+        "webhookUri": "={{'wellness-check-in-' + $json[\"phoneNumber\"]}}",
+        "httpMethod": "POST",
+        "responseBody": "Thank you for your response! We're here to support you."
+      },
+      "name": "Receive Response Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        900,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "passThrough",
+        "functionCode": "const message = $json[\"Body\"] || \"\";\nreturn [{ json: { message } }];"
+      },
+      "name": "Extract Message Text",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "options": {},
+        "prompt": "You are a caring mental health assistant. Analyze the following user input for signs of distress, depression, anxiety, or suicidal ideation:\n\nUser input:\n{{ $json[\"message\"] }}\n\nRespond with a JSON object containing:\n{\n  \"distressDetected\": true or false,\n  \"severity\": \"none\", \"mild\", \"moderate\", or \"severe\",\n  \"recommendedAction\": \"support resources\" or \"human counselor\",\n  \"summary\": \"brief summary of user's emotional state\"\n}"
+      },
+      "name": "Analyze Mental State",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        400
+      ],
+      "credentials": {
+        "openAiApi": "OpenAI API"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const analysisText = $json[\"choices\"][0][\"message\"][\"content\"];\n// parse the JSON safely\ntry {\n  const analysis = JSON.parse(analysisText);\n  return [{ json: analysis }];\n} catch(e) {\n  return [{ json: { distressDetected: false, severity: \"none\", recommendedAction: \"support resources\", summary: \"Could not analyze user input.\" } }];\n}"
+      },
+      "name": "Parse AI Analysis",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "if ($json[\"distressDetected\"] === true && ($json[\"severity\"] === \"moderate\" || $json[\"severity\"] === \"severe\")) {\n  return [this.helpers.returnJsonArray([$json]), []];\n} else {\n  return [[], this.helpers.returnJsonArray([$json])];\n}"
+      },
+      "name": "Check If Escalate Needed",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 1,
+      "position": [
+        1700,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "chatId": "={{$json[\"phoneNumber\"]}}",
+        "text": "We noticed you're going through a tough time. We've alerted a counselor to support you shortly. Meanwhile, here are some emergency contact numbers and mental health resources:\n\n- National Suicide Prevention Lifeline: 1-800-273-8255\n- Crisis Text Line: Text HOME to 741741\n- Local counseling services: [insert link or details]"
+      },
+      "name": "Send Escalation SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1900,
+        300
+      ],
+      "credentials": {
+        "twilioApi": "Twilio API"
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "chatId": "={{$json[\"phoneNumber\"]}}",
+        "text": "Thanks for checking in today. Remember, self-care is important. Here are some personalized resources based on your response:\n\n- Meditation app: https://www.calm.com/\n- CBT exercises: https://www.moodgym.com.au/\n- Mental wellness articles: https://www.headspace.com/articles"
+      },
+      "name": "Send Support Resources SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1900,
+        500
+      ],
+      "credentials": {
+        "twilioApi": "Twilio API"
+      }
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Users from Spreadsheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Users from Spreadsheet": {
+      "main": [
+        [
+          {
+            "node": "Send Wellness Check-in SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Wellness Check-in SMS": {
+      "main": [
+        []
+      ]
+    },
+    "Receive Response Webhook": {
+      "main": [
+        [
+          {
+            "node": "Extract Message Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Message Text": {
+      "main": [
+        [
+          {
+            "node": "Analyze Mental State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Mental State": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Analysis": {
+      "main": [
+        [
+          {
+            "node": "Check If Escalate Needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If Escalate Needed": {
+      "main": [
+        [
+          {
+            "node": "Send Escalation SMS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Support Resources SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
