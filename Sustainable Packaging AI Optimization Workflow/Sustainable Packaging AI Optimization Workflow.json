@@ -1,0 +1,159 @@
+{
+  "name": "AI-Powered Sustainable Packaging Recommendation & Inventory Optimization",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.example.com/packaging-materials",
+        "responseFormat": "json"
+      },
+      "name": "Fetch Packaging Materials Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.example.com/carbon-footprints",
+        "responseFormat": "json"
+      },
+      "name": "Fetch Carbon Footprint Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.example.com/supplier-inventories",
+        "responseFormat": "json"
+      },
+      "name": "Fetch Supplier Inventory Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const materials = $items(\"Fetch Packaging Materials Data\")[0].json.data;\nconst carbonData = $items(\"Fetch Carbon Footprint Data\")[0].json.data;\nconst supplierInventories = $items(\"Fetch Supplier Inventory Data\")[0].json.data;\n\n/**\n * 1. Map packaging materials to their carbon footprints.\n * 2. Identify eco-friendly alternatives with lower carbon footprint.\n * 3. Cross-reference supplier inventories to confirm availability.\n * 4. Optimize order quantities based on available inventory, carbon impact and cost.\n */\n\n// Create a lookup for carbon footprint by material ID or name\nconst carbonLookup = {};\ncarbonData.forEach(cf => {\n  carbonLookup[cf.materialId || cf.materialName] = cf.carbonPerUnit;\n});\n\n// Map materials with footprints and supplier info\nconst recommendations = materials.map(material => {\n  const footprint = carbonLookup[material.id] || carbonLookup[material.name] || null;\n\n  // Find eco-friendly alternatives: materials with same specs but lower carbon\n  const alternatives = materials.filter(alt => {\n    if (alt.id === material.id) return false;\n    // Simple heuristic: lower carbon footprint and compatible material type\n    const altFootprint = carbonLookup[alt.id] || carbonLookup[alt.name] || Infinity;\n    return alt.type === material.type && altFootprint < footprint;\n  }).map(alt => {\n    // Check supplier availability\n    const supplier = supplierInventories.find(s => s.materialId === alt.id);\n    return {\n      id: alt.id,\n      name: alt.name,\n      carbonPerUnit: carbonLookup[alt.id] || carbonLookup[alt.name],\n      availableQuantity: supplier ? supplier.availableQuantity : 0,\n      costPerUnit: supplier ? supplier.costPerUnit : alt.costPerUnit || 0\n    };\n  });\n\n  // For the current material, find supplier info\n  const currentSupplier = supplierInventories.find(s => s.materialId === material.id);\n\n  return {\n    materialId: material.id,\n    materialName: material.name,\n    currentCarbonFootprint: footprint,\n    currentAvailableQuantity: currentSupplier ? currentSupplier.availableQuantity : 0,\n    currentCostPerUnit: currentSupplier ? currentSupplier.costPerUnit : material.costPerUnit || 0,\n    ecoFriendlyAlternatives: alternatives\n  };\n});\n\n// Optimization step (simplified example):\n// For each material, suggest alternative order quantities that minimize carbon footprint and cost\n\nfunction optimizeOrder(material) {\n  // If no alternatives, order current amount\n  if (material.ecoFriendlyAlternatives.length === 0) {\n    return {\n      recommendedMaterialId: material.materialId,\n      recommendedQuantity: Math.min(material.currentAvailableQuantity, 100),\n      estimatedCarbonFootprint: material.currentCarbonFootprint * Math.min(material.currentAvailableQuantity, 100),\n      estimatedCost: material.currentCostPerUnit * Math.min(material.currentAvailableQuantity, 100)\n    };\n  }\n\n  // Evaluate alternatives\n  const candidates = [\n    {\n      materialId: material.materialId,\n      carbonPerUnit: material.currentCarbonFootprint,\n      availableQuantity: material.currentAvailableQuantity,\n      costPerUnit: material.currentCostPerUnit\n    },\n    ...material.ecoFriendlyAlternatives\n  ];\n\n  // Pick candidate with minimal combined metric: carbon footprint + cost weighted\n  const weightCarbon = 0.7;\n  const weightCost = 0.3;\n\n  let bestChoice = null;\n  let bestScore = Infinity;\n  const desiredQuantity = 100; // example order quantity\n\n  candidates.forEach(c => {\n    const qty = Math.min(c.availableQuantity, desiredQuantity);\n    if (qty <= 0) return;\n    const score = (c.carbonPerUnit * qty) * weightCarbon + (c.costPerUnit * qty) * weightCost;\n    if (score < bestScore) {\n      bestScore = score;\n      bestChoice = {\n        recommendedMaterialId: c.materialId,\n        recommendedQuantity: qty,\n        estimatedCarbonFootprint: c.carbonPerUnit * qty,\n        estimatedCost: c.costPerUnit * qty\n      };\n    }\n  });\n\n  return bestChoice;\n}\n\n// Build final recommendations with optimized order\nconst finalRecommendations = recommendations.map(material => {\n  const optimization = optimizeOrder(material);\n  return {\n    materialId: material.materialId,\n    materialName: material.materialName,\n    recommendedMaterialId: optimization.recommendedMaterialId,\n    recommendedQuantity: optimization.recommendedQuantity,\n    estimatedCarbonFootprint: optimization.estimatedCarbonFootprint,\n    estimatedCost: optimization.estimatedCost\n  };\n});\n\nreturn [{ json: { recommendations: finalRecommendations } }];"
+      },
+      "name": "Generate Recommendations & Optimize Orders",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        600,
+        400
+      ],
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "active": false,
+        "parametersUi": {
+          "parametersValues": {}
+        },
+        "resource": "document",
+        "operation": "create",
+        "additionalFields": {
+          "content": "={{JSON.stringify($json[\"recommendations\"], null, 2)}}",
+          "title": "Sustainable Packaging Recommendations - {{new Date().toISOString().slice(0,10)}}",
+          "folderId": "1"
+        }
+      },
+      "name": "Save Recommendations as Document",
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 2,
+      "position": [
+        900,
+        400
+      ]
+    },
+    {
+      "parameters": {},
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [
+        100,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Fetch Packaging Materials Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Carbon Footprint Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Supplier Inventory Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Packaging Materials Data": {
+      "main": [
+        [
+          {
+            "node": "Generate Recommendations & Optimize Orders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Carbon Footprint Data": {
+      "main": [
+        [
+          {
+            "node": "Generate Recommendations & Optimize Orders",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch Supplier Inventory Data": {
+      "main": [
+        [
+          {
+            "node": "Generate Recommendations & Optimize Orders",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Generate Recommendations & Optimize Orders": {
+      "main": [
+        [
+          {
+            "node": "Save Recommendations as Document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
