@@ -1,0 +1,261 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "device",
+        "operation": "get",
+        "deviceType": "airQualitySensor",
+        "returnAll": true,
+        "filters": {}
+      },
+      "name": "Get Air Quality Sensor Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const data = items[0].json;\n\n// Extract sensor values; assuming pm2_5, co2, voc, and humidity\nconst pm25 = data.pm2_5 || 0;\nconst co2 = data.co2 || 0;\nconst voc = data.voc || 0;\nconst humidity = data.humidity || 0;\n\n// Get thresholds from input parameters or default\nconst thresholds = $json.thresholds || {\n  pm25: 35,\n  co2: 1000,\n  voc: 500,\n  humidityLow: 30,\n  humidityHigh: 60\n};\n\n// Analyze each pollutant/hazard\nconst alerts = [];\n\nif (pm25 > thresholds.pm25) {\n  alerts.push(`PM2.5 level high: ${pm25} µg/m³ (Threshold: ${thresholds.pm25})`);\n}\nif (co2 > thresholds.co2) {\n  alerts.push(`CO2 level high: ${co2} ppm (Threshold: ${thresholds.co2})`);\n}\nif (voc > thresholds.voc) {\n  alerts.push(`VOC level high: ${voc} ppb (Threshold: ${thresholds.voc})`);\n}\nif (humidity < thresholds.humidityLow) {\n  alerts.push(`Humidity too low: ${humidity}% (Minimum: ${thresholds.humidityLow}%)`);\n} else if (humidity > thresholds.humidityHigh) {\n  alerts.push(`Humidity too high: ${humidity}% (Maximum: ${thresholds.humidityHigh}%)`);\n}\n\nreturn [\n  {\n    json: {\n      pm25,\n      co2,\n      voc,\n      humidity,\n      alerts,\n      alertTriggered: alerts.length > 0\n    }\n  }\n];"
+      },
+      "name": "Analyze Air Quality Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "resource": "email",
+        "fromEmail": "your-email@example.com",
+        "toEmail": "={{$json[\"userEmail\"]}}",
+        "subject": "Air Quality Alert - Smart Home",
+        "text": "={{$json[\"alerts\"].join('\\n')}}"
+      },
+      "name": "Send Email Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        900,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "message": "={{$json[\"alerts\"].join('\\n')}}",
+        "phoneNumber": "={{$json[\"userPhone\"]}}"
+      },
+      "name": "Send SMS Alert",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "message": "={{$json[\"alerts\"].join('\\n')}}",
+        "title": "Air Quality Alert",
+        "userIds": [
+          "={{$json[\"userPushId\"]}}"
+        ]
+      },
+      "name": "Send Push Notification",
+      "type": "n8n-nodes-base.pushbullet",
+      "typeVersion": 1,
+      "position": [
+        900,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "device",
+        "operation": "update",
+        "deviceType": "airPurifier",
+        "deviceId": "={{$json[\"airPurifierId\"]}}",
+        "data": {
+          "mode": "auto",
+          "power": "on"
+        }
+      },
+      "name": "Activate Air Purifier",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        900,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "pass",
+        "rules": [
+          {
+            "value1": "={{$json[\"alertTriggered\"]}}",
+            "operation": "equal",
+            "value2": true
+          }
+        ]
+      },
+      "name": "Check Alert Condition",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "passThrough"
+      },
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [
+        50,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "parameters": {
+          "pm25": {
+            "type": "number",
+            "default": 35,
+            "description": "PM2.5 threshold in µg/m³"
+          },
+          "co2": {
+            "type": "number",
+            "default": 1000,
+            "description": "CO2 threshold in ppm"
+          },
+          "voc": {
+            "type": "number",
+            "default": 500,
+            "description": "VOC threshold in ppb"
+          },
+          "humidityLow": {
+            "type": "number",
+            "default": 30,
+            "description": "Humidity minimum threshold in %"
+          },
+          "humidityHigh": {
+            "type": "number",
+            "default": 60,
+            "description": "Humidity maximum threshold in %"
+          },
+          "userEmail": {
+            "type": "string",
+            "default": "user@example.com",
+            "description": "Notification email address"
+          },
+          "userPhone": {
+            "type": "string",
+            "default": "+1234567890",
+            "description": "Notification phone number"
+          },
+          "userPushId": {
+            "type": "string",
+            "default": "user_push_id",
+            "description": "User Push Notification ID"
+          },
+          "airPurifierId": {
+            "type": "string",
+            "default": "purifier_device_id",
+            "description": "Smart air purifier device ID"
+          }
+        }
+      },
+      "name": "Set User Configurable Parameters",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        150,
+        450
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Set User Configurable Parameters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set User Configurable Parameters": {
+      "main": [
+        [
+          {
+            "node": "Get Air Quality Sensor Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Air Quality Sensor Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze Air Quality Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Air Quality Data": {
+      "main": [
+        [
+          {
+            "node": "Check Alert Condition",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Alert Condition": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send SMS Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Push Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Activate Air Purifier",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  }
+}
