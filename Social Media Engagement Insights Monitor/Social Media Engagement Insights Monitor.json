@@ -1,0 +1,270 @@
+{
+  "name": "Unified Social Media Engagement Aggregator",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "postMetrics",
+        "platform": "Facebook",
+        "endpoint": "/me/posts",
+        "additionalFields": {
+          "fields": "id,message,likes.summary(true),comments.summary(true),shares"
+        }
+      },
+      "name": "Facebook Posts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ],
+      "credentials": {
+        "httpOAuth2Api": "Facebook OAuth2 API"
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "endpoint": "/v1.0/me/media",
+        "fields": "id,caption,like_count,comments_count"
+      },
+      "name": "Instagram Media",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        450
+      ],
+      "credentials": {
+        "httpOAuth2Api": "Instagram OAuth2 API"
+      }
+    },
+    {
+      "parameters": {
+        "resource": "tweet",
+        "operation": "getTweet",
+        "id": "={{$json[\"id_str\"]}}",
+        "additionalFields": {
+          "tweet.fields": "public_metrics"
+        }
+      },
+      "name": "Twitter Metrics",
+      "type": "n8n-nodes-base.twitter",
+      "typeVersion": 1,
+      "position": [
+        250,
+        600
+      ],
+      "credentials": {
+        "twitterApi": "Twitter API"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const facebookPosts = items.filter(item => item.json.platform === 'Facebook Posts');\nconst instagramMedia = items.filter(item => item.json.platform === 'Instagram Media');\nconst twitterTweets = items.filter(item => item.json.platform === 'Twitter Metrics');\n\nconst consolidated = [];\n\n// Process Facebook\nfacebookPosts.forEach(post => {\n  const likes = post.json.likes ? post.json.likes.summary.total_count : 0;\n  const comments = post.json.comments ? post.json.comments.summary.total_count : 0;\n  const shares = post.json.shares ? post.json.shares.count : 0;\n  consolidated.push({\n    platform: 'Facebook',\n    id: post.json.id,\n    message: post.json.message || '',\n    likes: likes,\n    comments: comments,\n    shares: shares\n  });\n});\n\n// Process Instagram\ninstagramMedia.forEach(media => {\n  consolidated.push({\n    platform: 'Instagram',\n    id: media.json.id,\n    caption: media.json.caption || '',\n    likes: media.json.like_count || 0,\n    comments: media.json.comments_count || 0,\n    shares: 0\n  });\n});\n\n// Process Twitter\ntwitterTweets.forEach(tweet => {\n  const metrics = tweet.json.public_metrics || {};\n  consolidated.push({\n    platform: 'Twitter',\n    id: tweet.json.id_str,\n    text: tweet.json.text || '',\n    likes: metrics.like_count || 0,\n    comments: metrics.reply_count || 0,\n    shares: metrics.retweet_count || 0\n  });\n});\n\nreturn consolidated.map(data => ({ json: data }));"
+      },
+      "name": "Consolidate Engagement Metrics",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        550,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const previousTotals = items[0].json.previousTotals || {};\nconst currentTotals = {};\nlet spikeAlerts = [];\nlet dropAlerts = [];\n\n// Sum current likes, comments, shares per platform\nfor (const item of items) {\n  const { platform, likes, comments, shares } = item.json;\n  if (!currentTotals[platform]) {\n    currentTotals[platform] = { likes: 0, comments: 0, shares: 0 };\n  }\n  currentTotals[platform].likes += likes;\n  currentTotals[platform].comments += comments;\n  currentTotals[platform].shares += shares;\n}\n\n// Check for spikes or drops (threshold 30%)\nfor (const platform in currentTotals) {\n  if (previousTotals[platform]) {\n    ['likes', 'comments', 'shares'].forEach(metric => {\n      const previous = previousTotals[platform][metric] || 0;\n      const current = currentTotals[platform][metric];\n      if (previous === 0) return;\n      const change = (current - previous) / previous;\n      if (change >= 0.3) {\n        spikeAlerts.push(`${platform} ${metric} increased by ${(change * 100).toFixed(1)}%`);\n      } else if (change <= -0.3) {\n        dropAlerts.push(`${platform} ${metric} decreased by ${(Math.abs(change) * 100).toFixed(1)}%`);\n      }\n    });\n  }\n}\n\nreturn [{ json: { currentTotals, spikeAlerts, dropAlerts } }];"
+      },
+      "name": "Analyze Engagement Changes",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        450
+      ],
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "text": "={{\n  []\n  .concat($json.spikeAlerts)\n  .concat($json.dropAlerts)\n  .join('\\n') || 'No significant engagement changes detected.'\n}}"
+      },
+      "name": "Send Alerts",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        450
+      ],
+      "credentials": {
+        "slackApi": "Slack API"
+      },
+      "disabled": false,
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "mode": "mergeByIndex"
+      },
+      "name": "Merge Engagement Data",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 1,
+      "position": [
+        450,
+        450
+      ],
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "functionCode": "return [ { json: { previousTotals: $getWorkflowStaticData('global').previousTotals || {} } } ];"
+      },
+      "name": "Load Previous Totals",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const currentTotals = $input.all()[0].json.currentTotals;\n\n$setWorkflowStaticData('global').previousTotals = currentTotals;\n\nreturn [ { json: { dashboardData: currentTotals } } ];"
+      },
+      "name": "Save Current Totals",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "dataStore",
+        "operation": "write",
+        "key": "dashboardData",
+        "value": "={{$json.dashboardData}}"
+      },
+      "name": "Update Dashboard Data Store",
+      "type": "n8n-nodes-base.dataStore",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Facebook Posts": {
+      "main": [
+        [
+          {
+            "node": "Merge Engagement Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Instagram Media": {
+      "main": [
+        [
+          {
+            "node": "Merge Engagement Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Twitter Metrics": {
+      "main": [
+        [
+          {
+            "node": "Merge Engagement Data",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Merge Engagement Data": {
+      "main": [
+        [
+          {
+            "node": "Consolidate Engagement Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consolidate Engagement Metrics": {
+      "main": [
+        [
+          {
+            "node": "Load Previous Totals",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Analyze Engagement Changes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Previous Totals": {
+      "main": [
+        [
+          {
+            "node": "Analyze Engagement Changes",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Analyze Engagement Changes": {
+      "main": [
+        [
+          {
+            "node": "Send Alerts",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Save Current Totals",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Send Alerts": {
+      "main": [
+        [
+          {
+            "node": "Update Dashboard Data Store",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Current Totals": {
+      "main": [
+        [
+          {
+            "node": "Update Dashboard Data Store",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  }
+}
