@@ -1,0 +1,277 @@
+{
+  "name": "AI-Powered Sustainable Packaging Recommendation and Order Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.yourcompany.com/products",
+        "responseFormat": "json"
+      },
+      "name": "Fetch Product Details",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n This function calls AI API to recommend sustainable packaging based on product details.\n Input: items with product info\n Output: items with packaging recommendations\n*/\n\nconst openAI_API_key = $credentials.openAI.apiKey;\n\n// Prepare prompt for packaging recommendation\nconst product = items[0].json;\n\nconst prompt = `Suggest the best sustainable packaging options for the following product, taking into account eco-friendliness and suitability:\n\nProduct Name: ${product.name}\nDimensions: ${product.dimensions}\nWeight: ${product.weight}\nCategory: ${product.category}\n`;\n\nconst response = await this.helpers.request({\n  method: 'POST',\n  url: 'https://api.openai.com/v1/chat/completions',\n  headers: {\n    'Authorization': `Bearer ${openAI_API_key}`,\n    'Content-Type': 'application/json'\n  },\n  body: {\n    model: 'gpt-4',\n    messages: [{ role: 'user', content: prompt }],\n    temperature: 0.7\n  },\n  json: true\n});\n\nreturn [{json: Object.assign({}, product, { packagingRecommendation: response.choices[0].message.content })}];"
+      },
+      "name": "AI Packaging Recommendation",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ],
+      "credentials": {
+        "openAI": {
+          "id": "1",
+          "name": "OpenAI API Credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.yourcompany.com/salesdata?period=last_6_months",
+        "responseFormat": "json"
+      },
+      "name": "Fetch Sales Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        200,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n This function forecasts packaging needs based on historical sales data.\n It sums sales quantities and estimates next month packaging requirements.\n*/\n\nconst salesData = items[0].json.sales;\n\n// Aggregate quantities by product\nconst forecast = salesData.reduce((acc, record) => {\n  if (!acc[record.productId]) {\n    acc[record.productId] = 0;\n  }\n  acc[record.productId] += record.quantity;\n  return acc;\n}, {});\n\n// Simple forecast: average monthly sales * 1.1 (10% growth assumption)\nconst monthsCount = 6;\nconst forecastedNeeds = Object.entries(forecast).map(([productId, totalQty]) => {\n  const avgMonthly = totalQty / monthsCount;\n  return { productId, forecastedPackagingQty: Math.ceil(avgMonthly * 1.1) };\n});\n\nreturn forecastedNeeds.map(item => ({ json: item }));"
+      },
+      "name": "Forecast Packaging Needs",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.yourcompany.com/packagingInventory",
+        "responseFormat": "json"
+      },
+      "name": "Fetch Packaging Inventory",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        200,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n Optimize packaging inventory by comparing forecasted needs and current inventory.\n Return list of packaging types and quantities that need restocking.\n\nInputs:\n - items (packaging inventory)\n - $node[\"Forecast Packaging Needs\"].json (forecast)\n*/\n\nconst inventory = items[0].json.inventory;\nconst forecastData = $node[\"Forecast Packaging Needs\"].item;\n\nconst restockList = [];\n\nforecastData.forEach(forecast => {\n  const productId = forecast.json.productId;\n  const forecastQty = forecast.json.forecastedPackagingQty;\n\n  const inventoryRecord = inventory.find(inv => inv.productId === productId);\n  const onHand = inventoryRecord ? inventoryRecord.quantity : 0;\n\n  if (onHand < forecastQty) {\n    restockList.push({ productId, quantityToOrder: forecastQty - onHand });\n  }\n});\n\nreturn restockList.map(item => ({ json: item }));"
+      },
+      "name": "Optimize Inventory & Identify Restock Needs",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.yourcompany.com/vendors?category=packaging",
+        "responseFormat": "json"
+      },
+      "name": "Fetch Vendors",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        200,
+        750
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n Select vendors based on sustainability ratings and cost effectiveness.\n\nInputs:\n - vendors: list\n - restock requests\n\nReturns:\n - purchase orders by best vendor\n*/\n\nconst vendors = items[0].json.vendors;\nconst restockRequests = $node[\"Optimize Inventory & Identify Restock Needs\"].item;\n\nconst purchaseOrders = [];\n\nrestockRequests.forEach(request => {\n  const productId = request.json.productId;\n  const qtyNeeded = request.json.quantityToOrder;\n\n  // Filter vendors who supply this product\n  const filteredVendors = vendors.filter(vendor => vendor.products.includes(productId));\n\n  if (filteredVendors.length === 0) return;\n\n  // Sort vendors by weighted score: sustainabilityRating / cost\n  filteredVendors.sort((a, b) => {\n    const scoreA = a.sustainabilityRating / a.costPerUnit;\n    const scoreB = b.sustainabilityRating / b.costPerUnit;\n    return scoreB - scoreA;\n  });\n\n  const bestVendor = filteredVendors[0];\n\n  purchaseOrders.push({\n    vendorId: bestVendor.id,\n    productId: productId,\n    quantity: qtyNeeded,\n    unitPrice: bestVendor.costPerUnit,\n    sustainabilityRating: bestVendor.sustainabilityRating\n  });\n});\n\nreturn purchaseOrders.map(po => ({ json: po }));"
+      },
+      "name": "Select Vendors & Create Purchase Orders",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        750
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "url": "https://api.supplierportal.com/orders",
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "vendorId",
+              "value": "={{$json[\"vendorId\"]}}",
+              "type": "string"
+            },
+            {
+              "name": "productId",
+              "value": "={{$json[\"productId\"]}}",
+              "type": "string"
+            },
+            {
+              "name": "quantity",
+              "value": "={{$json[\"quantity\"]}}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Place Orders with Suppliers",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        700,
+        750
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n Trigger notification if packaging inventory is below restock threshold.\n*/\n\nconst restockRequests = items;\nif (restockRequests.length > 0) {\n  return [{ json: { message: `Packaging inventory low for ${restockRequests.length} items. Orders placed.` } }];\n} else {\n  return [{ json: { message: 'Packaging inventory sufficient, no orders needed.' } }];\n}"
+      },
+      "name": "Notification Trigger",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        750
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "123456789",
+        "text": "={{$json[\"message\"]}}"
+      },
+      "name": "Send Notification",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        750
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "2",
+          "name": "Telegram API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Fetch Product Details": {
+      "main": [
+        [
+          {
+            "node": "AI Packaging Recommendation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Sales Data": {
+      "main": [
+        [
+          {
+            "node": "Forecast Packaging Needs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Forecast Packaging Needs": {
+      "main": [
+        [
+          {
+            "node": "Optimize Inventory & Identify Restock Needs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Packaging Inventory": {
+      "main": [
+        [
+          {
+            "node": "Optimize Inventory & Identify Restock Needs",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Optimize Inventory & Identify Restock Needs": {
+      "main": [
+        [
+          {
+            "node": "Select Vendors & Create Purchase Orders",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Notification Trigger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Vendors": {
+      "main": [
+        [
+          {
+            "node": "Select Vendors & Create Purchase Orders",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Select Vendors & Create Purchase Orders": {
+      "main": [
+        [
+          {
+            "node": "Place Orders with Suppliers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notification Trigger": {
+      "main": [
+        [
+          {
+            "node": "Send Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "ai-powered-sustainable-packaging"
+}
