@@ -1,0 +1,192 @@
+{
+  "name": "AI-Powered Urban Noise Pollution Monitoring and Mitigation Alert System",
+  "nodes": [
+    {
+      "id": "1",
+      "name": "Fetch Noise Sensor Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ],
+      "parameters": {
+        "url": "https://api.urban-environment-sensors.com/noise-data",
+        "method": "GET",
+        "queryParameters": [
+          {
+            "name": "area",
+            "value": "citywide"
+          },
+          {
+            "name": "realtime",
+            "value": "true"
+          }
+        ],
+        "responseFormat": "json",
+        "authentication": "none"
+      }
+    },
+    {
+      "id": "2",
+      "name": "Process and Format Sensor Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ],
+      "parameters": {
+        "functionCode": "/*\nInput: sensor data from HTTP request\nOutput: structured data for AI analytics API\n*/\n\nconst processed = items[0].json.data.map(sensorReading => {\n  return {\n    noise_level: sensorReading.noise_level,\n    timestamp: sensorReading.timestamp,\n    location: sensorReading.location\n  };\n});\n\nreturn [{ json: { readings: processed } }];"
+      }
+    },
+    {
+      "id": "3",
+      "name": "Call AI Analytics API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ],
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.ai-noise-analytics.com/predict-health-risk",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {},
+        "headerParameters": [
+          {
+            "name": "Authorization",
+            "value": "Bearer {{$credentials.AIAnalyticsApi.apiKey}}"
+          },
+          {
+            "name": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "bodyParametersJson": "={{ JSON.stringify($json.readings) }}"
+      }
+    },
+    {
+      "id": "4",
+      "name": "Extract Risk Zones",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ],
+      "parameters": {
+        "functionCode": "/*\nInput: AI analytics response\nOutput: risk zones and recommendations\n*/\n\nconst result = items[0].json;\n\n// Example result structure assumed\n// {\n//   zones: [{ location, risk_level, recommendations }]\n// }\n\nconst highRiskZones = result.zones.filter(zone => zone.risk_level === 'high');\n\nconst alerts = highRiskZones.map(zone => {\n  return {\n    location: zone.location,\n    risk_level: zone.risk_level,\n    message: `High noise pollution detected at ${zone.location}. Recommended actions: ${zone.recommendations.join(\", \")}`\n  };\n});\n\nreturn alerts.map(alert => ({ json: alert }));"
+      }
+    },
+    {
+      "id": "5",
+      "name": "Send Resident Notifications",
+      "type": "n8n-nodes-base.pushNotification",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        200
+      ],
+      "parameters": {
+        "notificationTitle": "Noise Pollution Alert",
+        "notificationBody": "={{ $json.message }}",
+        "userIds": "={{ $json.location + '-residents' }}"
+      },
+      "credentials": {
+        "pushNotificationApi": {
+          "id": "1",
+          "name": "UrbanPushNotifications"
+        }
+      }
+    },
+    {
+      "id": "6",
+      "name": "Send Authorities Alerts",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        400
+      ],
+      "parameters": {
+        "toEmail": "city.authorities@urban.gov",
+        "subject": "Urgent: High Noise Pollution Risk Zone Detected",
+        "text": "={{ $json.message }}\n\nPlease take immediate action to mitigate noise pollution at this location: {{$json.location}}"
+      },
+      "credentials": {
+        "smtp": {
+          "id": "2",
+          "name": "CityAuthoritySMTP"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Fetch Noise Sensor Data": {
+      "main": [
+        [
+          {
+            "node": "Process and Format Sensor Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process and Format Sensor Data": {
+      "main": [
+        [
+          {
+            "node": "Call AI Analytics API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call AI Analytics API": {
+      "main": [
+        [
+          {
+            "node": "Extract Risk Zones",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Risk Zones": {
+      "main": [
+        [
+          {
+            "node": "Send Resident Notifications",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Authorities Alerts",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  },
+  "credentials": {
+    "AIAnalyticsApi": {
+      "id": "1",
+      "name": "AI Noise Analytics API"
+    },
+    "pushNotificationApi": {
+      "id": "1",
+      "name": "UrbanPushNotifications"
+    },
+    "smtp": {
+      "id": "2",
+      "name": "CityAuthoritySMTP"
+    }
+  }
+}
