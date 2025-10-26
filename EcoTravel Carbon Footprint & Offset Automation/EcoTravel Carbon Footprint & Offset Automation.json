@@ -1,0 +1,135 @@
+{
+  "name": "EcoTravel AI: Sustainable Itinerary & Carbon Offset Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "functionCode": "const destinations = [\n  { city: 'Amsterdam', country: 'Netherlands', sustainabilityRating: 9 },\n  { city: 'Copenhagen', country: 'Denmark', sustainabilityRating: 8.5 },\n  { city: 'Reykjavik', country: 'Iceland', sustainabilityRating: 9.2 },\n  { city: 'Vancouver', country: 'Canada', sustainabilityRating: 8 },\n  { city: 'Kyoto', country: 'Japan', sustainabilityRating: 7.8 },\n  { city: 'San Francisco', country: 'USA', sustainabilityRating: 8.1 }\n];\n\n// Filter destinations above certain sustainability rating\nconst filtered = destinations.filter(d => d.sustainabilityRating >= 8);\n\nreturn filtered.map(dest => ({ json: dest }));"
+      },
+      "name": "Destination Recommendation",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "passThrough"
+      },
+      "name": "User Input Travel Mode & Distance",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        50,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const data = items[0].json;\n\n// Example travel modes and their emission factors in kg CO2 per km\nconst emissionFactors = {\n  plane: 0.255,\n  train: 0.041,\n  bus: 0.068,\n  car: 0.192,\n  bicycle: 0\n};\n\nconst travelMode = data.travelMode.toLowerCase();\nconst distanceKm = Number(data.distanceKm);\n\nif (!emissionFactors.hasOwnProperty(travelMode)) {\n  throw new Error('Unsupported travel mode: ' + travelMode);\n}\n\nconst emission = emissionFactors[travelMode] * distanceKm;\n\nreturn [{ json: { travelMode, distanceKm, carbonFootprintKgCO2: emission } }];"
+      },
+      "name": "Calculate Carbon Footprint",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const data = items[0].json;\n\n// Assume 1 carbon credit = 1 kg CO2 offset\nconst carbonOffsetKgCO2 = data.carbonFootprintKgCO2;\nconst pricePerCredit = 10; // Assume $10 per credit\nconst totalCostUSD = carbonOffsetKgCO2 * pricePerCredit;\n\nreturn [{ json: {\n  carbonOffsetKgCO2,\n  pricePerCreditUSD: pricePerCredit,\n  totalCostUSD\n} }];"
+      },
+      "name": "Calculate Offset Cost",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.examplecarbonoffset.com/purchase",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={\n  \"userId\": $json[\"userId\"] || 'demoUser',\n  \"offsetKg\": $json[\"carbonOffsetKgCO2\"],\n  \"payment\": {\n    \"amount\": $json[\"totalCostUSD\"],\n    \"currency\": \"USD\",\n    \"method\": $json[\"paymentMethod\"] || \"credit_card\"\n  },\n  \"itinerary\": $json[\"itinerary\"] || null\n}"
+      },
+      "name": "Purchase Carbon Offset",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: { message: 'Carbon offset purchased successfully!', details: items[0].json } }];"
+      },
+      "name": "Confirm Purchase",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "User Input Travel Mode & Distance": {
+      "main": [
+        [
+          {
+            "node": "Calculate Carbon Footprint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Destination Recommendation": {
+      "main": [
+        []
+      ]
+    },
+    "Calculate Carbon Footprint": {
+      "main": [
+        [
+          {
+            "node": "Calculate Offset Cost",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Offset Cost": {
+      "main": [
+        [
+          {
+            "node": "Purchase Carbon Offset",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Purchase Carbon Offset": {
+      "main": [
+        [
+          {
+            "node": "Confirm Purchase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
