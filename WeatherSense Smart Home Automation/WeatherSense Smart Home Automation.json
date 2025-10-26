@@ -1,0 +1,221 @@
+{
+  "name": "AI-Powered Local Weather-Driven Smart Home Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.openweathermap.org/data/2.5/weather",
+        "responseFormat": "json",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "q",
+              "value": "YOUR_CITY_HERE"
+            },
+            {
+              "name": "appid",
+              "value": "YOUR_API_KEY_HERE"
+            },
+            {
+              "name": "units",
+              "value": "metric"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Fetch Weather Data",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const weather = items[0].json;\n\nconst temperature = weather.main.temp;\nconst precipitation = weather.rain ? (weather.rain['1h'] || 0) : 0;\nconst sunlight = weather.weather[0].main.toLowerCase() === 'clear' ? true : false;\n\nreturn [{\n  json: {\n    temperature,\n    precipitation,\n    sunlight\n  }\n}];"
+      },
+      "name": "Analyze Weather Conditions",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const { temperature, precipitation, sunlight } = items[0].json;\n\nlet thermostatSetting;\nif (temperature < 18) {\n  thermostatSetting = 22;\n} else if (temperature > 26) {\n  thermostatSetting = 20;\n} else {\n  thermostatSetting = 21;\n}\n\nconst lightsOn = !sunlight;\nconst irrigationOn = precipitation < 0.1;\n\nreturn [{\n  json: {\n    thermostatSetting,\n    lightsOn,\n    irrigationOn\n  }\n}];"
+      },
+      "name": "Decide Device Settings",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": {
+          "type": "apiKey",
+          "apiKey": "={{$credentials.smartHomeApi.apiKey}}"
+        },
+        "resource": "thermostat",
+        "operation": "setTemperature",
+        "temperature": "={{$json.thermostatSetting}}"
+      },
+      "name": "Set Thermostat",
+      "type": "n8n-nodes-base.smartHome",
+      "typeVersion": 1,
+      "position": [
+        850,
+        200
+      ],
+      "credentials": {
+        "smartHomeApi": {
+          "id": "1",
+          "name": "Smart Home API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": {
+          "type": "apiKey",
+          "apiKey": "={{$credentials.smartHomeApi.apiKey}}"
+        },
+        "resource": "lighting",
+        "operation": "turnOn",
+        "turnOn": "={{$json.lightsOn}}"
+      },
+      "name": "Adjust Lighting",
+      "type": "n8n-nodes-base.smartHome",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ],
+      "credentials": {
+        "smartHomeApi": {
+          "id": "1",
+          "name": "Smart Home API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": {
+          "type": "apiKey",
+          "apiKey": "={{$credentials.smartHomeApi.apiKey}}"
+        },
+        "resource": "irrigation",
+        "operation": "turnOn",
+        "turnOn": "={{$json.irrigationOn}}"
+      },
+      "name": "Control Irrigation",
+      "type": "n8n-nodes-base.smartHome",
+      "typeVersion": 1,
+      "position": [
+        850,
+        400
+      ],
+      "credentials": {
+        "smartHomeApi": {
+          "id": "1",
+          "name": "Smart Home API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "text": "Settings updated:\\nThermostat set to {{$json.thermostatSetting}}°C\\nLighting turned {{$json.lightsOn ? 'ON' : 'OFF'}}\\nIrrigation turned {{$json.irrigationOn ? 'ON' : 'OFF'}}"
+      },
+      "name": "Notify User",
+      "type": "n8n-nodes-base.notify",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Fetch Weather Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze Weather Conditions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Weather Conditions": {
+      "main": [
+        [
+          {
+            "node": "Decide Device Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decide Device Settings": {
+      "main": [
+        [
+          {
+            "node": "Set Thermostat",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Adjust Lighting",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Control Irrigation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Thermostat": {
+      "main": [
+        [
+          {
+            "node": "Notify User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Adjust Lighting": {
+      "main": [
+        [
+          {
+            "node": "Notify User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Control Irrigation": {
+      "main": [
+        [
+          {
+            "node": "Notify User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
