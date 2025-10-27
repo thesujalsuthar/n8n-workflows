@@ -1,0 +1,181 @@
+{
+  "name": "AI-Powered Personalized Climate Action Planner",
+  "nodes": [
+    {
+      "parameters": {
+        "functionCode": "const axios = require('axios');\n\n// Get user's location input\nconst { city, country } = $json;\n\n// Fetch real-time local climate data from a public API (e.g., OpenWeatherMap or similar)\n// Replace 'YOUR_API_KEY' with an appropriate API key\n\nasync function getClimateData(city, country) {\n  const apiKey = 'YOUR_API_KEY';\n  const url = `https://api.openweathermap.org/data/2.5/weather?q=${city},${country}&appid=${apiKey}&units=metric`;\n  const response = await axios.get(url);\n  return response.data;\n}\n\nreturn getClimateData(city, country).then(data => {\n  return { climateData: data };\n});"
+      },
+      "name": "Fetch Local Climate Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        250,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const input = $json;\n\n// Parse user-provided carbon footprint data\n// Assuming input includes: energyUsage, transportUsage, dietType, wasteProduced\n\nfunction calculateCarbonFootprint(data) {\n  // Example baseline emission factors (tons CO2e per unit)\n  const energyFactor = 0.0005; // per kWh\n  const transportFactor = 0.0002; // per km\n  const dietFactor = { 'vegan': 1.5, 'vegetarian': 2.0, 'omnivore': 3.5 };\n  const wasteFactor = 0.0003; // per kg\n\n  const energyEmissions = data.energyUsage * energyFactor;\n  const transportEmissions = data.transportUsage * transportFactor;\n  const dietEmissions = dietFactor[data.dietType.toLowerCase()] || 3.5;\n  const wasteEmissions = data.wasteProduced * wasteFactor;\n\n  const totalEmissions = energyEmissions + transportEmissions + dietEmissions + wasteEmissions;\n\n  return { totalEmissions, energyEmissions, transportEmissions, dietEmissions, wasteEmissions };\n}\n\nreturn calculateCarbonFootprint(input);"
+      },
+      "name": "Calculate Carbon Footprint",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const climateData = $json.climateData;\nconst emissions = $json.totalEmissions;\n\n// Generate personalized lifestyle recommendations\nconst recommendations = [];\n\n// Example logic based on emissions and climate\nif (emissions > 5) {\n  recommendations.push('Reduce electricity usage by switching to LED bulbs and unplugging unused electronics.');\n  recommendations.push('Use public transportation or carpool more often.');\n}\n\nif (climateData && climateData.main && climateData.main.temp > 25) {\n  recommendations.push('Consider reducing air conditioning usage during hot days to save energy.');\n}\n\nif (emissions <= 2) {\n  recommendations.push('Great job on maintaining a low carbon footprint!');\n} else {\n  recommendations.push('Try adopting a plant-based diet a few days per week.');\n}\n\nreturn { recommendations };"
+      },
+      "name": "Generate Sustainable Lifestyle Recommendations",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "text": "Hello {{$json[\"userName\"] || \"User\"}}, here is your personalized climate action plan:\n\n- Current local temperature: {{$json[\"climateData\"]?.main?.temp || \"N/A\"}} °C\n- Your estimated carbon footprint: {{$json[\"totalEmissions\"]?.toFixed(2) || \"N/A\"}} tons CO2e\n\nRecommendations to reduce your carbon emissions:\n{{$json[\"recommendations\"]?.map(item => `- ${item}`).join('\\n') || \"No recommendations available.\"}}\n\nStay committed to your sustainability goals!"
+      },
+      "name": "Send Personalized Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        400
+      ],
+      "credentials": {
+        "telegramApi": "Telegram API"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// Simulated function to fetch local eco-friendly resources\nconst localResources = [\n  { name: \"Community Garden\", address: \"123 Green St\", contact: \"garden@example.com\" },\n  { name: \"Recycling Center\", address: \"456 Blue Ave\", contact: \"recycle@example.com\" },\n  { name: \"Sustainable Market\", address: \"789 Eco Rd\", contact: \"market@example.com\" }\n];\n\n// Simulated local events\nconst localEvents = [\n  { title: \"Clean-up Drive\", date: \"2024-07-15\", location: \"City Park\" },\n  { title: \"Sustainable Living Workshop\", date: \"2024-08-10\", location: \"Community Center\" }\n];\n\nreturn { localResources, localEvents };"
+      },
+      "name": "Fetch Local Eco-friendly Resources & Events",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "text": "Hello {{$json[\"userName\"] || \"User\"}}, here are some local eco-friendly resources and upcoming events:\n\nResources:\n{{$json[\"localResources\"]?.map(r => `- ${r.name}, Address: ${r.address}, Contact: ${r.contact}`).join('\\n')}}\n\nEvents:\n{{$json[\"localEvents\"]?.map(e => `- ${e.title} on ${e.date} at ${e.location}`).join('\\n')}}\n\nGet involved and contribute to a greener community!"
+      },
+      "name": "Send Local Resources & Events",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        600
+      ],
+      "credentials": {
+        "telegramApi": "Telegram API"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// Track and update user's sustainability progress\n// Assume input contains pastEmissions array and currentEmission\nconst pastEmissions = $json.pastEmissions || [];\nconst currentEmission = $json.totalEmissions || 0;\n\npastEmissions.push({ date: new Date().toISOString(), emission: currentEmission });\n\nconst initialEmission = pastEmissions[0]?.emission || currentEmission;\nconst reductionPercent = ((initialEmission - currentEmission) / initialEmission) * 100;\n\nreturn { pastEmissions, reductionPercent };\n"
+      },
+      "name": "Track Sustainability Progress",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "text": "Hi {{$json[\"userName\"] || \"User\"}}, here is your sustainability progress update:\n- Total carbon footprint now: {{$json[\"pastEmissions\"]?.slice(-1)[0]?.emission?.toFixed(2) || \"N/A\"}} tons CO2e\n- Reduction since start: {{$json[\"reductionPercent\"]?.toFixed(2) || 0}}%\n\nKeep up the great work!"
+      },
+      "name": "Send Progress Update",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        750,
+        800
+      ],
+      "credentials": {
+        "telegramApi": "Telegram API"
+      }
+    }
+  ],
+  "connections": {
+    "Fetch Local Climate Data": {
+      "main": [
+        [
+          {
+            "node": "Calculate Carbon Footprint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Carbon Footprint": {
+      "main": [
+        [
+          {
+            "node": "Generate Sustainable Lifestyle Recommendations",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Track Sustainability Progress",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Sustainable Lifestyle Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Send Personalized Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Track Sustainability Progress": {
+      "main": [
+        [
+          {
+            "node": "Send Progress Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Local Eco-friendly Resources & Events": {
+      "main": [
+        [
+          {
+            "node": "Send Local Resources & Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
