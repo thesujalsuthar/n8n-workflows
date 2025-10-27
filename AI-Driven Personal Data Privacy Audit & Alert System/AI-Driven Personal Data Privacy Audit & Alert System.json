@@ -1,0 +1,234 @@
+{
+  "name": "AI-Powered Personal Data Privacy Audit & Recommendation System",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 9,
+              "minute": 0
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Cron",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "account",
+        "operation": "list",
+        "authentication": "oauth2",
+        "additionalFields": {}
+      },
+      "name": "Get Connected Accounts",
+      "type": "n8n-nodes-base.socialAccounts",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "dataScan",
+        "operation": "scan",
+        "accounts": "={{$json[\"accounts\"]}}",
+        "scanOptions": {
+          "privacyRisks": true,
+          "exposedData": true,
+          "unsafeSharing": true
+        }
+      },
+      "name": "Scan User Data",
+      "type": "custom.n8n-nodes.DataScanner",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "prompt": "You are an AI privacy auditor. Analyze the following data scan results for privacy risks, vulnerabilities, and unsafe data sharing. Generate a detailed assessment and personalized, actionable recommendations to enhance privacy settings and data protection practices.\n\nData Scan Results:\n{{$json[\"scanResults\"]}}\n\nProvide the output as a JSON object with 'summary', 'vulnerabilities', and 'recommendations' fields.",
+        "temperature": 0.3,
+        "maxTokens": 1000
+      },
+      "name": "Analyze Findings AI",
+      "type": "n8n-nodes-base.openai",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "template": "Privacy Audit Report\n\nSummary:\n{{ $json.summary }}\n\nIdentified Vulnerabilities:\n{{#each $json.vulnerabilities}}- {{this}}\n{{/each}}\n\nRecommendations:\n{{#each $json.recommendations}}- {{this}}\n{{/each}}\n",
+        "data": "={{ $json }}"
+      },
+      "name": "Generate Report",
+      "type": "n8n-nodes-base.template",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "storage",
+        "operation": "upload",
+        "binaryData": "report",
+        "fileName": "Privacy_Audit_Report_{{$now.format(\"YYYYMMDD_HHmm\")}}.txt",
+        "options": {}
+      },
+      "name": "Save Report",
+      "type": "n8n-nodes-base.file",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "type": "email",
+        "toEmail": "={{$json[\"userEmail\"]}}",
+        "subject": "Your Personal Data Privacy Audit Report",
+        "message": "Hello,\n\nPlease find your latest personal data privacy audit report attached. Review the vulnerabilities and follow the recommendations to enhance your privacy and data protection settings.\n\nBest regards,\nAI Privacy Audit Team",
+        "binaryProperty": "data"
+      },
+      "name": "Send Report Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "reminder",
+        "operation": "create",
+        "title": "Review Your Privacy Settings",
+        "message": "It's time to review and improve your privacy settings to keep your personal data safe.",
+        "schedule": "weekly",
+        "dayOfWeek": "monday",
+        "time": "09:00"
+      },
+      "name": "Schedule Reminder",
+      "type": "custom.n8n-nodes.ReminderScheduler",
+      "typeVersion": 1,
+      "position": [
+        450,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "type": "push",
+        "toUserId": "={{$json[\"userId\"]}}",
+        "title": "Critical Privacy Risk Detected",
+        "message": "Immediate action recommended. Please check your latest privacy audit report for details."
+      },
+      "name": "Notify Critical Risk",
+      "type": "n8n-nodes-base.pushNotification",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "Cron": {
+      "main": [
+        [
+          {
+            "node": "Get Connected Accounts",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Schedule Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Connected Accounts": {
+      "main": [
+        [
+          {
+            "node": "Scan User Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scan User Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze Findings AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Findings AI": {
+      "main": [
+        [
+          {
+            "node": "Generate Report",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Notify Critical Risk",
+            "type": "main",
+            "index": 0,
+            "condition": "=!!$json.vulnerabilities && $json.vulnerabilities.length > 0"
+          }
+        ]
+      ]
+    },
+    "Generate Report": {
+      "main": [
+        [
+          {
+            "node": "Save Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Report": {
+      "main": [
+        [
+          {
+            "node": "Send Report Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "id": "ai-powered-personal-data-privacy-audit-recommendation-system"
+}
