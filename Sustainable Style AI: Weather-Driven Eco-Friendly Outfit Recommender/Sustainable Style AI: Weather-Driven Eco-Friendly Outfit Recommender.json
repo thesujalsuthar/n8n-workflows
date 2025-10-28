@@ -1,0 +1,102 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "options": {},
+        "url": "={{`https://api.openweathermap.org/data/2.5/weather?q=${$json[\"city\"]}&units=metric&appid=${$credentials.openWeatherApi.apiKey}`}}",
+        "responseFormat": "json",
+        "headerParametersUi": {
+          "parameter": []
+        }
+      },
+      "name": "Get Weather",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ],
+      "credentials": {
+        "openWeatherApi": {
+          "id": "1",
+          "name": "OpenWeatherMap API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const preferences = $json.preferences || {};\nconst weather = $items(\"Get Weather\")[0].json.weather[0].main.toLowerCase();\nconst temp = $items(\"Get Weather\")[0].json.main.temp;\nconst sustainableBrands = $items(\"Get Sustainable Brands\")[0].json.brands;\n\nfunction filterByPreferences(clothes, preferences) {\n  return clothes.filter(item => {\n    if(preferences.color && item.color.toLowerCase() !== preferences.color.toLowerCase()) return false;\n    if(preferences.category && item.category.toLowerCase() !== preferences.category.toLowerCase()) return false;\n    return true;\n  });\n}\n\nfunction filterByWeather(clothes, weather, temp) {\n  return clothes.filter(item => {\n    if(weather.includes('rain')) {\n      return item.features.includes('waterproof') || item.features.includes('rainproof');\n    } else if(temp < 15) {\n      return item.features.includes('warm') || item.category === 'outerwear';\n    } else if(temp > 25) {\n      return item.features.includes('lightweight') || item.category === 'top' || item.category === 'bottom';\n    }\n    return true;\n  });\n}\n\n// Flatten all clothes from all brands\nconst allClothes = [];\nsustainableBrands.forEach(brand => {\n  brand.items.forEach(item => {\n    const newItem = Object.assign({}, item);\n    newItem.brand = brand.name;\n    allClothes.push(newItem);\n  });\n});\n\nlet filteredClothes = filterByPreferences(allClothes, preferences);\nfilteredClothes = filterByWeather(filteredClothes, weather, temp);\n\n// Group by category\nconst outfit = {};\nfilteredClothes.forEach(item => {\n  if(!outfit[item.category]) {\n    outfit[item.category] = [];\n  }\n  outfit[item.category].push({\n    name: item.name,\n    brand: item.brand,\n    features: item.features\n  });\n});\n\nreturn [{json: {outfit}}];"
+      },
+      "name": "Generate Outfit Recommendation",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: { city: $json.city || \"San Francisco\", preferences: $json.preferences || { color: \"green\", category: \"top\" } } }];"
+      },
+      "name": "Set User Input",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        150,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{json: {\n  brands: [\n    {\n      name: \"EcoWear\",\n      items: [\n        { name: \"Organic Cotton T-Shirt\", category: \"top\", color: \"green\", features: [\"lightweight\", \"breathable\"] },\n        { name: \"Recycled Polyester Jacket\", category: \"outerwear\", color: \"blue\", features: [\"warm\", \"waterproof\"] }\n      ]\n    },\n    {\n      name: \"GreenThreads\",\n      items: [\n        { name: \"Hemp Jeans\", category: \"bottom\", color: \"blue\", features: [\"durable\"] },\n        { name: \"Bamboo Hoodie\", category: \"outerwear\", color: \"green\", features: [\"warm\", \"waterproof\"] }\n      ]\n    },\n    {\n      name: \"SustainStyle\",\n      items: [\n        { name: \"Linen Shorts\", category: \"bottom\", color: \"beige\", features: [\"lightweight\"] },\n        { name: \"Organic Wool Sweater\", category: \"top\", color: \"cream\", features: [\"warm\"] }\n      ]\n    }\n  ]\n}}];"
+      },
+      "name": "Get Sustainable Brands",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Set User Input": {
+      "main": [
+        [
+          {
+            "node": "Get Weather",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Weather": {
+      "main": [
+        [
+          {
+            "node": "Get Sustainable Brands",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Sustainable Brands": {
+      "main": [
+        [
+          {
+            "node": "Generate Outfit Recommendation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "ai-powered-sustainable-fashion-recommender"
+}
