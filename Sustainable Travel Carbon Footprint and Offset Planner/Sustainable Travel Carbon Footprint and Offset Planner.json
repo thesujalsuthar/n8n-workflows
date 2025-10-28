@@ -1,0 +1,187 @@
+{
+  "name": "AI-Powered Sustainable Travel and Carbon Offset Planner",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "get",
+        "resource": "route",
+        "from": "={{$json[\"origin\"]}}",
+        "to": "={{$json[\"destination\"]}}",
+        "travelMode": "driving",
+        "departureTime": "={{$json[\"departureTime\"]}}"
+      },
+      "name": "Get Travel Route",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "1",
+          "name": "TravelAPI_Credentials"
+        }
+      },
+      "notesInFlow": "Fetches travel data (route, distance, duration) from a travel API (e.g., Google Maps or OpenRouteService)."
+    },
+    {
+      "parameters": {
+        "functionCode": "const route = items[0].json;\n\nconst distanceKm = route.distance / 1000 || 0;\nconst travelMode = route.travelMode || 'driving';\n\n// Basic emission factors (kg CO2 per km) by mode\nconst emissionFactors = {\n  driving: 0.192,\n  walking: 0,\n  bicycling: 0,\n  transit: 0.105\n};\n\nconst co2Emission = (emissionFactors[travelMode] || 0.192) * distanceKm;\n\nreturn [{\n  json: {\n    distance_km: distanceKm,\n    mode: travelMode,\n    co2_emissions_kg: co2Emission\n  }\n}];"
+      },
+      "name": "Calculate Carbon Footprint",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        600,
+        300
+      ],
+      "notesInFlow": "Calculates estimated carbon footprint based on travel mode and distance."
+    },
+    {
+      "parameters": {
+        "url": "https://api.carbonoffsetapi.com/v1/offsets",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {
+          "bodyContentType": "json"
+        },
+        "bodyParametersJson": "={\"offset_amount\": $json[\"co2_emissions_kg\"], \"currency\": \"USD\", \"preferences\": { \"project_type\": \"reforestation\", \"region\": \"global\" }}"
+      },
+      "name": "Get Carbon Offset Options",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        950,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "2",
+          "name": "CarbonOffsetAPI_Key"
+        }
+      },
+      "notesInFlow": "Retrieves personalized carbon offset options and prices based on the user's CO2 emissions."
+    },
+    {
+      "parameters": {
+        "functionCode": "const emissions = items[0].json.co2_emissions_kg;\n\n// Suggest alternative travel modes and their estimated CO2\n// Suppose we offer walking, bicycling, transit as eco options\n\nconst alternatives = [\n  {\n    mode: 'walking',\n    estimated_emissions_kg: 0,\n    description: 'Walking is completely carbon free and healthy.'\n  },\n  {\n    mode: 'bicycling',\n    estimated_emissions_kg: 0,\n    description: 'Bicycling emits no CO2 and is great for short trips.'\n  },\n  {\n    mode: 'transit',\n    estimated_emissions_kg: emissions * 0.55, // transit often about 45% less than driving\n    description: 'Public transit typically produces less than half the CO2 of driving.'\n  }\n];\n\nreturn [{ json: { alternatives } }];"
+      },
+      "name": "Suggest Eco-friendly Alternatives",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        600,
+        550
+      ],
+      "notesInFlow": "Generates eco-friendly travel alternatives with estimated carbon emissions and brief descriptions."
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: {\n  summary: {\n    origin: $json[\"origin\"],\n    destination: $json[\"destination\"],\n    distance_km: $json[\"distance_km\"],\n    travel_mode: $json[\"mode\"],\n    estimated_co2_kg: $json[\"co2_emissions_kg\"]\n  },\n  carbonOffsetOptions: items.find(i => i.name === 'Get Carbon Offset Options').json,\n  ecoAlternatives: items.find(i => i.name === 'Suggest Eco-friendly Alternatives').json.alternatives\n} }];"
+      },
+      "name": "Compile Result",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        400
+      ],
+      "notesInFlow": "Combines all data: travel info, carbon footprint, offset options, and eco alternatives for user output."
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "origin",
+              "value": ""
+            },
+            {
+              "name": "destination",
+              "value": ""
+            },
+            {
+              "name": "departureTime",
+              "value": ""
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        50,
+        300
+      ],
+      "notesInFlow": "Workflow start: user inputs origin, destination, and departure time."
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Get Travel Route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Travel Route": {
+      "main": [
+        [
+          {
+            "node": "Calculate Carbon Footprint",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Suggest Eco-friendly Alternatives",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Carbon Footprint": {
+      "main": [
+        [
+          {
+            "node": "Get Carbon Offset Options",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Carbon Offset Options": {
+      "main": [
+        [
+          {
+            "node": "Compile Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Suggest Eco-friendly Alternatives": {
+      "main": [
+        [
+          {
+            "node": "Compile Result",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "ai-powered-sustainable-travel-carbon-offset-planner"
+}
