@@ -1,0 +1,250 @@
+{
+  "name": "AI-Powered Sustainable Urban Mobility Planner",
+  "nodes": [
+    {
+      "parameters": {
+        "requestMethod": "GET",
+        "url": "https://api.trafficservice.com/v1/traffic",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "location",
+              "value": "={{$json[\"startLocation\"]}}"
+            },
+            {
+              "name": "destination",
+              "value": "={{$json[\"endLocation\"]}}"
+            }
+          ]
+        },
+        "responseFormat": "json"
+      },
+      "name": "Get Real-Time Traffic Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "requestMethod": "GET",
+        "url": "https://api.publictransport.com/v1/schedules",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "origin",
+              "value": "={{$json[\"startLocation\"]}}"
+            },
+            {
+              "name": "destination",
+              "value": "={{$json[\"endLocation\"]}}"
+            },
+            {
+              "name": "datetime",
+              "value": "={{$json[\"travelTime\"]}}"
+            }
+          ]
+        },
+        "responseFormat": "json"
+      },
+      "name": "Get Public Transport Schedules",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "requestMethod": "GET",
+        "url": "https://api.bikesharing.com/v1/availability",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "location",
+              "value": "={{$json[\"startLocation\"]}}"
+            }
+          ]
+        },
+        "responseFormat": "json"
+      },
+      "name": "Get Bike-Sharing Availability",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        550
+      ]
+    },
+    {
+      "parameters": {
+        "requestMethod": "GET",
+        "url": "https://api.evcharging.com/v1/stations",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "near",
+              "value": "={{$json[\"endLocation\"]}}"
+            }
+          ]
+        },
+        "responseFormat": "json"
+      },
+      "name": "Get EV Charging Stations",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const trafficData = $items(\"Get Real-Time Traffic Data\")[0].json;\nconst publicTransport = $items(\"Get Public Transport Schedules\")[0].json;\nconst bikeAvailability = $items(\"Get Bike-Sharing Availability\")[0].json;\nconst evStations = $items(\"Get EV Charging Stations\")[0].json;\n\n/**\n * Mock AI model integration: Compose a route optimization combining data.\n * In a real-world, this would call an AI API with the aggregated data.\n */\n\nconst aiRouteRecommendation = {\n  recommendedModes: [],\n  totalCarbonEmission: 0, // in kg CO2\n  totalCost: 0, // in local currency\n  totalTime: 0, // in minutes\n  segments: []\n};\n\n// Example logic (mocked):\n// Prefer bike-sharing if available nearby and distance < 5km\n// Else public transport; if public transport is late, fallback to EV charging station route\n\nfunction kmBetween(loc1, loc2) {\n  // Simple haversine formula mockup or assume input distance provided externally\n  return 4; // mock 4 km\n}\n\nconst distance = kmBetween(trafficData.startLocation, trafficData.endLocation);\n\nif (bikeAvailability.stations && bikeAvailability.stations.length > 0 && distance <= 5) {\n  aiRouteRecommendation.recommendedModes.push(\"Bike-Sharing\");\n  aiRouteRecommendation.totalCarbonEmission = 0.1; // kg CO2\n  aiRouteRecommendation.totalCost = bikeAvailability.price || 2; // mocked\n  aiRouteRecommendation.totalTime = trafficData.estimatedTime * 0.8;\n  aiRouteRecommendation.segments.push({\n    mode: \"Bike-Sharing\",\n    duration: aiRouteRecommendation.totalTime,\n    cost: aiRouteRecommendation.totalCost,\n    carbonEmission: aiRouteRecommendation.totalCarbonEmission\n  });\n} else if (publicTransport.connections && publicTransport.connections.length > 0) {\n  aiRouteRecommendation.recommendedModes.push(\"Public Transport\");\n  aiRouteRecommendation.totalCarbonEmission = 0.5; // kg CO2\n  aiRouteRecommendation.totalCost = publicTransport.fare || 3;\n  aiRouteRecommendation.totalTime = trafficData.estimatedTime * 1.1;\n  aiRouteRecommendation.segments.push({\n    mode: \"Public Transport\",\n    duration: aiRouteRecommendation.totalTime,\n    cost: aiRouteRecommendation.totalCost,\n    carbonEmission: aiRouteRecommendation.totalCarbonEmission\n  });\n} else {\n  aiRouteRecommendation.recommendedModes.push(\"Electric Vehicle\");\n  aiRouteRecommendation.totalCarbonEmission = 0.2;\n  aiRouteRecommendation.totalCost = 5; // charging costs\n  aiRouteRecommendation.totalTime = trafficData.estimatedTime;\n  aiRouteRecommendation.segments.push({\n    mode: \"Electric Vehicle\",\n    duration: aiRouteRecommendation.totalTime,\n    cost: aiRouteRecommendation.totalCost,\n    carbonEmission: aiRouteRecommendation.totalCarbonEmission\n  });\n}\n\nreturn [{ json: aiRouteRecommendation }];"
+      },
+      "name": "AI Route Optimization",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        600,
+        475
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{\n  json: {\n    message: `Recommended modes of transport: ${$json.recommendedModes.join(\", \")}`,\n    carbonEmissionKg: $json.totalCarbonEmission,\n    totalCost: $json.totalCost,\n    estimatedTimeMinutes: $json.totalTime,\n    segments: $json.segments,\n    sustainableRecommendations: []\n  }\n}];"
+      },
+      "name": "Prepare Output Summary",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        800,
+        475
+      ]
+    },
+    {
+      "parameters": {
+        "text": "={{\n  `Hello! Based on your daily commute from ${$json.startLocation} to ${$json.endLocation}, here are your optimized travel options:\n- Modes: ${$json.recommendedModes.join(\", \")}\n- Estimated Carbon Footprint: ${$json.totalCarbonEmission} kg CO2\n- Estimated Cost: ${$json.totalCost} \n- Estimated Travel Time: ${$json.totalTime} minutes\n\nConsider these sustainable options to reduce your environmental impact!`\n}}"
+      },
+      "name": "Notify User",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        475
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.map(item => {\n  item.json.startLocation = $json.startLocation || \"UserSpecifiedStart\";\n  item.json.endLocation = $json.endLocation || \"UserSpecifiedEnd\";\n  item.json.travelTime = $json.travelTime || new Date().toISOString();\n  return item;\n});"
+      },
+      "name": "Set Input Defaults",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        50,
+        475
+      ]
+    }
+  ],
+  "connections": {
+    "Set Input Defaults": {
+      "main": [
+        [
+          {
+            "node": "Get Real-Time Traffic Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Public Transport Schedules",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Bike-Sharing Availability",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get EV Charging Stations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Real-Time Traffic Data": {
+      "main": [
+        [
+          {
+            "node": "AI Route Optimization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Public Transport Schedules": {
+      "main": [
+        [
+          {
+            "node": "AI Route Optimization",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Get Bike-Sharing Availability": {
+      "main": [
+        [
+          {
+            "node": "AI Route Optimization",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Get EV Charging Stations": {
+      "main": [
+        [
+          {
+            "node": "AI Route Optimization",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "AI Route Optimization": {
+      "main": [
+        [
+          {
+            "node": "Prepare Output Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Output Summary": {
+      "main": [
+        [
+          {
+            "node": "Notify User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
