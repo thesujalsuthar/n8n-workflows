@@ -1,0 +1,268 @@
+{
+  "name": "SmartHome Energy Guardian",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.smartmeterprovider.com/v1/energy-usage",
+        "responseFormat": "json",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$credentials.smartMeterApi.token}}"
+            }
+          ]
+        }
+      },
+      "name": "Get Smart Meter Data",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "smartMeterApi",
+          "name": "Smart Meter API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://api.weather.com/v3/wx/forecast/daily/5day",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "geocode",
+              "value": "40.7128,-74.0060"
+            },
+            {
+              "name": "format",
+              "value": "json"
+            },
+            {
+              "name": "apiKey",
+              "value": "{{$credentials.weatherApi.apiKey}}"
+            }
+          ]
+        },
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Get Weather Forecast",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        500
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "weatherApi",
+          "name": "Weather API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://api.energyprices.com/v1/prices",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "region",
+              "value": "NY"
+            },
+            {
+              "name": "date",
+              "value": "={{(new Date()).toISOString().split('T')[0]}}"
+            }
+          ]
+        },
+        "responseFormat": "json",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$credentials.energyPricingApi.token}}"
+            }
+          ]
+        }
+      },
+      "name": "Get Energy Pricing",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        700
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "energyPricingApi",
+          "name": "Energy Pricing API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const energyData = items[0].json;\nconst weatherData = items[1].json;\nconst pricingData = items[2].json;\n\n// Extract relevant energy usage info\nconst usage = energyData.current_usage_kWh || 0;\nconst timestamp = energyData.timestamp || new Date().toISOString();\n\n// Extract weather info\nconst todayForecast = weatherData.forecasts ? weatherData.forecasts[0] : {};\nconst temperature = todayForecast.temperature || null;\n\n// Extract pricing info\nconst currentPrice = pricingData.price_per_kWh || 0;\n\n// Simple anomaly detection logic (could be enhanced with ML model)\nlet alert = null;\nconst averageUsage = energyData.average_day_usage_kWh || 0;\nconst thresholdMultiplier = 1.5;\nif (usage > averageUsage * thresholdMultiplier) {\n  alert = `⚠️ High energy consumption detected: ${usage.toFixed(2)} kWh, which is above your average of ${averageUsage.toFixed(2)} kWh.`;\n}\n\n// Basic recommendations\nconst recommendations = [];\nif (temperature && temperature > 25) {\n  recommendations.push('Consider using energy-efficient cooling solutions to reduce air conditioning usage.');\n} else if (temperature && temperature < 10) {\n  recommendations.push('Ensure proper insulation to minimize heating energy consumption.');\n}\nif (currentPrice > 0.20) {\n  recommendations.push('Energy prices are high currently; consider reducing consumption during peak hours.');\n}\n\n// Carbon footprint estimate (assuming 0.7 kg CO2 per kWh)\nconst carbonFootprint = usage * 0.7;\n\nreturn [{\n  json: {\n    timestamp,\n    usage,\n    averageUsage,\n    alert,\n    temperature,\n    currentPrice,\n    recommendations,\n    carbonFootprint\n  }\n}];"
+      },
+      "name": "Analyze Data & Generate Insights",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        550,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "condition": "={{$json.alert !== null}}",
+        "rules": [
+          {
+            "value1": "={{$json.alert}}",
+            "operation": "isNotEmpty"
+          }
+        ],
+        "combineOperation": "and"
+      },
+      "name": "Check For Alerts",
+      "type": "IF",
+      "typeVersion": 1,
+      "position": [
+        800,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "channel": "homeowner",
+        "text": "={{$json.alert}}"
+      },
+      "name": "Send Alert Notification",
+      "type": "telegram",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        400
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegramApi",
+          "name": "Telegram API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "append",
+        "path": "energy_logs.json",
+        "options": {}
+      },
+      "name": "Log Energy Data",
+      "type": "file",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "channel": "homeowner",
+        "text": "={{\"Daily Energy Report:\\n- Usage: \" + $json.usage.toFixed(2) + \" kWh\\n- Estimated Carbon Footprint: \" + $json.carbonFootprint.toFixed(2) + \" kg CO2\\n- Recommendations:\\n\" + $json.recommendations.map((rec, i) => (i+1) + \". \" + rec).join(\"\\n\")}}"
+      },
+      "name": "Send Daily Report",
+      "type": "telegram",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        700
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegramApi",
+          "name": "Telegram API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Get Smart Meter Data": {
+      "main": [
+        [
+          {
+            "node": "Get Weather Forecast",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Energy Pricing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Weather Forecast": {
+      "main": [
+        [
+          {
+            "node": "Analyze Data & Generate Insights",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Energy Pricing": {
+      "main": [
+        [
+          {
+            "node": "Analyze Data & Generate Insights",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Analyze Data & Generate Insights": {
+      "main": [
+        [
+          {
+            "node": "Check For Alerts",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log Energy Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Daily Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check For Alerts": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Send Alert Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
