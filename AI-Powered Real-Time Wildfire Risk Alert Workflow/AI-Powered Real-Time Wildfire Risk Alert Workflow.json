@@ -1,0 +1,184 @@
+{
+  "name": "AI-Driven Real-Time Wildfire Risk Assessment and Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.environmentaldata.org/v1/wildfire/conditions",
+        "responseFormat": "json"
+      },
+      "name": "Fetch Environmental Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const environmentalData = items[0].json;\n\n// Example feature extraction\nconst features = {\n  temperature: environmentalData.temperature,\n  humidity: environmentalData.humidity,\n  windSpeed: environmentalData.windSpeed,\n  rainfall: environmentalData.rainfall,\n  vegetationIndex: environmentalData.vegetationIndex\n};\n\nreturn [{ json: features }];"
+      },
+      "name": "Prepare Features",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "model-abcdefg1234567",
+        "input": "{{$json}}",
+        "inputPropertyName": "body",
+        "additionalFields": {}
+      },
+      "name": "AI Wildfire Risk Model",
+      "type": "n8n-nodes-base.openai",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const riskScore = parseFloat(items[0].json.riskScore);\n\n// Threshold based alert\nif (riskScore >= 0.7) {\n  return items;\n}\n\nreturn [];"
+      },
+      "name": "Evaluate Risk Threshold",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "alerts@wildfirealerts.com",
+        "toEmail": "={{$json[\"userEmail\"]}}",
+        "subject": "Wildfire Risk Alert: High Risk Detected",
+        "text": "Dear User,\n\nOur AI system has detected a high wildfire risk in your area.\n\nRisk Score: {{$json.riskScore}}\n\nPlease take necessary precautions.\n\nStay safe,\nWildfire Alert Team"
+      },
+      "name": "Send Email Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "to": "={{$json[\"userPhoneNumber\"]}}",
+        "message": "Wildfire Alert! High risk detected with risk score {{$json.riskScore}}. Please take immediate precautions."
+      },
+      "name": "Send SMS Alert",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "notificationTitle": "Wildfire Risk Alert",
+        "notificationBody": "High wildfire risk detected! Risk Score: {{$json.riskScore}}. Stay alert and follow safety instructions.",
+        "userIds": "={{$json[\"userId\"]}}"
+      },
+      "name": "Send Push Notification",
+      "type": "n8n-nodes-base.pushbullet",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        540
+      ]
+    },
+    {
+      "parameters": {},
+      "name": "Get Subscribed Users",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        650,
+        520,
+        0
+      ],
+      "credentials": {
+        "postgres": "PostgresCreds"
+      },
+      "notesInFlow": "Fetch all users subscribed for alerts with their contact info"
+    }
+  ],
+  "connections": {
+    "Fetch Environmental Data": {
+      "main": [
+        [
+          {
+            "node": "Prepare Features",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Features": {
+      "main": [
+        [
+          {
+            "node": "AI Wildfire Risk Model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Wildfire Risk Model": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Risk Threshold",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Risk Threshold": {
+      "main": [
+        [
+          {
+            "node": "Get Subscribed Users",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Subscribed Users": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send SMS Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Push Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
