@@ -1,0 +1,127 @@
+{
+  "name": "AI-Powered Sustainable Fashion Outfit Recommender",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "Start",
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "recommend-outfit",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "Webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ],
+      "webhookId": "ai_sustainable_fashion_recommender"
+    },
+    {
+      "parameters": {
+        "functionCode": "const userPreferences = $json.userPreferences || {};\nconst location = $json.location || {};\nconst weather = $json.weather || {};\n\nreturn [{ json: { userPreferences, location, weather } }];"
+      },
+      "id": "ExtractUserData",
+      "name": "Extract User Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "temperature": 0.7,
+        "maxTokens": 600,
+        "topP": 1,
+        "frequencyPenalty": 0,
+        "presencePenalty": 0,
+        "prompt": "You are a sustainable fashion expert AI assistant.\n\nGiven the user's preferences, location, and current weather, create a personalized eco-friendly outfit recommendation. Consider:\n- Sustainable fashion principles: use of organic, recycled, or eco-friendly materials\n- Weather appropriate attire\n- User's style, comfort, and preferences\n\nDetails Provided:\nUser Preferences: {{ $json.userPreferences | json }}\nLocation: {{ $json.location | json }}\nWeather: {{ $json.weather | json }}\n\nPlease generate a detailed outfit recommendation with explanations on sustainability and style."
+      },
+      "id": "AIRecommendation",
+      "name": "Generate Outfit Recommendation",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{\n  json: {\n    recommendation: $json.choices[0].message.content\n  }\n}];"
+      },
+      "id": "FormatOutput",
+      "name": "Format Output",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Extract User Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract User Data": {
+      "main": [
+        [
+          {
+            "node": "Generate Outfit Recommendation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Outfit Recommendation": {
+      "main": [
+        [
+          {
+            "node": "Format Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  ],
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
