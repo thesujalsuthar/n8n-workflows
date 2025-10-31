@@ -1,0 +1,183 @@
+{
+  "name": "AI-Powered Sustainable Urban Mobility Optimizer",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.trafficservice.example.com/realtime",
+        "options": {}
+      },
+      "name": "Real-Time Traffic Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.transitschedules.example.com/schedules",
+        "options": {}
+      },
+      "name": "Public Transit Schedules",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.environmentalmetrics.example.com/impact",
+        "options": {}
+      },
+      "name": "Environmental Impact Metrics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const trafficData = $items(\"Real-Time Traffic Data\")[0].json;\nconst transitData = $items(\"Public Transit Schedules\")[0].json;\nconst envMetrics = $items(\"Environmental Impact Metrics\")[0].json;\n\n// Placeholder: combine datasets to create personalized route options\n// This is where AI or optimization logic can be implemented\n\nconst userLocation = $json.userLocation || { lat: 0, lon: 0 };\nconst userDestination = $json.userDestination || { lat: 0, lon: 0 };\n\n// Simulate generating optimized routes considering traffic, transit, and environmental impact\nconst optimizedRoutes = [\n  {\n    mode: 'bus',\n    routeId: 'B12',\n    estimatedTimeMinutes: 35,\n    carbonFootprintKgCO2: 2.3,\n    delayMinutes: trafficData.delays?.['B12'] || 0\n  },\n  {\n    mode: 'bike',\n    routeId: 'bike_path_1',\n    estimatedTimeMinutes: 45,\n    carbonFootprintKgCO2: 0,\n    delayMinutes: 0\n  },\n  {\n    mode: 'walk',\n    routeId: 'walk_path_3',\n    estimatedTimeMinutes: 60,\n    carbonFootprintKgCO2: 0,\n    delayMinutes: 0\n  },\n  {\n    mode: 'car_sharing',\n    routeId: 'cs_101',\n    estimatedTimeMinutes: 30,\n    carbonFootprintKgCO2: 1.5,\n    delayMinutes: trafficData.delays?.['cs_101'] || 0\n  }\n];\n\nreturn [{ json: { optimizedRoutes } }];"
+      },
+      "name": "Optimize Routes",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ],
+      "notesInFlow": true,
+      "notes": "Generates personalized eco-friendly commuting options based on data inputs"
+    },
+    {
+      "parameters": {
+        "functionCode": "const optimizedRoutes = $json.optimizedRoutes;\n\n// Filter routes with delays longer than 5 minutes\nconst delayedRoutes = optimizedRoutes.filter(route => route.delayMinutes > 5);\n\nconst alerts = delayedRoutes.map(route => {\n  return `Alert: Delay of ${route.delayMinutes} minutes on your ${route.mode} route (${route.routeId}). Consider alternatives.`;\n});\n\nreturn [{ json: { alerts } }];"
+      },
+      "name": "Generate Delay Alerts",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const optimizedRoutes = $json.optimizedRoutes;\n\n// Generate carbon footprint summary\nconst totalCarbonFootprint = optimizedRoutes.reduce((sum, route) => sum + route.carbonFootprintKgCO2, 0);\n\nreturn [{ json: { totalCarbonFootprint } }];"
+      },
+      "name": "Carbon Footprint Tracker",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const optimizedRoutes = $json.optimizedRoutes;\n\n// Suggest alternative modes that reduce carbon footprint\nconst alternatives = optimizedRoutes.filter(route => route.carbonFootprintKgCO2 < 1 && route.estimatedTimeMinutes <= 60);\n\nreturn [{ json: { alternatives } }];"
+      },
+      "name": "Alternative Transport Suggestions",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "simple",
+        "email": "={{$json[\"userEmail\"] || \"user@example.com\"}}",
+        "subject": "Transit Delay Alert",
+        "text": "={{$json[\"alerts\"].join('\\n')}}"
+      },
+      "name": "Send Delay Alerts Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Real-Time Traffic Data": {
+      "main": [
+        [
+          {
+            "node": "Optimize Routes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Public Transit Schedules": {
+      "main": [
+        [
+          {
+            "node": "Optimize Routes",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Environmental Impact Metrics": {
+      "main": [
+        [
+          {
+            "node": "Optimize Routes",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Optimize Routes": {
+      "main": [
+        [
+          {
+            "node": "Generate Delay Alerts",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Carbon Footprint Tracker",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "Alternative Transport Suggestions",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Generate Delay Alerts": {
+      "main": [
+        [
+          {
+            "node": "Send Delay Alerts Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "id": "1"
+}
