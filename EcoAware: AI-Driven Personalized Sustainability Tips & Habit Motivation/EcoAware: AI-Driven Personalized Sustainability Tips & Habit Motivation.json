@@ -1,0 +1,341 @@
+{
+  "name": "EcoAware: Personalized Sustainability Tips & Habit Tracker",
+  "nodes": [
+    {
+      "parameters": {
+        "event": "webhook",
+        "path": "getDailyTips",
+        "options": {}
+      },
+      "name": "Webhook Trigger - Get Daily Tips",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const preferences = items[0].json.preferences || {};\n\nreturn [{ json: { preferences } }];"
+      },
+      "name": "Extract Preferences",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "temperature": 0.7,
+        "input": "You are an AI assistant that provides personalized daily sustainability tips. User preferences: {{$json[\"preferences\"]}}.\n\nGenerate a concise list of 3 personalized sustainability tips for today to encourage eco-friendly behaviors. Return them as a JSON array under the key \"tips\"."
+      },
+      "name": "AI - Generate Sustainability Tips",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const tips = JSON.parse(items[0].json.choices[0].message.content).tips;\nreturn [{ json: { tips } }];"
+      },
+      "name": "Parse AI Tips",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "event": "webhook",
+        "path": "updateHabit",
+        "options": {},
+        "responseMode": "onReceived"
+      },
+      "name": "Webhook Trigger - Update Habit",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        200,
+        550
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const habitData = items[0].json;\nreturn [{ json: habitData }];"
+      },
+      "name": "Extract Habit Update Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        400,
+        550
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "collection": "ecoAwareHabits",
+        "query": {
+          "userId": "={{$json[\"userId\"]}}",
+          "habitId": "={{$json[\"habitId\"]}}"
+        },
+        "replace": false
+      },
+      "name": "Database - Upsert Habit Progress",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        650,
+        550
+      ],
+      "credentials": {
+        "mongoDb": "EcoAware MongoDB"
+      }
+    },
+    {
+      "parameters": {
+        "operation": "find",
+        "collection": "ecoAwareHabits",
+        "query": {
+          "userId": "={{$json[\"userId\"]}}"
+        }
+      },
+      "name": "Database - Get User Habit Progress",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        400,
+        700
+      ],
+      "credentials": {
+        "mongoDb": "EcoAware MongoDB"
+      }
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "temperature": 0.7,
+        "input": "You are an AI assistant that tracks a user's eco-friendly habit progress and motivates them. Current progress data: {{$json[\"document\"]}}.\n\nGenerate a personalized motivational message to encourage continued eco-friendly behavior. Return it as a JSON object with the key \"message\"."
+      },
+      "name": "AI - Generate Motivational Message",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        650,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const message = JSON.parse(items[0].json.choices[0].message.content).message;\nreturn [{ json: { message } }];"
+      },
+      "name": "Parse Motivational Message",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: { tips: $items(\"Parse AI Tips\")[0].json.tips } }];"
+      },
+      "name": "Respond with Tips",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: { message: $items(\"Parse Motivational Message\")[0].json.message } }];"
+      },
+      "name": "Respond with Motivation",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "responseCode": 200,
+        "responseMode": "onSend",
+        "body": "={{JSON.stringify($items(\"Respond with Tips\")[0].json)}}",
+        "headers": {}
+      },
+      "name": "Respond to Get Daily Tips",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "responseCode": 200,
+        "responseMode": "onSend",
+        "body": "={{JSON.stringify($items(\"Respond with Motivation\")[0].json)}}",
+        "headers": {}
+      },
+      "name": "Respond to Update Habit",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        700
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger - Get Daily Tips": {
+      "main": [
+        [
+          {
+            "node": "Extract Preferences",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Preferences": {
+      "main": [
+        [
+          {
+            "node": "AI - Generate Sustainability Tips",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI - Generate Sustainability Tips": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Tips",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Tips": {
+      "main": [
+        [
+          {
+            "node": "Respond with Tips",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond with Tips": {
+      "main": [
+        [
+          {
+            "node": "Respond to Get Daily Tips",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Trigger - Update Habit": {
+      "main": [
+        [
+          {
+            "node": "Extract Habit Update Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Habit Update Data": {
+      "main": [
+        [
+          {
+            "node": "Database - Upsert Habit Progress",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Database - Upsert Habit Progress": {
+      "main": [
+        [
+          {
+            "node": "Database - Get User Habit Progress",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Database - Get User Habit Progress": {
+      "main": [
+        [
+          {
+            "node": "AI - Generate Motivational Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI - Generate Motivational Message": {
+      "main": [
+        [
+          {
+            "node": "Parse Motivational Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Motivational Message": {
+      "main": [
+        [
+          {
+            "node": "Respond with Motivation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond with Motivation": {
+      "main": [
+        [
+          {
+            "node": "Respond to Update Habit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "id": "1"
+}
