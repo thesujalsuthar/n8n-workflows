@@ -1,0 +1,193 @@
+{
+  "name": "AI-Powered Sustainable Fashion Outfit Recommender",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "user-preferences",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "name": "Receive User Preferences",
+      "type": "n8n-nodes-base.httpTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "none",
+        "url": "https://api.fashiontrends.example.com/v1/trends/current",
+        "options": {},
+        "queryParametersUi": {
+          "parameter": []
+        }
+      },
+      "name": "Fetch Current Fashion Trends",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        650,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.sustainability-metrics.example.com/v1/products/scores",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$credentials.sustainabilityApi.apiKey}}"
+            }
+          ]
+        },
+        "queryParametersUi": {
+          "parameter": []
+        }
+      },
+      "name": "Fetch Sustainability Metrics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        650,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nCombine user preferences, fashion trends, and sustainability metrics.\nPrepare payload for AI recommendation.\n*/\n\nconst userPreferences = items[0].json;\nconst fashionTrends = items[1].json;\nconst sustainabilityData = items[2].json;\n\nreturn [{\n  json: {\n    userPreferences,\n    fashionTrends,\n    sustainabilityData\n  }\n}];"
+      },
+      "name": "Aggregate Inputs",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.openai.example.com/v1/chat/completions",
+        "options": {},
+        "headers": {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer {{$credentials.openAI.apiKey}}"
+        },
+        "bodyParametersJson": "={{ JSON.stringify({\n  model: 'gpt-4',\n  messages: [\n    { role: 'system', content: 'You are an AI assistant that recommends eco-friendly outfits based on user preferences, current fashion trends, and sustainability data.' },\n    { role: 'user', content: `User Preferences: ${JSON.stringify($json.userPreferences)}\nCurrent Fashion Trends: ${JSON.stringify($json.fashionTrends)}\nSustainability Data: ${JSON.stringify($json.sustainabilityData)}\n\nPlease provide personalized outfit recommendations with sustainability scores.` }\n  ],\n  temperature: 0.7\n}) }}"
+      },
+      "name": "Generate Outfit Recommendations",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nExtract and format the AI response to return structured recommendations.\n*/\n\nconst response = items[0].json;\n\nlet recommendations = [];\n\ntry {\n  const content = response.choices[0].message.content;\n  recommendations = JSON.parse(content);\n} catch (e) {\n  recommendations = { error: 'Failed to parse AI response', raw: response };\n}\n\nreturn [{ json: { recommendations } }];"
+      },
+      "name": "Format Recommendations",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "respond"
+      },
+      "name": "Respond to User",
+      "type": "n8n-nodes-base.httpResponse",
+      "typeVersion": 1,
+      "position": [
+        1650,
+        250
+      ]
+    }
+  ],
+  "connections": {
+    "Receive User Preferences": {
+      "main": [
+        [
+          {
+            "node": "Fetch Current Fashion Trends",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Sustainability Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Current Fashion Trends": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Inputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Sustainability Metrics": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Inputs",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Aggregate Inputs": {
+      "main": [
+        [
+          {
+            "node": "Generate Outfit Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Outfit Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Format Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Respond to User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
