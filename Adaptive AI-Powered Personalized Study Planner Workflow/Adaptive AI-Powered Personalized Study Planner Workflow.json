@@ -1,0 +1,161 @@
+{
+  "name": "Adaptive AI-Powered Personalized Study Planner",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "bare",
+        "requestMethod": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={{JSON.stringify({\n  model: 'gpt-4',\n  messages: [\n    { role: 'system', content: 'You are an AI study planner that creates personalized and adaptive study schedules, recommends resources, and tracks progress based on user input and performance.' },\n    { role: 'user', content: `Create a study schedule tailored to the following user preferences and past performance:\n\nSubjects: ${$json.subjects}\nStudy hours per day: ${$json.studyHoursPerDay}\nPreferred study times: ${$json.preferredTimes}\nAreas of improvement: ${$json.weakPoints}\nLearning style: ${$json.learningStyle}\nProgress data: ${$json.progressData}` }\n  ],\n  temperature: 0.7\n})}}"
+      },
+      "name": "AI Generate Study Schedule",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        400,
+        300
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "user": "",
+          "password": ""
+        },
+        "httpHeaderAuth": {
+          "name": "Authorization",
+          "value": "Bearer YOUR_OPENAI_API_KEY"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const scheduleText = items[0].json.choices[0].message.content;\n// Parse or further process the AI generated schedule\nreturn [\n  {\n    json: {\n      schedule: scheduleText\n    }\n  }\n];"
+      },
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const progress = $json.progressData || {};\nconst updatedProgress = {\n  ...progress,\n  lastUpdated: new Date().toISOString()\n};\nreturn [{ json: { updatedProgress } }];"
+      },
+      "name": "Update Progress",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "sendMessage",
+        "text": "Your personalized adaptive study schedule has been created and updated based on your latest progress. Happy studying! Here's your schedule:\n\n{{$node[\"Parse AI Response\"].json.schedule}}"
+      },
+      "name": "Send Notification",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "webhookId": "studyPlannerWebhook",
+        "path": "study-planner",
+        "httpMethod": "POST"
+      },
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "table": "studyProgress",
+        "operation": "upsert",
+        "keyField": "userId",
+        "updateKey": "userId",
+        "data": "={{$json.updatedProgress}}"
+      },
+      "name": "Save Progress to DB",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        900,
+        400
+      ],
+      "credentials": {
+        "postgres": {
+          "host": "YOUR_DB_HOST",
+          "port": 5432,
+          "database": "YOUR_DB_NAME",
+          "user": "YOUR_DB_USER",
+          "password": "YOUR_DB_PASSWORD"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "AI Generate Study Schedule",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Generate Study Schedule": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Update Progress",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Progress": {
+      "main": [
+        [
+          {
+            "node": "Save Progress to DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  ],
+  "active": false,
+  "settings": {}
+}
