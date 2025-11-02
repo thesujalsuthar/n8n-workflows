@@ -1,0 +1,210 @@
+{
+  "name": "AI-Driven Sustainable Urban Mobility Optimizer",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.urbanmobilitydata.com/realtime",
+        "responseFormat": "json",
+        "options": {},
+        "queryParameters": {}
+      },
+      "name": "Fetch Real-Time Urban Mobility Data",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.publictransport.com/schedules",
+        "responseFormat": "json",
+        "options": {},
+        "queryParameters": {}
+      },
+      "name": "Fetch Public Transport Schedules",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.bikeshare.com/availability",
+        "responseFormat": "json",
+        "options": {},
+        "queryParameters": {}
+      },
+      "name": "Fetch Bike-Sharing Availability",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.evchargingstations.com/status",
+        "responseFormat": "json",
+        "options": {},
+        "queryParameters": {}
+      },
+      "name": "Fetch EV Charging Station Status",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        550
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n * Aggregate all fetched data into a single structured object for processing\n */\nreturn [{\n  json: {\n    urbanMobility: $items(\"Fetch Real-Time Urban Mobility Data\")[0].json,\n    publicTransport: $items(\"Fetch Public Transport Schedules\")[0].json,\n    bikeSharing: $items(\"Fetch Bike-Sharing Availability\")[0].json,\n    evCharging: $items(\"Fetch EV Charging Station Status\")[0].json\n  }\n}];"
+      },
+      "name": "Aggregate Data",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        325
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "options": {
+          "temperature": 0.3,
+          "top_p": 1,
+          "frequency_penalty": 0,
+          "presence_penalty": 0
+        },
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an AI assistant specialized in environmental impact analytics and urban mobility optimization."
+          },
+          {
+            "role": "user",
+            "content": "Given the following data on urban mobility, public transport schedules, bike-sharing availability, and EV charging station status, analyze environmental impacts and AI-optimize the best eco-friendly and efficient routes for daily commutes. Recommend transport modes, timings, and routes to minimize carbon footprint and commute time.\n\nInput data:\n{{ $json }}"
+          }
+        ]
+      },
+      "name": "AI Route Optimization & Environmental Impact Analysis",
+      "type": "openAi",
+      "typeVersion": 1,
+      "position": [
+        700,
+        325
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n * Parse AI response and transform it into structured recommendations\n */\nconst aiResponse = JSON.parse(items[0].json.choices[0].message.content);\nreturn [{ json: aiResponse }];"
+      },
+      "name": "Parse AI Recommendations",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        325
+      ]
+    },
+    {
+      "parameters": {
+        "topic": "sustainable_commute_recommendations",
+        "payload": "={{ $json }}",
+        "options": {}
+      },
+      "name": "Publish Recommendations",
+      "type": "mqtt",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        325
+      ]
+    }
+  ],
+  "connections": {
+    "Fetch Real-Time Urban Mobility Data": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Public Transport Schedules": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch Bike-Sharing Availability": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Data",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Fetch EV Charging Station Status": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Data",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Aggregate Data": {
+      "main": [
+        [
+          {
+            "node": "AI Route Optimization & Environmental Impact Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Route Optimization & Environmental Impact Analysis": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Publish Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
