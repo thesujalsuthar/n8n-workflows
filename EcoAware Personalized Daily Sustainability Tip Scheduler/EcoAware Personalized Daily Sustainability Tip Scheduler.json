@@ -1,0 +1,212 @@
+{
+  "name": "EcoAware Daily Sustainability Tip Delivery Scheduler",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": [
+          {
+            "hour": 8,
+            "minute": 0
+          }
+        ],
+        "options": {}
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "find",
+        "collection": "users",
+        "filter": {}
+      },
+      "name": "Get Users",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ],
+      "credentials": {
+        "mongoDB": "MongoDB Account"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.map(item => {\n  // Extract user preferences and past engagement\n  const user = item.json;\n  return {\n    json: {\n      userId: user._id,\n      email: user.email,\n      messagingId: user.messagingId || null,\n      preferences: user.preferences || {},\n      engagementHistory: user.engagementHistory || []\n    }\n  };\n});"
+      },
+      "name": "Prepare User Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "prompt": "You are an assistant creating personalized daily sustainability tips based on user preferences and past engagement.\n\nUser Preferences: {{ $json.preferences | JSON.stringify }}\n\nEngagement History: {{ $json.engagementHistory | JSON.stringify }}\n\nCraft a concise, motivational sustainability tip that aligns with the user's interests and encourages positive habits. Output only the text of the tip without any extra formatting.",
+        "options": {
+          "useCaching": true
+        }
+      },
+      "name": "Generate Sustainability Tip",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        300
+      ],
+      "credentials": {
+        "openAiApi": "OpenAI API Key"
+      }
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "fromEmail": "no-reply@ecoaware.org",
+        "toEmail": "={{$json.email}}",
+        "subject": "Your Daily EcoAware Sustainability Tip",
+        "text": "Hello,\n\nHere's your personalized sustainability tip for today:\n\n{{$json.choices[0].message.content}}\n\nKeep up the great work in making the planet healthier!\n\n- EcoAware Team"
+      },
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        200
+      ],
+      "credentials": {
+        "smtp": "SMTP Account"
+      }
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "channel": "={{ $json.messagingId ? 'direct' : '' }}",
+        "userId": "={{ $json.messagingId }}",
+        "text": "Daily Sustainability Tip: {{$json.choices[0].message.content}}"
+      },
+      "name": "Send Message",
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        400
+      ],
+      "credentials": {
+        "discordApi": "Discord Bot API"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.filter(item => item.json.email || item.json.messagingId);"
+      },
+      "name": "Filter Users With Contact",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "collection": "users",
+        "id": "={{ $json.userId }}",
+        "updateFields": {
+          "$push": {
+            "engagementHistory": {
+              "date": "={{ (new Date()).toISOString() }}",
+              "tip": "={{ $json.choices[0].message.content }}"
+            }
+          }
+        }
+      },
+      "name": "Update Engagement History",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        300
+      ],
+      "credentials": {
+        "mongoDB": "MongoDB Account"
+      }
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Users",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Users": {
+      "main": [
+        [
+          {
+            "node": "Prepare User Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare User Data": {
+      "main": [
+        [
+          {
+            "node": "Filter Users With Contact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Users With Contact": {
+      "main": [
+        [
+          {
+            "node": "Generate Sustainability Tip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Sustainability Tip": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Message",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Update Engagement History",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
