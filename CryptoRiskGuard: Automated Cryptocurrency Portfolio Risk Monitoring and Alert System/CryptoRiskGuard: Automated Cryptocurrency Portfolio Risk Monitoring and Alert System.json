@@ -1,0 +1,195 @@
+{
+  "name": "Cryptocurrency Portfolio Risk Management and Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 0,
+              "minute": 0,
+              "mode": "everyDay"
+            },
+            {
+              "hour": 6,
+              "minute": 0,
+              "mode": "everyDay"
+            },
+            {
+              "hour": 12,
+              "minute": 0,
+              "mode": "everyDay"
+            },
+            {
+              "hour": 18,
+              "minute": 0,
+              "mode": "everyDay"
+            }
+          ]
+        }
+      },
+      "name": "Scheduled Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "apiKey",
+        "url": "https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest",
+        "qsParametersJson": "={{\n  \"symbol\": $json[\"symbols\"].join(\",\")\n}}",
+        "options": {},
+        "headerParametersJson": "={\n  \"X-CMC_PRO_API_KEY\": $credentials.coinmarketcapApi.key\n}"
+      },
+      "credentials": {
+        "coinmarketcapApi": {
+          "id": "1",
+          "name": "CoinMarketCap API"
+        }
+      },
+      "name": "Fetch Market Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "number": [
+            {
+              "name": "riskThreshold",
+              "value": 0.05
+            }
+          ],
+          "string": [
+            {
+              "name": "symbols",
+              "value": "BTC,ETH,ADA,BNB"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "User Parameters",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        200,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const symbols = $node[\"User Parameters\"].json[\"symbols\"].split(\",\").map(s => s.trim());\n\nconst response = $node[\"Fetch Market Data\"].json;\n\n// Extract relevant price data\nconst quotes = response.data;\n\nlet prices = {};\nsymbols.forEach(symbol => {\n  if (quotes[symbol] && quotes[symbol].quote && quotes[symbol].quote.USD && typeof quotes[symbol].quote.USD.price === 'number') {\n    prices[symbol] = quotes[symbol].quote.USD.price;\n  }\n});\n\n// Assuming portfolio holdings (could be fetched from DB or user input)\nconst portfolio = {\n  BTC: 0.5,\n  ETH: 5,\n  ADA: 1000,\n  BNB: 10\n};\n\n// Compute portfolio value\nlet portfolioValue = 0;\nfor (const asset in portfolio) {\n  if (prices[asset]) {\n    portfolioValue += portfolio[asset] * prices[asset];\n  }\n}\n\n// Compute returns placeholder (would require historical prices; simplified here)\n// For demonstration, generate mock daily returns for each asset\nconst volatility = {};\nconst correlations = {\n  BTC: { BTC: 1, ETH: 0.6, ADA: 0.4, BNB: 0.5 },\n  ETH: { BTC: 0.6, ETH: 1, ADA: 0.5, BNB: 0.7 },\n  ADA: { BTC: 0.4, ETH: 0.5, ADA: 1, BNB: 0.6 },\n  BNB: { BTC: 0.5, ETH: 0.7, ADA: 0.6, BNB: 1 }\n};\n\n// Mock volatilities (standard deviations)\nvolatility.BTC = 0.04;\nvolatility.ETH = 0.06;\nvolatility.ADA = 0.1;\nvolatility.BNB = 0.07;\n\n// Calculate portfolio variance\nconst weights = {};\nfor (const asset in portfolio) {\n  if (prices[asset]) {\n    weights[asset] = (portfolio[asset] * prices[asset]) / portfolioValue;\n  } else {\n    weights[asset] = 0;\n  }\n}\n\nlet portfolioVariance = 0;\nconst assets = Object.keys(weights);\nfor (let i = 0; i < assets.length; i++) {\n  for (let j = 0; j < assets.length; j++) {\n    const asset_i = assets[i];\n    const asset_j = assets[j];\n    const cov = correlations[asset_i][asset_j] * volatility[asset_i] * volatility[asset_j];\n    portfolioVariance += weights[asset_i] * weights[asset_j] * cov;\n  }\n}\n\nconst portfolioVolatility = Math.sqrt(portfolioVariance);\n\nreturn [{\n  portfolioValue,\n  portfolioVolatility,\n  riskThreshold: $node[\"User Parameters\"].json[\"riskThreshold\"]\n}];"
+      },
+      "name": "Calculate Risk Metrics",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const volatility = $json.portfolioVolatility;\nconst threshold = $json.riskThreshold;\nconst alerts = [];\n\nif (volatility > threshold) {\n  alerts.push({\n    level: 'HIGH RISK',\n    message: `Portfolio volatility of ${(volatility * 100).toFixed(2)}% exceeds threshold of ${(threshold * 100).toFixed(2)}%. Consider reducing exposure or diversifying.`\n  });\n} else {\n  alerts.push({\n    level: 'NORMAL',\n    message: `Portfolio volatility of ${(volatility * 100).toFixed(2)}% is within acceptable limits.`\n  });\n}\n\nreturn alerts;"
+      },
+      "name": "Evaluate Risk and Generate Alerts",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "alerts@cryptoriskmanager.com",
+        "toEmail": "={{$json[\"email\"] || 'user@example.com'}}",
+        "subject": "Cryptocurrency Portfolio Risk Alert",
+        "text": "={{$json.message}}"
+      },
+      "name": "Send Email Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "2",
+          "name": "SMTP Email"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Scheduled Trigger": {
+      "main": [
+        [
+          {
+            "node": "User Parameters",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Market Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "User Parameters": {
+      "main": [
+        [
+          {
+            "node": "Fetch Market Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Market Data": {
+      "main": [
+        [
+          {
+            "node": "Calculate Risk Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Risk Metrics": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Risk and Generate Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Risk and Generate Alerts": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
