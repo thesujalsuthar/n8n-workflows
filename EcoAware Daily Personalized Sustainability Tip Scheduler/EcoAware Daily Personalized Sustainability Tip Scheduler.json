@@ -1,0 +1,173 @@
+{
+  "name": "EcoAware Personalized Sustainability Tip Scheduler",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": [
+          {
+            "hour": 8,
+            "minute": 0,
+            "second": 0
+          }
+        ],
+        "options": {}
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "document",
+        "operation": "findMany",
+        "collection": "users",
+        "filters": {},
+        "options": {
+          "limit": 100
+        }
+      },
+      "name": "Fetch Users",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        520,
+        300
+      ],
+      "credentials": {
+        "mongoDb": {
+          "id": "MONGODB_CREDENTIALS_ID"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const tipsDatabase = [\n  {\n    category: 'water',\n    tips: [\n      'Fix leaking faucets to save up to 30 gallons of water daily.',\n      'Use a rain barrel to collect water for your garden.',\n      'Turn off the tap while brushing your teeth to save water.'\n    ]\n  },\n  {\n    category: 'energy',\n    tips: [\n      'Replace incandescent bulbs with LEDs to reduce energy use.',\n      'Unplug electronics when not in use to prevent phantom energy loss.',\n      'Set your thermostat a few degrees lower in winter to conserve energy.'\n    ]\n  },\n  {\n    category: 'waste',\n    tips: [\n      'Start composting organic waste to reduce landfill garbage.',\n      'Bring reusable bags when shopping to cut plastic waste.',\n      'Avoid single-use plastics by choosing reusable containers.'\n    ]\n  },\n  {\n    category: 'transport',\n    tips: [\n      'Use public transport or carpool to reduce your carbon footprint.',\n      'Bike or walk short distances instead of driving.',\n      'Maintain your vehicle for better fuel efficiency.'\n    ]\n  }\n];\n\nreturn tipsDatabase;"
+      },
+      "name": "Define Tips Database",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        790,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const users = $items(\"Fetch Users\");\nconst tipsDB = $json[\"Define Tips Database\"];\nconst axios = require('axios');\n\nconst results = [];\n\n// Helper to get random item from array\nfunction getRandom(arr) {\n  return arr[Math.floor(Math.random() * arr.length)];\n}\n\nasync function getLocalEnvData(lat, lon) {\n  // Using OpenWeatherMap (replace with your API key and endpoint)\n  const apiKey = process.env.OPENWEATHERMAP_API_KEY || '';\n  if (!apiKey) {\n    throw new Error('Missing OpenWeatherMap API key in environment variables.');\n  }\n  const url = `https://api.openweathermap.org/data/2.5/onecall?lat=${lat}&lon=${lon}&exclude=minutely,hourly,alerts&units=metric&appid=${apiKey}`;\n  try {\n    const response = await axios.get(url);\n    return response.data;\n  } catch (error) {\n    return null;\n  }\n}\n\nasync function main() {\n  for (const user of users) {\n    const prefs = user.json.preferences || [];\n    const loc = user.json.location || {};\n    const lat = loc.latitude;\n    const lon = loc.longitude;\n\n    let localData = null;\n    if (lat && lon) {\n      localData = await getLocalEnvData(lat, lon);\n    }\n\n    // Compose tip category based on preferences and local weather conditions\n    let chosenCategory = null;\n\n    if (localData) {\n      // Example logic:\n      if (localData.current.temp > 25 && prefs.includes('energy')) {\n        chosenCategory = 'energy';\n      } else if (localData.current.humidity > 70 && prefs.includes('water')) {\n        chosenCategory = 'water';\n      } else if (prefs.length > 0) {\n        chosenCategory = getRandom(prefs);\n      } else {\n        chosenCategory = getRandom(tipsDB.map(t => t.category));\n      }\n    } else {\n      if (prefs.length > 0) {\n        chosenCategory = getRandom(prefs);\n      } else {\n        chosenCategory = getRandom(tipsDB.map(t => t.category));\n      }\n    }\n\n    const tipGroup = tipsDB.find(t => t.category === chosenCategory);\n    const tip = tipGroup ? getRandom(tipGroup.tips) : 'Remember to live sustainably every day!';\n\n    results.push({\n      json: {\n        userId: user.json._id || user.json.id || null,\n        email: user.json.email || null,\n        category: chosenCategory,\n        tip: tip,\n        date: new Date().toISOString(),\n        location: loc\n      }\n    });\n  }\n\n  return results;\n}\n\nreturn main();"
+      },
+      "name": "Generate Personalized Tips",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        300
+      ],
+      "notesInFlow": true,
+      "notes": "Fetches environmental data and picks a fitting tip per user preferences"
+    },
+    {
+      "parameters": {
+        "resource": "document",
+        "operation": "create",
+        "collection": "scheduled_tips",
+        "documents": "={{ $json }}"
+      },
+      "name": "Save Tips",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        1280,
+        300
+      ],
+      "credentials": {
+        "mongoDb": {
+          "id": "MONGODB_CREDENTIALS_ID"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "ecoaware@yourdomain.com",
+        "toEmail": "={{$json.email}}",
+        "subject": "Your Daily Sustainability Tip 🌍",
+        "text": "Hello! Here is your personalized sustainability tip for today:\n\n{{ $json.tip }}\n\nStay eco-aware and have a great day!",
+        "html": "<p>Hello!</p><p>Here is your personalized sustainability tip for today:</p><blockquote>{{ $json.tip }}</blockquote><p>Stay eco-aware and have a great day! 🌱</p>"
+      },
+      "name": "Send Tip Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        300
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "SMTP_CREDENTIALS_ID"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Users",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Users": {
+      "main": [
+        [
+          {
+            "node": "Define Tips Database",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Define Tips Database": {
+      "main": [
+        [
+          {
+            "node": "Generate Personalized Tips",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Personalized Tips": {
+      "main": [
+        [
+          {
+            "node": "Save Tips",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Tips": {
+      "main": [
+        [
+          {
+            "node": "Send Tip Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "id": "1"
+}
