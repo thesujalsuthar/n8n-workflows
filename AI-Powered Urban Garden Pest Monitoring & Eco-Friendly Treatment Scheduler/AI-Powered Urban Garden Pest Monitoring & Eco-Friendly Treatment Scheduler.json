@@ -1,0 +1,163 @@
+{
+  "name": "AI-Powered Smart Urban Garden AI Pest Detection & Eco-Friendly Treatment Scheduler",
+  "nodes": [
+    {
+      "parameters": {
+        "resource": "camera",
+        "operation": "capture",
+        "cameraId": "urban_garden_cam_01",
+        "options": {}
+      },
+      "name": "Capture Garden Image",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "headerAuth": {
+          "name": "Authorization",
+          "value": "Bearer YOUR_AI_API_KEY"
+        },
+        "url": "https://api.example-ai.com/v1/image-recognition/pests",
+        "method": "POST",
+        "responseFormat": "json",
+        "options": {},
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "image",
+              "value": "={{$json[\"body\"]}}"
+            }
+          ]
+        }
+      },
+      "name": "AI Pest Detection",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        500,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const pestDetections = items[0].json.detections || [];\n\nif (pestDetections.length === 0) {\n  return [];\n}\n\nreturn pestDetections.map(detection => {\n  return {\n    json: {\n      pestType: detection.type,\n      confidence: detection.confidence,\n      location: detection.location,\n      recommendedTreatment: getTreatment(detection.type),\n      detectionTime: new Date().toISOString()\n    }\n  };\n\n  function getTreatment(type) {\n    const treatments = {\n      \"aphids\": \"Neem oil spray\",\n      \"whiteflies\": \"Insecticidal soap\",\n      \"spider_mites\": \"Horticultural oil\",\n      \"caterpillars\": \"Bt (Bacillus thuringiensis)\",\n      \"thrips\": \"Sticky traps and neem oil\",\n      \"mealybugs\": \"Alcohol spray\"\n    };\n    return treatments[type.toLowerCase()] || \"Manual inspection needed\";\n  }\n});"
+      },
+      "name": "Parse & Recommend Treatment",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "dateTime",
+        "dateTime": "={{new Date(new Date().getTime() + 1 * 60 * 60 * 1000).toISOString()}}"
+      },
+      "name": "Schedule Treatment",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "notification",
+        "operation": "send",
+        "title": "Pest Detection Alert",
+        "message": "={{`Pest detected: ${$json.pestType} with confidence ${($json.confidence * 100).toFixed(1)}%. Recommended eco-friendly treatment: ${$json.recommendedTreatment}. Scheduled treatment time: ${$node[\"Schedule Treatment\"].json.dateTime}`}}",
+        "recipient": "gardeners@example.com",
+        "notificationType": "email"
+      },
+      "name": "Notify Gardeners",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "cronExpression": "0 */6 * * *",
+        "timezone": "Etc/UTC"
+      },
+      "name": "Every 6 Hours Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        100,
+        250
+      ]
+    }
+  ],
+  "connections": {
+    "Every 6 Hours Trigger": {
+      "main": [
+        [
+          {
+            "node": "Capture Garden Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Capture Garden Image": {
+      "main": [
+        [
+          {
+            "node": "AI Pest Detection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Pest Detection": {
+      "main": [
+        [
+          {
+            "node": "Parse & Recommend Treatment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse & Recommend Treatment": {
+      "main": [
+        [
+          {
+            "node": "Schedule Treatment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Treatment": {
+      "main": [
+        [
+          {
+            "node": "Notify Gardeners",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
