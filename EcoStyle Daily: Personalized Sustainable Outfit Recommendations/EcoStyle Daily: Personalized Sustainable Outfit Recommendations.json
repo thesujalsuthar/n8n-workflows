@@ -1,0 +1,202 @@
+{
+  "name": "AI-Powered Sustainable Style Advisor: Eco-Friendly Outfit Recommendations",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "user-preferences",
+        "responseCode": 200,
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "name": "Receive User Preferences",
+      "type": "n8n-nodes-base.httpTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ],
+      "credentials": {}
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.openweathermap.org/data/2.5/weather?q={{$json[\"city\"]}}&units=metric&appid={{$credentials.openWeatherMapApi.key}}",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": []
+        }
+      },
+      "name": "Get Current Weather",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        450,
+        300
+      ],
+      "credentials": {
+        "openWeatherMapApi": {
+          "id": "1",
+          "name": "OpenWeatherMap API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.ecofashiontrends.io/v1/trends?season={{$json[\"season\"]}}&apikey={{$credentials.ecoFashionApi.key}}",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": []
+        }
+      },
+      "name": "Get Eco-Friendly Fashion Trends",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        650,
+        300
+      ],
+      "credentials": {
+        "ecoFashionApi": {
+          "id": "2",
+          "name": "EcoFashion API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const preferences = $items()[0].json;\nconst weather = $items()[1].json;\nconst trends = $items()[2].json;\n\n// Sample logic to match weather and trends with preferences\nconst temperature = weather.main.temp;\nconst season = (temperature >= 20) ? 'spring' : 'fall';\n\n// Filter trends by season\nconst seasonTrends = trends.trends.filter(trend => trend.season.toLowerCase() === season);\n\n// Build outfit recommendation\nconst outfitSuggestions = seasonTrends.map(trend => {\n  return {\n    item: trend.item,\n    material: trend.material,\n    ecoFriendlyScore: trend.ecoFriendlyScore\n  };\n});\n\n// Select outfits based on user preferences\n// For simplicity, assume preferences include preferred materials\nconst preferredMaterials = preferences.preferredMaterials || [];\n\nconst filteredOutfits = outfitSuggestions.filter( outfit => preferredMaterials.includes(outfit.material) || preferredMaterials.length === 0 );\n\nreturn [{ json: {\n  city: preferences.city,\n  temperature: temperature,\n  outfitRecommendations: filteredOutfits.length > 0 ? filteredOutfits : outfitSuggestions\n}}];"
+      },
+      "name": "Generate Outfit Recommendations",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "toEmail": "={{$json[\"email\"]}}",
+        "subject": "Your Daily Eco-Friendly Outfit Recommendations",
+        "text": "Hello,\n\nBased on your preferences and today's weather in {{$json[\"city\"]}}, here are your sustainable outfit recommendations:\n\n{{$json[\"outfitRecommendations\"].map(o => `- Item: ${o.item}, Material: ${o.material}, Eco Score: ${o.ecoFriendlyScore}`).join('\\n')}}\n\nStay stylish and sustainable!\n\nBest,\nYour Sustainable Style Advisor"
+      },
+      "name": "Send Email Notification",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "3",
+          "name": "SMTP Email"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 7,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        250,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "credentials": "={{ $json[\"credentials\"] || null }}"
+      },
+      "name": "Load User Preferences from DB",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        450,
+        100
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "4",
+          "name": "Postgres User Preferences DB"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Load User Preferences from DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load User Preferences from DB": {
+      "main": [
+        [
+          {
+            "node": "Get Current Weather",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Eco-Friendly Fashion Trends",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Current Weather": {
+      "main": [
+        [
+          {
+            "node": "Generate Outfit Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Eco-Friendly Fashion Trends": {
+      "main": [
+        [
+          {
+            "node": "Generate Outfit Recommendations",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Generate Outfit Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Send Email Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "id": "ai-powered-sustainable-style-advisor"
+}
