@@ -1,0 +1,263 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.smartmeterprovider.com/v1/energy-consumption",
+        "queryParameters": [],
+        "options": {
+          "headers": {
+            "Authorization": "Bearer {{$credentials.smartMeterApi.apiKey}}",
+            "Accept": "application/json"
+          }
+        }
+      },
+      "name": "Fetch Energy Consumption Data",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": "smartMeterApi"
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.smarthomeplatform.com/v1/iot-sensors",
+        "queryParameters": [],
+        "options": {
+          "headers": {
+            "Authorization": "Bearer {{$credentials.smartHomePlatformApi.apiKey}}",
+            "Accept": "application/json"
+          }
+        }
+      },
+      "name": "Fetch IoT Sensor Data",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        450
+      ],
+      "credentials": {
+        "httpHeaderAuth": "smartHomePlatformApi"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const energyData = items[0].json;\nconst sensorData = items[1].json;\n\n// Aggregate and combine data\nconst combinedData = {\n  timestamp: new Date().toISOString(),\n  energyUsage: energyData.usage,\n  voltage: sensorData.voltage,\n  temperature: sensorData.temperature,\n  humidity: sensorData.humidity\n};\n\nreturn [{ json: combinedData }];"
+      },
+      "name": "Combine and Aggregate Data",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        375
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "prompt": "Analyze the following home energy data to identify optimization opportunities that reduce energy consumption and carbon footprint while maintaining comfort:\n\n{{ $json }}\n\nList specific recommendations and potential energy savings.",
+        "maxTokens": 300,
+        "temperature": 0.7
+      },
+      "name": "AI Optimization Analysis",
+      "type": "openAi",
+      "typeVersion": 1,
+      "position": [
+        750,
+        375
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "notification",
+        "operation": "send",
+        "message": "Energy Optimization Recommendations:\n\n{{$json.choices[0].message.content}}",
+        "title": "SmartHome Energy AI Optimizer Alert",
+        "priority": "high",
+        "target": "{{$credentials.notificationService.userId}}"
+      },
+      "name": "Send Notification",
+      "type": "pushbullet",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        375
+      ],
+      "credentials": {
+        "pushbulletApi": "notificationService"
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "url": "https://api.smarthomeplatform.com/v1/devices/actions",
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "deviceId",
+              "value": "thermostat_01"
+            },
+            {
+              "name": "action",
+              "value": "adjust_temperature"
+            },
+            {
+              "name": "value",
+              "value": "{{$json.recommendedTemperature || 22}}"
+            }
+          ]
+        },
+        "options": {
+          "headers": {
+            "Authorization": "Bearer {{$credentials.smartHomePlatformApi.apiKey}}",
+            "Content-Type": "application/json"
+          }
+        },
+        "jsonParameters": true
+      },
+      "name": "Adjust Thermostat",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        250
+      ],
+      "credentials": {
+        "httpHeaderAuth": "smartHomePlatformApi"
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "url": "https://api.smarthomeplatform.com/v1/devices/actions",
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "deviceId",
+              "value": "lighting_01"
+            },
+            {
+              "name": "action",
+              "value": "set_brightness"
+            },
+            {
+              "name": "value",
+              "value": "{{$json.recommendedBrightness || 70}}"
+            }
+          ]
+        },
+        "options": {
+          "headers": {
+            "Authorization": "Bearer {{$credentials.smartHomePlatformApi.apiKey}}",
+            "Content-Type": "application/json"
+          }
+        },
+        "jsonParameters": true
+      },
+      "name": "Adjust Lighting",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        500
+      ],
+      "credentials": {
+        "httpHeaderAuth": "smartHomePlatformApi"
+      }
+    },
+    {
+      "parameters": {
+        "readData": true,
+        "interval": 300
+      },
+      "name": "Trigger Every 5 Minutes",
+      "type": "cron",
+      "typeVersion": 1,
+      "position": [
+        100,
+        375
+      ]
+    }
+  ],
+  "connections": {
+    "Trigger Every 5 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Fetch Energy Consumption Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch IoT Sensor Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Energy Consumption Data": {
+      "main": [
+        [
+          {
+            "node": "Combine and Aggregate Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch IoT Sensor Data": {
+      "main": [
+        [
+          {
+            "node": "Combine and Aggregate Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Combine and Aggregate Data": {
+      "main": [
+        [
+          {
+            "node": "AI Optimization Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Optimization Analysis": {
+      "main": [
+        [
+          {
+            "node": "Send Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Adjust Thermostat",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Adjust Lighting",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
