@@ -1,0 +1,190 @@
+{
+  "name": "AI-Driven Smart Home Water Leak Detection & Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "deviceIds": [
+          "your-water-sensor-device-id"
+        ],
+        "returnAll": true
+      },
+      "name": "Fetch Water Sensor Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "your-iot-api-credential-id"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Poll water sensor data from IoT platform REST API"
+    },
+    {
+      "parameters": {
+        "functionCode": "const sensorData = $input.item.json.data;\n\n// Assume sensorData includes moistureLevel, leakDetectedRaw etc.\n// Prepare data payload for AI\nreturn [{\n  json: {\n    waterData: sensorData\n  }\n}];"
+      },
+      "name": "Prepare Data for AI",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://your-ai-leak-detection-api.com/analyze",
+        "method": "POST",
+        "responseFormat": "json",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={{ JSON.stringify({ sensorData: $json.waterData }) }}",
+        "headerParametersJson": "{\"Authorization\":\"Bearer YOUR_AI_API_KEY\"}"
+      },
+      "name": "AI Leak Detection",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const aiResult = $input.item.json;\n\nif (aiResult.leakDetected === true) {\n  return [{ json: { alert: true, details: aiResult } }];\n}\n\n// Stop workflow by returning empty array if no leak\nreturn [];"
+      },
+      "name": "Evaluate AI Result",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "phoneNumber": "={{ $json[\"userPhoneNumber\"] || '+11234567890' }}",
+        "message": "Leak detected by AI analytics! Immediate action required. Please check your home water system.",
+        "options": {}
+      },
+      "name": "Send SMS Alert",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        200
+      ],
+      "credentials": {
+        "twilioApi": {
+          "id": "your-twilio-credential-id"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Send SMS notification to homeowner"
+    },
+    {
+      "parameters": {
+        "fromEmail": "no-reply@yourdomain.com",
+        "toEmail": "homeowner@example.com",
+        "subject": "Water Leak Detected - Immediate Attention Needed",
+        "text": "Dear Homeowner,\n\nOur AI analytics detected a water leak at your property. An automated shutoff valve has been triggered to prevent damage.\nPlease inspect your home water system immediately.\n\nRegards,\nSmart Home System"
+      },
+      "name": "Send Email Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        400
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "your-smtp-credential-id"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Send email notification to homeowner"
+    },
+    {
+      "parameters": {
+        "device": "water-shutoff-valve-device-id",
+        "command": "turn_off",
+        "additionalParameters": {}
+      },
+      "name": "Trigger Water Shutoff Valve",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        600
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "your-home-automation-api-credential-id"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Send command to home automation system to shut off water"
+    }
+  ],
+  "connections": {
+    "Fetch Water Sensor Data": {
+      "main": [
+        [
+          {
+            "node": "Prepare Data for AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Data for AI": {
+      "main": [
+        [
+          {
+            "node": "AI Leak Detection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Leak Detection": {
+      "main": [
+        [
+          {
+            "node": "Evaluate AI Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate AI Result": {
+      "main": [
+        [
+          {
+            "node": "Send SMS Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Trigger Water Shutoff Valve",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
