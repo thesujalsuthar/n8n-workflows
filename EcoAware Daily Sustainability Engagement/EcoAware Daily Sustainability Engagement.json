@@ -1,0 +1,102 @@
+{
+  "name": "EcoAware: Daily Personalized Sustainability Tips & Motivation",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 8,
+              "minute": 0,
+              "mode": "everyDay"
+            }
+          ]
+        }
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const users = [\n  {\n    id: 'user1@example.com',\n    name: 'Alice',\n    preferences: {\n      focusAreas: ['energy', 'water', 'waste'],\n      habitLevel: 'beginner'\n    }\n  },\n  {\n    id: 'user2@example.com',\n    name: 'Bob',\n    preferences: {\n      focusAreas: ['transport', 'food'],\n      habitLevel: 'intermediate'\n    }\n  }\n];\n\nreturn users.map(user => ({ json: user }));"
+      },
+      "name": "Get Users",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const tips = {\n  energy: {\n    beginner: [\n      'Turn off lights when not in use.',\n      'Unplug devices to save standby power.'\n    ],\n    intermediate: [\n      'Switch to LED bulbs.',\n      'Use a smart thermostat to reduce energy use.'\n    ]\n  },\n  water: {\n    beginner: [\n      'Fix dripping faucets promptly.',\n      'Take shorter showers to conserve water.'\n    ],\n    intermediate: [\n      'Use rainwater for gardening.',\n      'Install water-saving showerheads.'\n    ]\n  },\n  waste: {\n    beginner: [\n      'Use reusable bags instead of plastic.',\n      'Recycle paper and plastic waste properly.'\n    ],\n    intermediate: [\n      'Compost kitchen scraps.',\n      'Buy products with minimal packaging.'\n    ]\n  },\n  transport: {\n    beginner: [\n      'Walk or bike for short trips.',\n      'Carpool when possible.'\n    ],\n    intermediate: [\n      'Use public transportation regularly.',\n      'Consider electric or hybrid vehicles.'\n    ]\n  },\n  food: {\n    beginner: [\n      'Eat more plant-based meals.',\n      'Reduce food waste by planning meals.'\n    ],\n    intermediate: [\n      'Buy local and organic produce.',\n      'Grow your own herbs or vegetables.'\n    ]\n  }\n};\n\nconst user = items[0].json;\n\nconst selectedTips = [];\nuser.preferences.focusAreas.forEach(area => {\n  const level = user.preferences.habitLevel || 'beginner';\n  if (tips[area] && tips[area][level]) {\n    const tipList = tips[area][level];\n    const randomTip = tipList[Math.floor(Math.random() * tipList.length)];\n    selectedTips.push({ area, tip: randomTip });\n  }\n});\n\nconst motivationalQuotes = [\n  'Every small step counts towards a greener planet!',\n  'Sustainability starts with you — keep it up!',\n  'Your eco-friendly habits inspire positive change.',\n  'Together, we can make a difference every day.'\n];\n\nconst motivation = motivationalQuotes[Math.floor(Math.random() * motivationalQuotes.length)];\n\nreturn [{\n  json: {\n    userId: user.id,\n    name: user.name,\n    tips: selectedTips,\n    motivation\n  }\n}];"
+      },
+      "name": "Generate Tips & Motivation",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "ecoaware@yourdomain.com",
+        "toEmail": "={{$json[\"userId\"]}}",
+        "subject": "Your Daily Sustainability Tips & Motivation",
+        "text": "Hello {{$json[\"name\"]}},\n\nHere are your personalized sustainability tips for today:\n\n{{$json[\"tips\"].map(t => `- [${t.area}] ${t.tip}`).join('\\n')}}\n\nMotivation: {{$json[\"motivation\"]}}\n\nThank you for helping the planet!\n\n- EcoAware"
+      },
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Users",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Users": {
+      "main": [
+        [
+          {
+            "node": "Generate Tips & Motivation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Tips & Motivation": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  ],
+  "active": true,
+  "settings": {},
+  "id": "1"
+}
