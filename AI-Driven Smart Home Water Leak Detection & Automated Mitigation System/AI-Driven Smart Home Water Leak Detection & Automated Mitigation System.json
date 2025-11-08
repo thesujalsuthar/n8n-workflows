@@ -1,0 +1,186 @@
+{
+  "name": "AI-Powered Smart Home Water Leak Detection & Automated Response System",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "water-leak-sensor-webhook",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "name": "Water Leak Sensor Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ],
+      "webhookId": "water-leak-sensor-webhook-id"
+    },
+    {
+      "parameters": {
+        "resource": "custom",
+        "operation": "invoke",
+        "functionCode": "const data = items[0].json;\n\n// Replace with your AI anomaly detection logic or API call\n// For example, call an external AI service to analyze sensor data\n// Here, simulate detection by checking if waterLevel exceeds threshold\nconst leakThreshold = 5; // example threshold\nconst isLeak = data.waterLevel !== undefined && data.waterLevel > leakThreshold;\n\nreturn [{ json: { isLeakDetected: isLeak, originalData: data } }];"
+      },
+      "name": "AI Anomaly Detection",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        550,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "filter",
+        "filters": {
+          "boolean": [
+            {
+              "value1": "={{$json[\"isLeakDetected\"]}}",
+              "operation": "equal",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "If Leak Detected",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: { message: `Water leak detected at sensor ${$json.originalData.sensorId}. Initiating automated response.` } }];"
+      },
+      "name": "Compose Alert Message",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        950,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.smarthome.local/devices/water-valve/shutdown",
+        "method": "POST",
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_SMARTHOME_API_TOKEN"
+            }
+          ]
+        }
+      },
+      "name": "Shut Off Water Valve",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "channel": "sms",
+        "to": "={{$json.originalData.homeownerPhone}}",
+        "message": "={{$node[\"Compose Alert Message\"].json.message}}"
+      },
+      "name": "Notify Homeowner",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        950,
+        350
+      ],
+      "credentials": {
+        "twilioApi": {
+          "id": "your-twilio-credential-id",
+          "name": "Twilio API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "email",
+        "operation": "send",
+        "toEmail": "maintenance@smarthome.local",
+        "subject": "Urgent: Water Leak Detected",
+        "text": "={{$node[\"Compose Alert Message\"].json.message + ' Sensor Data: ' + JSON.stringify($json.originalData)}}"
+      },
+      "name": "Notify Maintenance Service",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        350
+      ]
+    }
+  ],
+  "connections": {
+    "Water Leak Sensor Webhook": {
+      "main": [
+        [
+          {
+            "node": "AI Anomaly Detection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Anomaly Detection": {
+      "main": [
+        [
+          {
+            "node": "If Leak Detected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Leak Detected": {
+      "main": [
+        [
+          {
+            "node": "Compose Alert Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Compose Alert Message": {
+      "main": [
+        [
+          {
+            "node": "Shut Off Water Valve",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Notify Homeowner",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Notify Maintenance Service",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "ai-smart-home-water-leak-detection-workflow"
+}
