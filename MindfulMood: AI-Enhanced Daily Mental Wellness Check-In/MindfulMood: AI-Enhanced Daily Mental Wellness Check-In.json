@@ -1,0 +1,298 @@
+{
+  "name": "AI-Powered Mental Wellness Daily Sentiment Check-In",
+  "nodes": [
+    {
+      "parameters": {
+        "prompt": "Welcome to your daily mental wellness check-in! Please share how you're feeling today in a few sentences:"
+      },
+      "name": "User Input - Daily Entry",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "text",
+        "operation": "analyzeSentiment",
+        "text": "={{$node[\"User Input - Daily Entry\"].json[\"prompt\"]}}"
+      },
+      "name": "AI Sentiment Analysis",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ],
+      "credentials": {
+        "openAiApi": "OpenAI API"
+      }
+    },
+    {
+      "parameters": {
+        "value": "={{new Date().toISOString().split(\"T\")[0]}}",
+        "key": "date",
+        "options": {}
+      },
+      "name": "Set Date",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        750,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "value": "={{$node[\"User Input - Daily Entry\"].json[\"prompt\"]}}",
+        "key": "entry",
+        "options": {}
+      },
+      "name": "Set Entry",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "value": "={{$node[\"AI Sentiment Analysis\"].json[\"sentiment\"]}}",
+        "key": "sentiment",
+        "options": {}
+      },
+      "name": "Set Sentiment",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        750,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "table": "mental_wellness_entries",
+        "keyColumn": "date",
+        "keyValue": "={{$node[\"Set Date\"].json[\"date\"]}}",
+        "columns": [
+          {
+            "name": "entry",
+            "value": "={{$node[\"Set Entry\"].json[\"entry\"]}}"
+          },
+          {
+            "name": "sentiment",
+            "value": "={{$node[\"Set Sentiment\"].json[\"sentiment\"]}}"
+          }
+        ]
+      },
+      "name": "Store Daily Entry",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ],
+      "credentials": {
+        "postgres": "Postgres Mental Wellness DB"
+      }
+    },
+    {
+      "parameters": {
+        "query": "SELECT date, sentiment FROM mental_wellness_entries WHERE date >= current_date - interval '7 days' ORDER BY date ASC"
+      },
+      "name": "Fetch Last 7 Days Sentiment",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ],
+      "credentials": {
+        "postgres": "Postgres Mental Wellness DB"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const entries = items[0].json;\n\nconst sentiments = entries.map(e => e.sentiment.toLowerCase());\nconst scores = sentiments.map(s => {\n  if (s.includes('positive')) return 1;\n  if (s.includes('negative')) return -1;\n  if (s.includes('neutral')) return 0;\n  return 0;\n});\n\nconst totalScore = scores.reduce((a,b) => a+b, 0);\nconst averageScore = totalScore / scores.length;\n\nlet trend = 'Neutral';\nif (averageScore > 0.3) {\n  trend = 'Improving';\n} else if (averageScore < -0.3) {\n  trend = 'Declining';\n}\n\nreturn [{ json: { trend, averageScore, sentiments } }];"
+      },
+      "name": "Analyze Mental Health Trend",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const trend = $node[\"Analyze Mental Health Trend\"].json.trend;\n\nlet recommendation = '';\n\nif (trend === 'Declining') {\n  recommendation = 'It seems your mental wellness trend is declining. Consider exploring mindfulness exercises, scheduling time with a counselor, or trying a meditation app like Headspace.';\n} else if (trend === 'Improving') {\n  recommendation = 'Great job! Your mental wellness trend is improving. Keep up the good work with your daily check-ins and self-care routines.';\n} else {\n  recommendation = 'Your mental wellness trend is steady. Maintain your healthy habits and consider trying new activities like journaling or light exercise.';\n}\n\nreturn [{ json: { recommendation } }];"
+      },
+      "name": "Generate Personalized Resource",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "chatCompletionModel": "gpt-4",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are a compassionate mental health assistant providing empathetic responses and uplifting messages based on user sentiment and trend."
+          },
+          {
+            "role": "user",
+            "content": "User daily entry: {{$node[\"User Input - Daily Entry\"].json.prompt}}\nSentiment analysis: {{$node[\"AI Sentiment Analysis\"].json.sentiment}}\nWeekly trend: {{$node[\"Analyze Mental Health Trend\"].json.trend}}\nRecommendation: {{$node[\"Generate Personalized Resource\"].json.recommendation}}\nWrite a supportive daily summary message (approx 100 words) to encourage the user."
+          }
+        ]
+      },
+      "name": "Generate Supportive Message",
+      "type": "n8n-nodes-base.openAiChat",
+      "typeVersion": 1,
+      "position": [
+        2000,
+        300
+      ],
+      "credentials": {
+        "openAiApi": "OpenAI API"
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "channel": "email",
+        "toEmail": "={{$json[\"userEmail\"] || \"user@example.com\"}}",
+        "subject": "Your Daily Mental Wellness Summary",
+        "message": "={{$node[\"Generate Supportive Message\"].json.choices[0].message.content}}"
+      },
+      "name": "Send Daily Email Summary",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        2250,
+        300
+      ],
+      "credentials": {
+        "smtp": "SMTP Mental Wellness Email"
+      }
+    }
+  ],
+  "connections": {
+    "User Input - Daily Entry": {
+      "main": [
+        [
+          {
+            "node": "AI Sentiment Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Sentiment Analysis": {
+      "main": [
+        [
+          {
+            "node": "Set Date",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Set Entry",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Set Sentiment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Date": {
+      "main": [
+        [
+          {
+            "node": "Store Daily Entry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Entry": {
+      "main": [
+        []
+      ]
+    },
+    "Set Sentiment": {
+      "main": [
+        []
+      ]
+    },
+    "Store Daily Entry": {
+      "main": [
+        [
+          {
+            "node": "Fetch Last 7 Days Sentiment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Last 7 Days Sentiment": {
+      "main": [
+        [
+          {
+            "node": "Analyze Mental Health Trend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Mental Health Trend": {
+      "main": [
+        [
+          {
+            "node": "Generate Personalized Resource",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Personalized Resource": {
+      "main": [
+        [
+          {
+            "node": "Generate Supportive Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Supportive Message": {
+      "main": [
+        [
+          {
+            "node": "Send Daily Email Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
