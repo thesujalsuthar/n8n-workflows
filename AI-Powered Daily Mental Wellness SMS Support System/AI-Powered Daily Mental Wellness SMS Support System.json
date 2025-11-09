@@ -1,0 +1,343 @@
+{
+  "name": "AI-Driven Automated Daily Mental Wellness Check-in & Personalized Support System",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 9,
+              "minute": 0
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "1",
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.twilio.com/2010-04-01/Accounts/{{TWILIO_ACCOUNT_SID}}/Messages.json",
+        "options": {},
+        "queryParametersUi": {
+          "parameter": []
+        }
+      },
+      "id": "2",
+      "name": "Send Check-in SMS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        550,
+        300
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "1",
+          "name": "Twilio Account"
+        }
+      },
+      "parameters": {
+        "httpMethod": "POST",
+        "url": "https://api.twilio.com/2010-04-01/Accounts/{{TWILIO_ACCOUNT_SID}}/Messages.json",
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "To",
+              "value": "{{USER_PHONE_NUMBER}}"
+            },
+            {
+              "name": "From",
+              "value": "{{TWILIO_PHONE_NUMBER}}"
+            },
+            {
+              "name": "Body",
+              "value": "Hi! How are you feeling today? Reply with a few sentences about how you feel."
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "parameters": {
+        "inbox": "sms",
+        "filtersUi": {
+          "filter": [
+            {
+              "field": "from",
+              "operation": "equal",
+              "value": "{{USER_PHONE_NUMBER}}"
+            }
+          ]
+        }
+      },
+      "id": "3",
+      "name": "Wait for User Reply",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [\n  {\n    json: {\n      text: $json[\"Body\"] || $json[\"body\"] || $json[\"message\"] || \"\"\n    }\n  }\n];"
+      },
+      "id": "4",
+      "name": "Extract User Message",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "temperature": 0.7,
+        "topP": 1,
+        "frequencyPenalty": 0,
+        "presencePenalty": 0,
+        "maxTokens": 500,
+        "stop": [],
+        "prompt": "Perform sentiment analysis on the following mental wellness check-in message. Return a JSON object with sentiment: positive, neutral, or negative, and an emotion score from 0 to 1.\nMessage: {{ $json[\"text\"] }}\n\nRespond ONLY with JSON like:\n{\n  \"sentiment\": \"positive|neutral|negative\",\n  \"emotion_score\": 0.0\n}"
+      },
+      "id": "5",
+      "name": "AI Sentiment Analysis",
+      "type": "n8n-nodes-base.openAI",
+      "typeVersion": 2,
+      "position": [
+        1350,
+        300
+      ],
+      "credentials": {
+        "openAIApi": {
+          "id": "1",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const analysis = JSON.parse(items[0].json.choices[0].message.content);\nreturn [{ json: { sentiment: analysis.sentiment, emotion_score: analysis.emotion_score } }];"
+      },
+      "id": "6",
+      "name": "Parse Sentiment JSON",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const sentiment = $json.sentiment;\nconst emotion = $json.emotion_score;\n\nlet strategy = '';\nlet escalate = false;\n\nif(sentiment === 'negative' && emotion >= 0.6) {\n  strategy = 'It seems today is tough. Try a few deep breathing exercises or a short walk. Remember, you can reach out to your support network.';\n  escalate = true;\n} else if(sentiment === 'negative') {\n  strategy = 'Try some mindfulness meditation and note three things you\'re thankful for today.';\n} else if(sentiment === 'neutral') {\n  strategy = 'Maintain your routine and take breaks when needed. Keep hydrated!';\n} else if(sentiment === 'positive') {\n  strategy = 'Great to hear you are positive! Keep doing what feels good and stay connected.';\n}\n\nreturn [{ json: { strategy, escalate } }];"
+      },
+      "id": "7",
+      "name": "Determine Coping Strategy & Escalation",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "url": "https://api.twilio.com/2010-04-01/Accounts/{{TWILIO_ACCOUNT_SID}}/Messages.json",
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "To",
+              "value": "{{USER_PHONE_NUMBER}}"
+            },
+            {
+              "name": "From",
+              "value": "{{TWILIO_PHONE_NUMBER}}"
+            },
+            {
+              "name": "Body",
+              "value": "{{ $json.strategy }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "8",
+      "name": "Send Coping Strategy SMS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        2100,
+        220
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "1",
+          "name": "Twilio Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return items[0].json.escalate ? items : [];"
+      },
+      "id": "9",
+      "name": "Check if Escalation Needed",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        2100,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "url": "https://api.twilio.com/2010-04-01/Accounts/{{TWILIO_ACCOUNT_SID}}/Messages.json",
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "To",
+              "value": "{{EMERGENCY_CONTACT_PHONE}}"
+            },
+            {
+              "name": "From",
+              "value": "{{TWILIO_PHONE_NUMBER}}"
+            },
+            {
+              "name": "Body",
+              "value": "Alert: The user has reported negative mental wellness with a high emotion score. Consider checking in with them directly or offering additional support."
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "10",
+      "name": "Send Escalation Alert SMS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        2350,
+        400
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "1",
+          "name": "Twilio Account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "1": {
+      "main": [
+        [
+          {
+            "node": "Send Check-in SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Check-in SMS": {
+      "main": [
+        [
+          {
+            "node": "Wait for User Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for User Reply": {
+      "main": [
+        [
+          {
+            "node": "Extract User Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract User Message": {
+      "main": [
+        [
+          {
+            "node": "AI Sentiment Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Sentiment Analysis": {
+      "main": [
+        [
+          {
+            "node": "Parse Sentiment JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Sentiment JSON": {
+      "main": [
+        [
+          {
+            "node": "Determine Coping Strategy & Escalation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Determine Coping Strategy & Escalation": {
+      "main": [
+        [
+          {
+            "node": "Send Coping Strategy SMS",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Check if Escalation Needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check if Escalation Needed": {
+      "main": [
+        [
+          {
+            "node": "Send Escalation Alert SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "AI-Driven Automated Daily Mental Wellness Check-in & Personalized Support System"
+}
