@@ -1,0 +1,271 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "functionCode": "const userId = $json[\"userId\"] || \"defaultUser\";\nreturn [{ json: { userId } }];"
+      },
+      "name": "Start",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are EcoAware, an AI that provides personalized daily sustainability tips and habit encouragement."
+          },
+          {
+            "role": "user",
+            "content": "Generate a daily personalized sustainability tip based on the user's recent habits and preferences: {{$json[\"userHabits\"]}}"
+          }
+        ],
+        "options": {}
+      },
+      "name": "Generate Sustainability Tip",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        550,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "collection": "habits",
+        "key": "userId",
+        "updateFields": {
+          "lastTipDate": "={{$now}}",
+          "tip": "={{$json[\"choices\"][0][\"message\"][\"content\"]}}"
+        },
+        "options": {}
+      },
+      "name": "Update User Habits",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ],
+      "credentials": {
+        "mongodb": "MongoDB Account"
+      }
+    },
+    {
+      "parameters": {
+        "collection": "habits",
+        "query": "{\"userId\": \"{{$json[\"userId\"]}}\"}",
+        "options": {}
+      },
+      "name": "Fetch User Habits",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        400,
+        450
+      ],
+      "credentials": {
+        "mongodb": "MongoDB Account"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const userHabits = $items(\"Fetch User Habits\")[0].json;\nreturn [{ json: { userId: $json[\"userId\"], userHabits } }];"
+      },
+      "name": "Prepare AI Input",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "additionalFields": {},
+        "toEmail": "={{$json[\"email\"]}}",
+        "subject": "Your Daily Sustainability Tip 🌱",
+        "text": "Hello {{$json[\"name\"]}},\n\nHere's your personalized sustainability tip for today:\n\n{{$json[\"tip\"]}}\n\nKeep up the great work tracking your habits!\n\nBest,\nEcoAware Team"
+      },
+      "name": "Send Daily Tip Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        300
+      ],
+      "credentials": {
+        "smtp": "SMTP Account"
+      }
+    },
+    {
+      "parameters": {
+        "service": "firebaseCloudMessaging",
+        "operation": "sendNotification",
+        "token": "={{$json[\"pushToken\"]}}",
+        "notification": {
+          "title": "EcoAware Reminder",
+          "body": "Don't forget to update your sustainability habits today and check out new community challenges!"
+        }
+      },
+      "name": "Send Push Notification",
+      "type": "n8n-nodes-base.firebaseCloudMessaging",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        450
+      ],
+      "credentials": {
+        "firebaseCloudMessagingApi": "Firebase Cloud Messaging Account"
+      }
+    },
+    {
+      "parameters": {
+        "collection": "communityChallenges",
+        "query": "{\"active\":true}",
+        "options": {
+          "limit": 3
+        }
+      },
+      "name": "Fetch Community Challenges",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        850,
+        450
+      ],
+      "credentials": {
+        "mongodb": "MongoDB Account"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const challenges = $items(\"Fetch Community Challenges\").map(item => item.json.name).join(', ');\nreturn [{ json: { challenges } }];"
+      },
+      "name": "Prepare Challenges Text",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "additionalFields": {},
+        "toEmail": "={{$json[\"email\"]}}",
+        "subject": "Join Our EcoAware Community Challenges!",
+        "text": "Hi {{$json[\"name\"]}},\n\nWe have exciting sustainability community challenges for you:\n{{$json[\"challenges\"]}}\n\nJoin now and make a positive impact together!\n\nCheers,\nEcoAware Team"
+      },
+      "name": "Send Challenge Invitation Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        450
+      ],
+      "credentials": {
+        "smtp": "SMTP Account"
+      }
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Fetch User Habits",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch User Habits": {
+      "main": [
+        [
+          {
+            "node": "Prepare AI Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare AI Input": {
+      "main": [
+        [
+          {
+            "node": "Generate Sustainability Tip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Sustainability Tip": {
+      "main": [
+        [
+          {
+            "node": "Update User Habits",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Daily Tip Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update User Habits": {
+      "main": [
+        [
+          {
+            "node": "Fetch Community Challenges",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Community Challenges": {
+      "main": [
+        [
+          {
+            "node": "Prepare Challenges Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Challenges Text": {
+      "main": [
+        [
+          {
+            "node": "Send Challenge Invitation Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Push Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
