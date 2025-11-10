@@ -1,0 +1,399 @@
+{
+  "name": "AI-Driven Personalized Climate Resilience & Action Planner",
+  "nodes": [
+    {
+      "parameters": {
+        "functionCode": "return [{ userId: $json[\"userId\"] || \"anonymous\", timestamp: new Date().toISOString() }];"
+      },
+      "name": "Initialize Workflow",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "properties": [
+          {
+            "displayName": "User Location",
+            "name": "location",
+            "type": "string",
+            "default": "",
+            "description": "User's city or coordinates"
+          },
+          {
+            "displayName": "Household Size",
+            "name": "householdSize",
+            "type": "number",
+            "default": 1,
+            "description": "Number of people in household"
+          },
+          {
+            "displayName": "Transportation Type",
+            "name": "transportation",
+            "type": "options",
+            "options": [
+              {
+                "name": "Car (Gasoline)",
+                "value": "car_gas"
+              },
+              {
+                "name": "Car (Electric)",
+                "value": "car_electric"
+              },
+              {
+                "name": "Public Transit",
+                "value": "public_transit"
+              },
+              {
+                "name": "Bicycle",
+                "value": "bicycle"
+              },
+              {
+                "name": "Walking",
+                "value": "walking"
+              }
+            ],
+            "default": "car_gas"
+          },
+          {
+            "displayName": "Electricity Usage (kWh/month)",
+            "name": "electricityUsage",
+            "type": "number",
+            "default": 300
+          },
+          {
+            "displayName": "Diet Preference",
+            "name": "diet",
+            "type": "options",
+            "options": [
+              {
+                "name": "Omnivore",
+                "value": "omnivore"
+              },
+              {
+                "name": "Vegetarian",
+                "value": "vegetarian"
+              },
+              {
+                "name": "Vegan",
+                "value": "vegan"
+              }
+            ],
+            "default": "omnivore"
+          }
+        ],
+        "options": {}
+      },
+      "name": "Get User Input",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.openweathermap.org/data/2.5/air_pollution",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "lat",
+              "value": "={{ $json[\"latitude\"] || 0 }}"
+            },
+            {
+              "name": "lon",
+              "value": "={{ $json[\"longitude\"] || 0 }}"
+            },
+            {
+              "name": "appid",
+              "value": "={{$credentials.openWeatherApi.apiKey}}"
+            }
+          ]
+        },
+        "options": {},
+        "responseFormat": "json"
+      },
+      "name": "Fetch Air Quality Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        600,
+        300
+      ],
+      "credentials": {
+        "openWeatherApi": {
+          "id": "1",
+          "name": "OpenWeather API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://climateapi.example.com/carbon-footprint",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "householdSize",
+              "value": "={{ $json[\"householdSize\"] }}"
+            },
+            {
+              "name": "transportation",
+              "value": "={{ $json[\"transportation\"] }}"
+            },
+            {
+              "name": "electricityUsage",
+              "value": "={{ $json[\"electricityUsage\"] }}"
+            },
+            {
+              "name": "diet",
+              "value": "={{ $json[\"diet\"] }}"
+            }
+          ]
+        },
+        "options": {},
+        "responseFormat": "json"
+      },
+      "name": "Calculate Carbon Footprint",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const footprint = $json[\"carbonFootprint\"] || 10;\n\nlet recommendations = [];\nif (footprint > 20) {\n  recommendations.push(\"Reduce car usage by using public transit or carpooling.\");\n  recommendations.push(\"Switch to an energy-efficient household appliance.\");\n}\nif ($json[\"diet\"] === \"omnivore\") {\n  recommendations.push(\"Incorporate more plant-based meals to reduce dietary footprint.\");\n} else if ($json[\"diet\"] === \"vegetarian\") {\n  recommendations.push(\"Try vegan meals occasionally for further impact reduction.\");\n}\n\nrecommendations.push(\"Consider installing solar panels or using green energy.\");\n\nreturn [{ json: { recommendations } }];"
+      },
+      "name": "Generate Recommendations",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://community-api.example.com/events",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "location",
+              "value": "={{ $json[\"location\"] }}"
+            }
+          ]
+        },
+        "options": {},
+        "responseFormat": "json"
+      },
+      "name": "Fetch Local Climate Events",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const events = $json[\"events\"] || [];\nreturn [{\n  json: {\n    dailyActionPlan: {\n      date: new Date().toISOString().split('T')[0],\n      tasks: [\n        ...$items(\"Generate Recommendations\")[0].json.recommendations.map(r => ({ task: r, completed: false })),\n        ...events.slice(0, 3).map(event => ({ task: `Participate in event: ${event.title}`, completed: false, eventId: event.id }))\n      ]\n    }\n  }\n}];"
+      },
+      "name": "Create Personalized Action Plan",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "database",
+        "operation": "upsert",
+        "table": "user_action_plans",
+        "updateKey": "userId",
+        "columns": [
+          {
+            "name": "userId",
+            "value": "={{ $json[\"userId\"] || \"anonymous\" }}"
+          },
+          {
+            "name": "planDate",
+            "value": "={{ new Date().toISOString().split('T')[0] }}"
+          },
+          {
+            "name": "actionPlan",
+            "value": "={{ JSON.stringify($json[\"dailyActionPlan\"]) }}"
+          },
+          {
+            "name": "lastUpdated",
+            "value": "={{ new Date().toISOString() }}"
+          }
+        ]
+      },
+      "name": "Store Action Plan",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "2",
+          "name": "Postgres DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "message": "Hello! Your personalized climate action plan for today is ready. Check your dashboard to see recommendations and upcoming local events to join. Let's make a difference together!",
+        "messageType": "text",
+        "phoneNumber": "={{$json[\"phoneNumber\"]}}"
+      },
+      "name": "Send Reminder",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1800,
+        300
+      ],
+      "credentials": {
+        "twilioApi": {
+          "id": "3",
+          "name": "Twilio API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const data = $json;\nif (data.location && typeof data.location === 'string') {\n  const parts = data.location.split(',');\n  if (parts.length === 2) {\n    data.latitude = parseFloat(parts[0].trim());\n    data.longitude = parseFloat(parts[1].trim());\n  }\n}\nreturn [{ json: data }];"
+      },
+      "name": "Parse Coordinates",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Initialize Workflow": {
+      "main": [
+        [
+          {
+            "node": "Get User Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get User Input": {
+      "main": [
+        [
+          {
+            "node": "Parse Coordinates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Coordinates": {
+      "main": [
+        [
+          {
+            "node": "Fetch Air Quality Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Calculate Carbon Footprint",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Local Climate Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Air Quality Data": {
+      "main": [
+        []
+      ]
+    },
+    "Calculate Carbon Footprint": {
+      "main": [
+        [
+          {
+            "node": "Generate Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Create Personalized Action Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Local Climate Events": {
+      "main": [
+        [
+          {
+            "node": "Create Personalized Action Plan",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Create Personalized Action Plan": {
+      "main": [
+        [
+          {
+            "node": "Store Action Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Action Plan": {
+      "main": [
+        [
+          {
+            "node": "Send Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Reminder": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
