@@ -1,0 +1,205 @@
+{
+  "name": "Adaptive AI-Powered VR Meditation Environment Designer",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "biometric-data",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "name": "Receive Biometric Data",
+      "type": "n8n-nodes-base.httpTrigger",
+      "typeVersion": 1,
+      "position": [
+        150,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "mood-input",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "name": "Receive Mood Input",
+      "type": "n8n-nodes-base.httpTrigger",
+      "typeVersion": 1,
+      "position": [
+        150,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ambient-surroundings",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "name": "Receive Ambient Data",
+      "type": "n8n-nodes-base.httpTrigger",
+      "typeVersion": 1,
+      "position": [
+        150,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Aggregate incoming biometric, mood, and ambient data into a single JSON object for AI processing.\n  Assumes input items are in order: Biometric Data, Mood Input, Ambient Data\n*/\n\nreturn [{\n  json: {\n    biometric: $items('Receive Biometric Data')[0].json,\n    mood: $items('Receive Mood Input')[0].json,\n    ambient: $items('Receive Ambient Data')[0].json\n  }\n}];"
+      },
+      "name": "Aggregate Inputs",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api adaptive-ai.example.com/v1/vr-environment-design",
+        "method": "POST",
+        "responseFormat": "json",
+        "jsonParameters": true,
+        "options": {},
+        "headerParametersJson": "={\"Authorization\": \"Bearer YOUR_API_KEY\", \"Content-Type\": \"application/json\"}",
+        "bodyParametersJson": "={\"biometricData\": $json[\"biometric\"], \"moodInput\": $json[\"mood\"], \"ambientData\": $json[\"ambient\"]}"
+      },
+      "name": "Call AI Design API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        700,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "passThrough",
+        "options": {}
+      },
+      "name": "Format for VR Platform",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        500,
+        10,
+        10
+      ],
+      "functionCode": "/*\n  Transform AI response into VR platform compatible command structure\n*/\nconst aiResponse = $json.data || {};\n\nconst vrPayload = {\n  visuals: aiResponse.visuals || {},\n  sounds: aiResponse.sounds || {},\n  interactivity: aiResponse.interactivity || {}\n};\n\nreturn [{ json: vrPayload }];"
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.vrplatform.example.com/v1/environment/update",
+        "method": "POST",
+        "responseFormat": "json",
+        "jsonParameters": true,
+        "options": {},
+        "headerParametersJson": "={\"Authorization\": \"Bearer VR_PLATFORM_API_KEY\", \"Content-Type\": \"application/json\"}",
+        "bodyParametersJson": "={\"environmentSettings\": $json}"
+      },
+      "name": "Update VR Environment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        1150,
+        500
+      ]
+    },
+    {
+      "parameters": {},
+      "name": "Success Response",
+      "type": "n8n-nodes-base.httpResponse",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "Receive Biometric Data": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Inputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Receive Mood Input": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Inputs",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Receive Ambient Data": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Inputs",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Aggregate Inputs": {
+      "main": [
+        [
+          {
+            "node": "Call AI Design API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call AI Design API": {
+      "main": [
+        [
+          {
+            "node": "Format for VR Platform",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format for VR Platform": {
+      "main": [
+        [
+          {
+            "node": "Update VR Environment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update VR Environment": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
