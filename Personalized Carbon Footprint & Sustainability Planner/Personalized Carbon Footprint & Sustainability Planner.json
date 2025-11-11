@@ -1,0 +1,202 @@
+{
+  "name": "AI-Driven Personalized Climate Action Planner",
+  "nodes": [
+    {
+      "parameters": {
+        "functionCode": "return [{ json: { step: \"start\", message: \"Welcome! Let's help you set achievable sustainability goals.\" } }];"
+      },
+      "name": "Start",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "question": "What is your estimated average monthly energy consumption in kWh?",
+        "options": [],
+        "variableName": "energyConsumption"
+      },
+      "name": "Ask Energy Consumption",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1,
+      "position": [
+        450,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "question": "What is your average monthly travel distance by car in kilometers?",
+        "options": [],
+        "variableName": "carDistance"
+      },
+      "name": "Ask Car Travel",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1,
+      "position": [
+        450,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const energyConsumption = $json[\"energyConsumption\"] || 0;\nconst carDistance = $json[\"carDistance\"] || 0;\nconst carbonPerKWh = 0.233; // kg CO2 per kWh typical average\nconst carbonPerKmCar = 0.192; // kg CO2 per km for average gasoline car\n\nconst energyEmission = energyConsumption * carbonPerKWh;\nconst carEmission = carDistance * carbonPerKmCar;\nconst totalEmission = energyEmission + carEmission;\n\nreturn [{json: {\n  energyEmission,\n  carEmission,\n  totalEmission,\n  message: `Your estimated monthly carbon footprint is ${totalEmission.toFixed(2)} kg CO2.`\n}}];"
+      },
+      "name": "Calculate Carbon Footprint",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const totalEmission = $json[\"totalEmission\"];\n\nlet recommendations = [];\n\nif (totalEmission > 100) {\n  recommendations.push(\"Consider switching to renewable energy sources for your home electricity.\");\n  recommendations.push(\"Try to reduce car travel or switch to electric/hybrid vehicles.\");\n} else if (totalEmission > 50) {\n  recommendations.push(\"Optimize your energy usage by turning off unused appliances.\");\n  recommendations.push(\"Plan car trips efficiently to reduce travel distance.\");\n} else {\n  recommendations.push(\"Great job! Maintain your sustainable habits.\");\n  recommendations.push(\"Consider planting trees or supporting carbon offset initiatives.\");\n}\n\nreturn [{ json: { recommendations, message: \"Here are your personalized recommendations:\" } }];"
+      },
+      "name": "Generate Recommendations",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "reminder",
+        "text": "Hi! Reminder: Review your sustainability goals and track your carbon footprint today to keep reducing your environmental impact."
+      },
+      "name": "Set Reminder",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        850,
+        500
+      ],
+      "notesInFlow": true,
+      "notes": "This cron node triggers reminders weekly at 9am Monday"
+    },
+    {
+      "parameters": {
+        "chatId": "={{$json[\"chatId\"]}}",
+        "text": "={{$json[\"message\"]}}",
+        "options": {}
+      },
+      "name": "Send Message",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{$json[\"chatId\"]}}",
+        "text": "={{$json[\"recommendations\"].join('\\n- ')}}",
+        "options": {}
+      },
+      "name": "Send Recommendations",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{$json[\"chatId\"]}}",
+        "text": "={{$node[\"Set Reminder\"].json[\"text\"]}}",
+        "options": {}
+      },
+      "name": "Send Reminder",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        550
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Ask Energy Consumption",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ask Energy Consumption": {
+      "main": [
+        [
+          {
+            "node": "Ask Car Travel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ask Car Travel": {
+      "main": [
+        [
+          {
+            "node": "Calculate Carbon Footprint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Carbon Footprint": {
+      "main": [
+        [
+          {
+            "node": "Generate Recommendations",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Send Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Reminder": {
+      "main": [
+        [
+          {
+            "node": "Send Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "id": "1"
+}
