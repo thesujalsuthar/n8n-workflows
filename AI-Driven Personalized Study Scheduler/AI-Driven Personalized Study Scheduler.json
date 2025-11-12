@@ -1,0 +1,186 @@
+{
+  "name": "Adaptive AI-Powered Personalized Study Planner",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "submitStudyData",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "name": "Receive User Input",
+      "type": "n8n-nodes-base.httpTrigger",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const { subjects, goals, habits } = items[0].json;\n\nreturn [{\n  json: {\n    prompt: `Given the user's subjects: ${JSON.stringify(subjects)}, goals: ${JSON.stringify(goals)}, and learning habits: ${JSON.stringify(habits)}, generate a personalized weekly study plan with daily time blocks optimized to improve retention and progress towards goals. Include recommendations for breaks and review sessions.`\n  }\n}];"
+      },
+      "name": "Generate Prompt for AI",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "resource": "chatCompletion",
+        "options": {},
+        "messages": [
+          {
+            "role": "user",
+            "content": "{{$json[\"prompt\"]}}"
+          }
+        ]
+      },
+      "name": "AI Generate Study Plan",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const aiResponse = items[0].json.choices[0].message.content;\n\nconst plan = aiResponse;\n\nreturn [{ json: { plan } }];"
+      },
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "calendarId": "primary",
+        "resource": "events",
+        "operation": "create",
+        "summary": "={{`Study: ${JSON.parse($json[\"plan\"]).subject || 'Subject'} - ${JSON.parse($json[\"plan\"]).topic || 'Topic'}`}}",
+        "description": "={{$json[\"plan\"]}}",
+        "start": "={{$json[\"planItem\"][\"startTime\"]}}",
+        "end": "={{$json[\"planItem\"][\"endTime\"]}}",
+        "timeZone": "UTC"
+      },
+      "name": "Create Calendar Events",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        300
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "httpResponseCode": 200,
+        "options": {}
+      },
+      "name": "Return Plan to User",
+      "type": "n8n-nodes-base.httpResponse",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const planText = items[0].json.plan;\n\n// Simple parse logic to convert plan text into array of study blocks\n// Expected format (example):\n// [\n//   { subject: \"Math\", topic: \"Algebra\", startTime: \"2024-06-01T09:00:00Z\", endTime: \"2024-06-01T10:00:00Z\" },\n//   ...\n// ]\n\nlet studyBlocks = [];\ntry {\n  studyBlocks = JSON.parse(planText);\n} catch (e) {\n  // fallback: if planText is plain text, no parsing\n  studyBlocks = [];\n}\n\nreturn studyBlocks.map(block => ({ json: { planItem: block } }));"
+      },
+      "name": "Extract Study Blocks",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Receive User Input": {
+      "main": [
+        [
+          {
+            "node": "Generate Prompt for AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Prompt for AI": {
+      "main": [
+        [
+          {
+            "node": "AI Generate Study Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Generate Study Plan": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Extract Study Blocks",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Return Plan to User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Study Blocks": {
+      "main": [
+        [
+          {
+            "node": "Create Calendar Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Calendar Events": {
+      "main": [
+        [
+          {
+            "node": "Return Plan to User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
