@@ -1,0 +1,213 @@
+{
+  "name": "Crypto Market Sentiment Analysis and Alert",
+  "nodes": [
+    {
+      "parameters": {
+        "resource": "tweet",
+        "operation": "search",
+        "q": "#bitcoin OR #ethereum OR #crypto",
+        "maxResults": 100,
+        "tweetMode": "extended"
+      },
+      "name": "Fetch Tweets",
+      "type": "n8n-nodes-base.twitter",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "news",
+        "operation": "getAll",
+        "query": "bitcoin, ethereum, crypto",
+        "language": "en",
+        "sortBy": "publishedAt",
+        "pageSize": 50
+      },
+      "name": "Fetch News",
+      "type": "n8n-nodes-base.newsApi",
+      "typeVersion": 1,
+      "position": [
+        250,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "text",
+              "value": "={{$json[\"full_text\"] || $json[\"text\"] || $json[\"title\"] + ' ' + $json[\"description\"]}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Prepare Text",
+      "type": "n8n-nodes-base.functionItem",
+      "typeVersion": 1,
+      "position": [
+        500,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-3.5-turbo",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are a sentiment analysis assistant. Given a single text input related to cryptocurrency social media or news, respond with JSON containing a sentiment score between -1 (negative) and 1 (positive), and a short sentiment label: 'negative', 'neutral', or 'positive'. Example response: {\"score\":0.75,\"label\":\"positive\"}."
+          },
+          {
+            "role": "user",
+            "content": "={{$json[\"text\"]}}"
+          }
+        ]
+      },
+      "name": "Sentiment Analysis (OpenAI)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        750,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const sentiment = JSON.parse(items[0].json.text);\n\nreturn [{json: {\n  score: sentiment.score,\n  label: sentiment.label,\n  originalText: items[0].json.text\n}}];"
+      },
+      "name": "Parse Sentiment",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        950,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const cryptoKeywords = [\"bitcoin\", \"btc\", \"ethereum\", \"eth\", \"crypto\", \"cryptocurrency\"];\n\nconst text = items[0].json.originalText.toLowerCase();\nlet detectedCrypto = [];\ncryptoKeywords.forEach(kw => {\n  if (text.includes(kw)) {\n    detectedCrypto.push(kw);\n  }\n});\n\nreturn [{ json: { ...items[0].json, detectedCrypto: detectedCrypto.join(\", \") } }];"
+      },
+      "name": "Identify Cryptocurrencies",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const previousSentiment = global.get('previousSentiment') || {};\nconst crypto = items[0].json.detectedCrypto;\nconst currentScore = items[0].json.score;\n\nlet alerts = [];\n\ncrypto.split(\", \").forEach(c => {\n  if (!c) return;\n  c = c.trim();\n  const prevScore = previousSentiment[c] || 0;\n  const diff = currentScore - prevScore;\n  \n  if (Math.abs(diff) > 0.3) {\n    // Significant sentiment change\n    alerts.push({crypto: c, change: diff, newScore: currentScore});\n  }\n  previousSentiment[c] = currentScore;\n});\n\nglobal.set('previousSentiment', previousSentiment);\n\nif (alerts.length === 0) {\n  return [];\n}\n\nreturn alerts.map(alert => ({json: alert}));"
+      },
+      "name": "Detect Significant Sentiment Change",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "text": "={{\"Alert: Significant sentiment change detected for \" + $json.crypto.toUpperCase() + \". Change: \" + $json.change.toFixed(2) + \", new sentiment score: \" + $json.newScore.toFixed(2)}}",
+        "chatId": "YOUR_TELEGRAM_CHAT_ID"
+      },
+      "name": "Send Telegram Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1550,
+        200
+      ]
+    }
+  ],
+  "connections": {
+    "Fetch Tweets": {
+      "main": [
+        [
+          {
+            "node": "Prepare Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch News": {
+      "main": [
+        [
+          {
+            "node": "Prepare Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Text": {
+      "main": [
+        [
+          {
+            "node": "Sentiment Analysis (OpenAI)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sentiment Analysis (OpenAI)": {
+      "main": [
+        [
+          {
+            "node": "Parse Sentiment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Sentiment": {
+      "main": [
+        [
+          {
+            "node": "Identify Cryptocurrencies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Identify Cryptocurrencies": {
+      "main": [
+        [
+          {
+            "node": "Detect Significant Sentiment Change",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect Significant Sentiment Change": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "id": "1"
+}
