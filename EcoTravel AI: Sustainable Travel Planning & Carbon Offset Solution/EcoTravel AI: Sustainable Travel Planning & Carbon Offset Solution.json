@@ -1,0 +1,181 @@
+{
+  "name": "EcoTravel AI: Sustainable Itinerary & Carbon Offset Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "geocode",
+        "location": "={{$json[\"start_location\"]}}"
+      },
+      "name": "Geocode Start Location",
+      "type": "n8n-nodes-base.travelApi",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "geocode",
+        "location": "={{$json[\"destination\"]}}"
+      },
+      "name": "Geocode Destination",
+      "type": "n8n-nodes-base.travelApi",
+      "typeVersion": 1,
+      "position": [
+        250,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "startCoordinates": "= {{ $node[\"Geocode Start Location\"].json[\"latitude\"] }},{{ $node[\"Geocode Start Location\"].json[\"longitude\"] }}",
+        "endCoordinates": "= {{ $node[\"Geocode Destination\"].json[\"latitude\"] }},{{ $node[\"Geocode Destination\"].json[\"longitude\"] }}",
+        "date": "={{$json[\"travel_date\"]}}",
+        "mode": "eco"
+      },
+      "name": "Fetch Sustainable Travel Options",
+      "type": "n8n-nodes-base.travelApi",
+      "typeVersion": 1,
+      "position": [
+        500,
+        375
+      ]
+    },
+    {
+      "parameters": {
+        "items": [
+          {
+            "parameters": {
+              "carbonData": "={{$node[\"Fetch Sustainable Travel Options\"].json[\"itinerary\"]}}"
+            }
+          }
+        ],
+        "functionCode": "const itinerary = $json.carbonData;\n\n// Sum estimated carbon emissions from itinerary legs\nlet totalEmission = 0;\nitinerary.legs.forEach(leg => {\n  totalEmission += leg.carbonEmissionKg;\n});\n\nreturn [{ json: { totalCarbonEmissionKg: totalEmission, itinerary } }];"
+      },
+      "name": "Calculate Carbon Footprint",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        375
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getOffsetRecommendations",
+        "carbonEmissionKg": "={{$node[\"Calculate Carbon Footprint\"].json[\"totalCarbonEmissionKg\"]}}"
+      },
+      "name": "Get Carbon Offset Recommendations",
+      "type": "n8n-nodes-base.carbonOffsetApi",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        375
+      ]
+    },
+    {
+      "parameters": {
+        "text": "Your planned trip emits approximately {{$node[\"Calculate Carbon Footprint\"].json.totalCarbonEmissionKg.toFixed(2)}} kg CO2.\n\nRecommended carbon offset options:\n{{$node[\"Get Carbon Offset Recommendations\"].json.options.map(o => `- ${o.name}: $${o.price} - ${o.description}`).join('\\n')}}\n\nEco-friendly travel tips:\n- Prefer public transportation or biking.\n- Reduce single-use plastics.\n- Support local sustainable businesses.\n- Pack light to reduce fuel consumption.\n\nStay green and travel responsibly!"
+      },
+      "name": "Prepare Notification Message",
+      "type": "n8n-nodes-base.functionItem",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        375
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "email",
+        "toEmail": "={{$json[\"user_email\"]}}",
+        "subject": "Your Sustainable Travel Itinerary & Carbon Offset Options",
+        "message": "={{$node[\"Prepare Notification Message\"].json[\"text\"]}}"
+      },
+      "name": "Send User Notification",
+      "type": "n8n-nodes-base.notification",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        375
+      ]
+    }
+  ],
+  "connections": {
+    "Geocode Start Location": {
+      "main": [
+        [
+          {
+            "node": "Fetch Sustainable Travel Options",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Geocode Destination": {
+      "main": [
+        [
+          {
+            "node": "Fetch Sustainable Travel Options",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch Sustainable Travel Options": {
+      "main": [
+        [
+          {
+            "node": "Calculate Carbon Footprint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Carbon Footprint": {
+      "main": [
+        [
+          {
+            "node": "Get Carbon Offset Recommendations",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Notification Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Carbon Offset Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Prepare Notification Message",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Prepare Notification Message": {
+      "main": [
+        [
+          {
+            "node": "Send User Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
