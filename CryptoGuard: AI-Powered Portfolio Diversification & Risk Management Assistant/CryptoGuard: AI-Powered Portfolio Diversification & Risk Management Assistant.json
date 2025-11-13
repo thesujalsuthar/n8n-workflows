@@ -1,0 +1,138 @@
+{
+  "name": "AI-Powered Cryptocurrency Portfolio Diversification and Risk Management Advisor",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.coingecko.com/api/v3/simple/price",
+        "options": {
+          "queryParameters": {
+            "ids": "bitcoin,ethereum,ripple,litecoin,chainlink,cardano,solana,polkadot,binancecoin,dogecoin",
+            "vs_currencies": "usd",
+            "include_24hr_change": "true"
+          }
+        },
+        "headerParameters": {},
+        "responseFormat": "json",
+        "httpMethod": "GET"
+      },
+      "name": "Fetch Real-Time Market Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        350,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Assumes input JSON with portfolio holdings, e.g.,\n  [\n    { symbol: 'bitcoin', amount: 1.5 },\n    { symbol: 'ethereum', amount: 10 },\n    ...\n  ]\n  along with real-time prices from previous node.\n  Calculates portfolio value, exposure by coin, and basic risk metric.\n*/\n\nconst portfolio = $input.all()[0].json.portfolio || [\n  { symbol: 'bitcoin', amount: 1 },\n  { symbol: 'ethereum', amount: 5 },\n  { symbol: 'ripple', amount: 200 }\n];\n\nconst prices = $items(\"Fetch Real-Time Market Data\")[0].json;\n\nlet totalValue = 0;\nconst detailedHoldings = portfolio.map(holding => {\n  const priceObj = prices[holding.symbol.toLowerCase()];\n  const price = priceObj ? priceObj.usd : 0;\n  const change24h = priceObj ? priceObj.usd_24h_change : 0;\n  const value = holding.amount * price;\n  totalValue += value;\n  return {\n    symbol: holding.symbol,\n    amount: holding.amount,\n    priceUsd: price,\n    valueUsd: value,\n    change24h: change24h\n  };\n});\n\n// Calculate exposure percentage\nconst holdingsWithExposure = detailedHoldings.map(h => {\n  return {\n    ...h,\n    exposurePercent: totalValue ? (h.valueUsd / totalValue) * 100 : 0\n  };\n});\n\n// Basic risk score calculation: higher concentration in volatile assets increases risk\n// Volatility proxy: absolute 24h change\nlet riskScore = 0;\nholdingsWithExposure.forEach(h => {\n  riskScore += Math.abs(h.change24h || 0) * (h.exposurePercent / 100);\n});\n\nreturn [{\n  json: {\n    holdings: holdingsWithExposure,\n    totalValueUsd: totalValue,\n    riskScore: riskScore\n  }\n}];"
+      },
+      "name": "Analyze Portfolio Risk Exposure",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "options": {},
+        "prompt": "You are a financial AI assistant specialized in cryptocurrency portfolio management.\n\nGiven the following portfolio summary:\n\n{{ $json | json }}\n\nProvide personalized diversification and risk management advice. Suggest which cryptocurrencies to consider adding or reducing based on current market prices and trends. Focus on reducing risk if the risk score is high (>5). Include rationale and actionable recommendations.\n\nReply in structured JSON with keys: recommendations (array of strings), rationale (string), urgencyLevel (Low, Medium, High).",
+        "temperature": 0.7,
+        "topP": 1,
+        "maxTokens": 400,
+        "frequencyPenalty": 0,
+        "presencePenalty": 0
+      },
+      "name": "Generate Diversification & Risk Advice (AI)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Parses the JSON text output from the AI node and formats alert message\n*/\n\nconst aiResponseRaw = $json[\"choices\"][0].message.content;\n\n// Attempt to parse AI JSON output\nlet aiData = {};\ntry {\n  aiData = JSON.parse(aiResponseRaw);\n} catch (error) {\n  return [{ json: { error: 'Failed to parse AI JSON response.', rawResponse: aiResponseRaw } }];\n}\n\nconst userName = $json[\"userName\"] || \"User\";\nconst totalValue = $json[\"totalValueUsd\"] || 0;\nconst riskScore = $json[\"riskScore\"] || 0;\n\nconst alertMessage = `Hello ${userName},\n\nYour current cryptocurrency portfolio value is $${totalValue.toFixed(2)} with a risk score of ${riskScore.toFixed(2)}.\n\nRisk Level: ${aiData.urgencyLevel}\n\nRecommendations:\n- ${aiData.recommendations.join('\\n- ')}\n\nRationale:\n${aiData.rationale}\n\nStay informed and adjust your portfolio accordingly.`;\n\nreturn [{ json: { alertMessage: alertMessage } }];"
+      },
+      "name": "Format Alert Message",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "channel": "user-email-address@example.com",
+        "subject": "Your Crypto Portfolio Diversification & Risk Management Report",
+        "text": "={{ $json[\"alertMessage\"] }}",
+        "html": "<p>{{ $json[\"alertMessage\"] }}</p>"
+      },
+      "name": "Send Personalized Alert Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        300
+      ],
+      "credentials": {
+        "smtp": "SMTP_Credentials"
+      }
+    }
+  ],
+  "connections": {
+    "Fetch Real-Time Market Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze Portfolio Risk Exposure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Portfolio Risk Exposure": {
+      "main": [
+        [
+          {
+            "node": "Generate Diversification & Risk Advice (AI)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Diversification & Risk Advice (AI)": {
+      "main": [
+        [
+          {
+            "node": "Format Alert Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Alert Message": {
+      "main": [
+        [
+          {
+            "node": "Send Personalized Alert Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
