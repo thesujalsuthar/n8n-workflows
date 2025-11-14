@@ -1,0 +1,182 @@
+{
+  "name": "Real-Time Crypto Regulatory Compliance Monitoring and Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.regulatorydata.example.com/crypto-updates",
+        "options": {},
+        "responseFormat": "json",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "jurisdiction",
+              "value": "US,EU,UK,SG,JP"
+            },
+            {
+              "name": "topic",
+              "value": "cryptocurrency"
+            },
+            {
+              "name": "since",
+              "value": "={{$moment().subtract(1, 'hour').toISOString()}}"
+            }
+          ]
+        }
+      },
+      "name": "Fetch Regulatory Updates",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const updates = items[0].json.data;\n\nconst filteredUpdates = updates.filter(update => update.relevanceScore >= 70);\n\nreturn filteredUpdates.map(update => ({ json: update }));"
+      },
+      "name": "Filter Relevant Updates",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "passThrough",
+        "operation": "executeAutomation",
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "text",
+              "value": "={{$json.content}}"
+            }
+          ]
+        },
+        "requestUrl": "https://api.openai.example.com/v1/engines/impact-analysis/completions",
+        "options": {
+          "headers": {
+            "Authorization": "Bearer {{$credentials.openAIApiKey.apiKey}}",
+            "Content-Type": "application/json"
+          }
+        },
+        "httpMethod": "POST",
+        "responseFormat": "json"
+      },
+      "name": "AI Impact Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{\n  json: {\n    message: `Regulatory Update Alert:\\nJurisdiction: ${items[0].json.jurisdiction}\\nDate: ${items[0].json.date}\\nSummary: ${items[0].json.summary}\\nImpact Analysis: ${items[1].json.choices[0].text}`\n  }\n}];"
+      },
+      "name": "Format Alert Message",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "channel": "compliance-alerts",
+        "text": "={{$json.message}}",
+        "options": {}
+      },
+      "name": "Send Slack Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "credentials": {
+        "slackApi": "Slack API"
+      },
+      "position": [
+        1100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "httpMethod": "POST",
+        "url": "https://api.crmplatform.example.com/v1/alerts",
+        "options": {
+          "headers": {
+            "Authorization": "Bearer {{$credentials.crmApi.apiKey}}",
+            "Content-Type": "application/json"
+          },
+          "body": "={{ { jurisdiction: $json.jurisdiction, date: $json.date, summary: $json.summary, impact: $json.impactAnalysis } }}"
+        },
+        "responseFormat": "json"
+      },
+      "name": "Log Alert to CRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        450
+      ]
+    }
+  ],
+  "connections": {
+    "Fetch Regulatory Updates": {
+      "main": [
+        [
+          {
+            "node": "Filter Relevant Updates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Relevant Updates": {
+      "main": [
+        [
+          {
+            "node": "AI Impact Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Impact Analysis": {
+      "main": [
+        [
+          {
+            "node": "Format Alert Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Alert Message": {
+      "main": [
+        [
+          {
+            "node": "Send Slack Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log Alert to CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
