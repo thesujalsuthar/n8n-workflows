@@ -1,0 +1,252 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "calendarId": "primary",
+        "options": {},
+        "operation": "getEvents",
+        "timeMax": "={{ new Date(new Date().setDate(new Date().getDate() + 7)).toISOString() }}",
+        "timeMin": "={{ new Date().toISOString() }}"
+      },
+      "name": "Get Upcoming Calendar Events",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1,
+      "position": [
+        300,
+        300
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": "Google Calendar OAuth2 API"
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getTasks",
+        "taskList": "=@jsonify($json[\"taskListId\"] || \"@default\")",
+        "filters": {}
+      },
+      "name": "Get Task List",
+      "type": "n8n-nodes-base.todoist",
+      "typeVersion": 1,
+      "position": [
+        300,
+        500
+      ],
+      "credentials": {
+        "todoistApi": "Todoist API"
+      }
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are a helpful AI assistant specialized in personalized study planning. Generate an optimized and adaptive study schedule based on user's tasks, upcoming calendar events, learning progress, and preferred study hours."
+          },
+          {
+            "role": "user",
+            "content": "Here is the current data: Tasks: {{$json[\"tasks\"]}}, Calendar Events: {{$json[\"calendarEvents\"]}}, Learning Progress: {{$json[\"progress\"]}}, Preferred Study Times: {{$json[\"preferredTimes\"]}}. Generate a study schedule that adapts to deadlines and progress, prioritizing difficult or overdue tasks, and include motivational prompts."
+          }
+        ],
+        "options": {
+          "temperature": 0.7
+        }
+      },
+      "name": "Generate Adaptive Study Schedule",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        700,
+        400
+      ],
+      "credentials": {
+        "openAIApi": "OpenAI API"
+      }
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "resource": "event",
+        "calendarId": "primary",
+        "start": "={{$json[\"startTime\"]}}",
+        "end": "={{$json[\"endTime\"]}}",
+        "summary": "={{$json[\"title\"]}}",
+        "description": "={{$json[\"description\"]}}",
+        "attendees": []
+      },
+      "name": "Create Calendar Events",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        300
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": "Google Calendar OAuth2 API"
+      }
+    },
+    {
+      "parameters": {
+        "resource": "task",
+        "operation": "create",
+        "content": "={{$json[\"title\"]}}",
+        "dueDateTime": "={{$json[\"dueDateTime\"]}}",
+        "priority": "={{$json[\"priority\"]}}"
+      },
+      "name": "Create/Update Tasks",
+      "type": "n8n-nodes-base.todoist",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        500
+      ],
+      "credentials": {
+        "todoistApi": "Todoist API"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const tasks = items[0].json;\nconst events = items[1].json;\n// Example progress and preferred times could come from a database or webhook - placeholders here\nconst progress = {\n  'Math': 0.6,\n  'History': 0.8,\n  'Physics': 0.4\n};\nconst preferredTimes = [\n  { start: '18:00', end: '20:00' },\n  { start: '08:00', end: '10:00' }\n];\nreturn [{ json: { tasks, calendarEvents: events, progress, preferredTimes } }];"
+      },
+      "name": "Aggregate Inputs",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        550,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 7,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "channel": "={{$json[\"userNotificationChannel\"] || \"default\"}}",
+        "text": "={{$json[\"motivationMessage\"] || \"Keep up the great work! Here's your study plan for today.\"}}"
+      },
+      "name": "Send Motivation Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        400
+      ],
+      "credentials": {
+        "slackApi": "Slack API"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const openAIResponse = items[0].json.choices[0].message.content;\n/**\n * Assume the AI response contains JSON with keys: schedule (array of study sessions), motivationMessage (string)\n * Each schedule item: { title, startTime, endTime, description, dueDateTime, priority }\n */\n\nlet parsed;\ntry {\n  parsed = JSON.parse(openAIResponse);\n} catch(e) {\n  return [{ json: { error: 'Failed to parse AI response', raw: openAIResponse } }];\n}\n\n// Map schedule items to separate outputs\nconst scheduleItems = parsed.schedule || [];\nconst motivationMessage = parsed.motivationMessage || \"Stay focused and keep pushing forward!\";\n\nreturn [\n  ...scheduleItems.map(item => ({ json: item })),\n  { json: { motivationMessage } }\n];"
+      },
+      "name": "Parse AI Schedule & Motivation",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Upcoming Calendar Events",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Task List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Upcoming Calendar Events": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Inputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Task List": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Inputs",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Aggregate Inputs": {
+      "main": [
+        [
+          {
+            "node": "Generate Adaptive Study Schedule",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Adaptive Study Schedule": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Schedule & Motivation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Schedule & Motivation": {
+      "main": [
+        [
+          {
+            "node": "Create Calendar Events",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create/Update Tasks",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Motivation Notification",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  }
+}
