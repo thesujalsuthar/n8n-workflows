@@ -1,0 +1,353 @@
+{
+  "name": "AI-Driven Remote Team Engagement and Productivity Booster",
+  "nodes": [
+    {
+      "parameters": {
+        "resource": "Channel",
+        "operation": "GetAll",
+        "teamId": "your-slack-team-id",
+        "limit": 50
+      },
+      "name": "Slack Get Channels",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        100,
+        150
+      ],
+      "credentials": {
+        "slackApi": "Slack API Credential"
+      }
+    },
+    {
+      "parameters": {
+        "resource": "Message",
+        "operation": "GetAll",
+        "channel": "={{ $json[\"id\"] }}",
+        "limit": 100
+      },
+      "name": "Slack Get Messages",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        300,
+        150
+      ],
+      "credentials": {
+        "slackApi": "Slack API Credential"
+      },
+      "maxTries": 3
+    },
+    {
+      "parameters": {
+        "operation": "Analyze Sentiment",
+        "text": "={{$node[\"Slack Get Messages\"].json[\"text\"]}}"
+      },
+      "name": "AI Sentiment Analysis",
+      "type": "n8n-nodes-base.openai",
+      "typeVersion": 1,
+      "position": [
+        500,
+        150
+      ],
+      "credentials": {
+        "openAIApi": "OpenAI API Credential"
+      }
+    },
+    {
+      "parameters": {
+        "resource": "GetTasks",
+        "boardId": "your-trello-board-id"
+      },
+      "name": "Trello Get Tasks",
+      "type": "n8n-nodes-base.trello",
+      "typeVersion": 1,
+      "position": [
+        100,
+        400
+      ],
+      "credentials": {
+        "trelloApi": "Trello API Credential"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const completedTasks = items.filter(item => {\n  return item.json.dueComplete === true || item.json.status === 'done';\n});\n\nreturn [{\n  json: {\n    totalTasks: items.length,\n    completedTasksCount: completedTasks.length,\n    completionRate: items.length === 0 ? 0 : (completedTasks.length / items.length) * 100\n  }\n}];"
+      },
+      "name": "Calculate Task Completion",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        300,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const sentiment = $items(\"AI Sentiment Analysis\")[0].json.choices[0].text || '';\nconst completionInfo = $items(\"Calculate Task Completion\")[0].json;\n\n// Determine micro-break recommendations based on sentiment and task completion\nlet activities = [];\nconst sentimentLower = sentiment.toLowerCase();\n\nif (sentimentLower.includes('negative') || completionInfo.completionRate < 50) {\n  activities = [\n    'Take a 5-minute mindfulness breathing break',\n    'Stand up and stretch',\n    'Grab a glass of water and hydrate'\n  ];\n} else if (sentimentLower.includes('neutral')) {\n  activities = [\n    'Quick desk yoga poses for 3 minutes',\n    'Look away from the screen for 2 minutes',\n    'Write down a quick gratitude note'\n  ];\n} else {\n  activities = [\n    'Celebrate a recent success with a quick dance',\n    'Share a positive story with the team',\n    'Plan a virtual coffee chat'\n  ];\n}\n\nconst motivationalMessages = [\n  \"Keep up the great work! Your efforts make a difference.\",\n  \"Remember to take breaks — they boost productivity.\",\n  \"You're doing amazing, keep pushing forward!\",\n  \"Small steps each day lead to big achievements.\",\n  \"Stay positive and focused — success is near.\"\n];\n\nconst randomActivity = activities[Math.floor(Math.random() * activities.length)];\nconst randomMotivation = motivationalMessages[Math.floor(Math.random() * motivationalMessages.length)];\n\nreturn [{\n  json: {\n    sentiment: sentiment.trim(),\n    completionRate: completionInfo.completionRate,\n    suggestedActivity: randomActivity,\n    motivationalMessage: randomMotivation\n  }\n}];"
+      },
+      "name": "Suggest Activity & Motivation",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        550,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "channel": "team-updates",
+        "text": "={{\n  `*Daily Team Booster*\n\nSentiment Analysis Summary: ${$json.sentiment}\nTask Completion Rate: ${$json.completionRate.toFixed(1)}%\n\nSuggested Micro-Break Activity: ${$json.suggestedActivity}\nMotivational Message: ${$json.motivationalMessage}\n\nKeep up the great collaboration and productivity!`\n}}"
+      },
+      "name": "Post Message to Slack Channel",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        750,
+        350
+      ],
+      "credentials": {
+        "slackApi": "Slack API Credential"
+      }
+    },
+    {
+      "parameters": {
+        "resource": "Channel",
+        "operation": "GetAll",
+        "teamId": "your-microsoft-teams-team-id"
+      },
+      "name": "MS Teams Get Channels",
+      "type": "n8n-nodes-base.microsoftTeams",
+      "typeVersion": 1,
+      "position": [
+        100,
+        600
+      ],
+      "credentials": {
+        "microsoftTeamsApi": "Microsoft Teams API Credential"
+      }
+    },
+    {
+      "parameters": {
+        "operation": "GetMessages",
+        "channelId": "={{ $json[\"id\"] }}",
+        "limit": 100
+      },
+      "name": "MS Teams Get Messages",
+      "type": "n8n-nodes-base.microsoftTeams",
+      "typeVersion": 1,
+      "position": [
+        300,
+        600
+      ],
+      "credentials": {
+        "microsoftTeamsApi": "Microsoft Teams API Credential"
+      }
+    },
+    {
+      "parameters": {
+        "resource": "tasks",
+        "operation": "getTasks",
+        "projectId": "your-asana-project-id"
+      },
+      "name": "Asana Get Tasks",
+      "type": "n8n-nodes-base.asana",
+      "typeVersion": 1,
+      "position": [
+        100,
+        850
+      ],
+      "credentials": {
+        "asanaApi": "Asana API Credential"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const completedTasks = items.filter(item => {\n  return item.json.completed === true;\n});\n\nreturn [{\n  json: {\n    totalTasks: items.length,\n    completedTasksCount: completedTasks.length,\n    completionRate: items.length === 0 ? 0 : (completedTasks.length / items.length) * 100\n  }\n}];"
+      },
+      "name": "Calculate Asana Task Completion",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        300,
+        850
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const teamsSentiment = $items(\"AI Sentiment Analysis MS Teams\")[0]?.json?.choices?.[0]?.text || '';\nconst trelloCompletion = $items(\"Calculate Task Completion\")[0].json?.completionRate || 0;\nconst asanaCompletion = $items(\"Calculate Asana Task Completion\")[0].json?.completionRate || 0;\nconst avgCompletion = (trelloCompletion + asanaCompletion) / 2;\n\n// Determine micro-break recommendations based on sentiment and average completion rate\nlet activities = [];\nconst sentimentLower = teamsSentiment.toLowerCase();\n\nif (sentimentLower.includes('negative') || avgCompletion < 50) {\n  activities = [\n    'Take a 5-minute mindfulness breathing break',\n    'Stand up and stretch',\n    'Grab a glass of water and hydrate'\n  ];\n} else if (sentimentLower.includes('neutral')) {\n  activities = [\n    'Quick desk yoga poses for 3 minutes',\n    'Look away from the screen for 2 minutes',\n    'Write down a quick gratitude note'\n  ];\n} else {\n  activities = [\n    'Celebrate a recent success with a quick dance',\n    'Share a positive story with the team',\n    'Plan a virtual coffee chat'\n  ];\n}\n\nconst motivationalMessages = [\n  \"Keep up the great work! Your efforts make a difference.\",\n  \"Remember to take breaks — they boost productivity.\",\n  \"You're doing amazing, keep pushing forward!\",\n  \"Small steps each day lead to big achievements.\",\n  \"Stay positive and focused — success is near.\"\n];\n\nconst randomActivity = activities[Math.floor(Math.random() * activities.length)];\nconst randomMotivation = motivationalMessages[Math.floor(Math.random() * motivationalMessages.length)];\n\nreturn [{\n  json: {\n    teamsSentiment: teamsSentiment.trim(),\n    averageCompletionRate: avgCompletion,\n    suggestedActivity: randomActivity,\n    motivationalMessage: randomMotivation\n  }\n}];"
+      },
+      "name": "Consolidate Suggestions and Motivation",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        550,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "channel": "general",
+        "text": "={{\n  `*Remote Team Daily Engagement*\n\nMS Teams Sentiment Summary: ${$json.teamsSentiment}\nAverage Task Completion Rate: ${$json.averageCompletionRate.toFixed(1)}%\n\nSuggested Micro-Break Activity: ${$json.suggestedActivity}\nMotivational Message: ${$json.motivationalMessage}\n\nLet's keep the momentum and support each other!`\n}}"
+      },
+      "name": "Post Message to MS Teams Channel",
+      "type": "n8n-nodes-base.microsoftTeams",
+      "typeVersion": 1,
+      "position": [
+        775,
+        700
+      ],
+      "credentials": {
+        "microsoftTeamsApi": "Microsoft Teams API Credential"
+      }
+    }
+  ],
+  "connections": {
+    "Slack Get Channels": {
+      "main": [
+        [
+          {
+            "node": "Slack Get Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack Get Messages": {
+      "main": [
+        [
+          {
+            "node": "AI Sentiment Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trello Get Tasks": {
+      "main": [
+        [
+          {
+            "node": "Calculate Task Completion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Task Completion": {
+      "main": [
+        [
+          {
+            "node": "Suggest Activity & Motivation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Sentiment Analysis": {
+      "main": [
+        [
+          {
+            "node": "Suggest Activity & Motivation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Suggest Activity & Motivation": {
+      "main": [
+        [
+          {
+            "node": "Post Message to Slack Channel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MS Teams Get Channels": {
+      "main": [
+        [
+          {
+            "node": "MS Teams Get Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MS Teams Get Messages": {
+      "main": [
+        [
+          {
+            "node": "AI Sentiment Analysis MS Teams",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Asana Get Tasks": {
+      "main": [
+        [
+          {
+            "node": "Calculate Asana Task Completion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Task Completion": {
+      "main": [
+        [
+          {
+            "node": "Consolidate Suggestions and Motivation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Asana Task Completion": {
+      "main": [
+        [
+          {
+            "node": "Consolidate Suggestions and Motivation",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "AI Sentiment Analysis MS Teams": {
+      "main": [
+        [
+          {
+            "node": "Consolidate Suggestions and Motivation",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Consolidate Suggestions and Motivation": {
+      "main": [
+        [
+          {
+            "node": "Post Message to MS Teams Channel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "id": "1"
+}
