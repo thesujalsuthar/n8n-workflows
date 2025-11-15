@@ -1,0 +1,165 @@
+{
+  "name": "AI-Driven Autonomous Green Roof Maintenance and Optimization System",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.planthealth.example.com/data",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Fetch Plant Health Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.weather.example.com/current",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Fetch Weather Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.watermeter.example.com/usage",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Fetch Water Usage Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const plantHealth = items[0].json;\nconst weather = items[1].json;\nconst waterUsage = items[2].json;\n\n// Example logic for irrigation optimization\nlet irrigationNeed = false;\nif (plantHealth.healthIndex < 70 && weather.precipitation < 5 && waterUsage.dailyLiters < 50) {\n  irrigationNeed = true;\n}\n\n// Example maintenance alert\nlet maintenanceAlerts = [];\nif (plantHealth.diseaseDetected) {\n  maintenanceAlerts.push('Disease detected on plants, schedule treatment');\n}\nif (plantHealth.soilMoisture < 30) {\n  maintenanceAlerts.push('Low soil moisture detected');\n}\n\n// Suggestions for energy efficiency and biodiversity\nlet suggestions = [];\nif (weather.temperature > 30) {\n  suggestions.push('Consider installing shading or reflective surfaces to reduce heat absorption');\n}\nif (plantHealth.biodiversityIndex < 3) {\n  suggestions.push('Introduce native plant species to improve biodiversity');\n}\n\nreturn [{\n  json: {\n    irrigationNeed,\n    maintenanceAlerts,\n    suggestions\n  }\n}];"
+      },
+      "name": "Analyze and Optimize",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        550,
+        300
+      ],
+      "alwaysOutputData": true,
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "channel": "green-roof-maintenance",
+        "text": "={{$json[\"maintenanceAlerts\"].length > 0 ? 'Maintenance Alerts:\\n' + $json[\"maintenanceAlerts\"].join('\\n') : 'No maintenance alerts needed currently.'}}"
+      },
+      "name": "Send Maintenance Alerts",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        850,
+        200
+      ],
+      "credentials": {
+        "slackApi": "Slack API Credential"
+      }
+    },
+    {
+      "parameters": {
+        "channel": "green-roof-irrigation",
+        "text": "={{$json[\"irrigationNeed\"] ? 'Irrigation required: Please activate water system.' : 'Irrigation not currently needed.'}}"
+      },
+      "name": "Send Irrigation Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        850,
+        400
+      ],
+      "credentials": {
+        "slackApi": "Slack API Credential"
+      }
+    },
+    {
+      "parameters": {
+        "channel": "green-roof-enhancements",
+        "text": "={{$json[\"suggestions\"].length > 0 ? 'Improvement Suggestions:\\n' + $json[\"suggestions\"].join('\\n') : 'No new suggestions for improvements currently.'}}"
+      },
+      "name": "Send Improvement Suggestions",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        850,
+        600
+      ],
+      "credentials": {
+        "slackApi": "Slack API Credential"
+      }
+    }
+  ],
+  "connections": {
+    "Fetch Plant Health Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze and Optimize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Weather Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze and Optimize",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch Water Usage Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze and Optimize",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Analyze and Optimize": {
+      "main": [
+        [
+          {
+            "node": "Send Maintenance Alerts",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Irrigation Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Improvement Suggestions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
