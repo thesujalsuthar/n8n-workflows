@@ -1,0 +1,259 @@
+{
+  "name": "Daily AI-Powered Mental Wellness Check-in & Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": [
+          {
+            "hours": 9,
+            "minutes": 0,
+            "seconds": 0
+          }
+        ]
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "text": "Hi {{ $json[\"userName\"] || \"there\" }}! How are you feeling today on a scale of 1 to 10? You can also share how you're feeling in your own words.",
+        "channel": "slack",
+        "channelType": "private",
+        "chatId": "={{$json[\"slackUserId\"]}}"
+      },
+      "name": "Send Daily Check-in Prompt",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ],
+      "credentials": {
+        "slackApi": "Slack API Credential"
+      }
+    },
+    {
+      "parameters": {
+        "event": "message_im",
+        "additionalFields": {
+          "userIds": [
+            "={{$json[\"slackUserId\"]}}"
+          ]
+        }
+      },
+      "name": "Listen for User Response",
+      "type": "n8n-nodes-base.slackTrigger",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ],
+      "credentials": {
+        "slackApi": "Slack API Credential"
+      }
+    },
+    {
+      "parameters": {
+        "mode": "text",
+        "text": "={{$json[\"text\"]}}",
+        "model": "gpt-4",
+        "options": {
+          "returnFullText": true
+        },
+        "prompt": "=Analyze the sentiment and detect emotional cues from this user's message. Return a JSON object with keys: sentiment (positive, neutral, negative), sentimentScore (numeric), emotionalKeywords (list), and suggestedSupport (summary advice). Message: {{$json[\"text\"]}}"
+      },
+      "name": "Perform Sentiment Analysis & Insights",
+      "type": "n8n-nodes-base.openAIApi",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ],
+      "credentials": {
+        "openAIApi": "OpenAI API Credential"
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json[\"sentiment\"]}}",
+              "operation": "equals",
+              "value2": "negative"
+            }
+          ]
+        }
+      },
+      "name": "Check for Negative Sentiment",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "from": "YourServiceName",
+        "to": "={{$json[\"phoneNumber\"]}}",
+        "message": "Hi {{ $json[\"userName\"] || \"there\" }}, we noticed you might be having a tough day based on your recent check-in. Remember, support is available if you need it. Here’s a personalized suggestion: {{$json[\"suggestedSupport\"]}}. If you are in crisis, please consider contacting professional help.",
+        "options": {}
+      },
+      "name": "Send SMS Alert",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1550,
+        250
+      ],
+      "credentials": {
+        "twilioApi": "Twilio API Credential"
+      }
+    },
+    {
+      "parameters": {
+        "set": [
+          {
+            "name": "sentiment",
+            "value": "={{$json[\"choices\"][0][\"text\"] ? JSON.parse($json[\"choices\"][0][\"text\"]).sentiment : \"neutral\"}}"
+          },
+          {
+            "name": "sentimentScore",
+            "value": "={{$json[\"choices\"][0][\"text\"] ? JSON.parse($json[\"choices\"][0][\"text\"]).sentimentScore : 0}}"
+          },
+          {
+            "name": "emotionalKeywords",
+            "value": "={{$json[\"choices\"][0][\"text\"] ? JSON.parse($json[\"choices\"][0][\"text\"]).emotionalKeywords.join(\", \") : \"\"}}"
+          },
+          {
+            "name": "suggestedSupport",
+            "value": "={{$json[\"choices\"][0][\"text\"] ? JSON.parse($json[\"choices\"][0][\"text\"]).suggestedSupport : \"\"}}"
+          }
+        ]
+      },
+      "name": "Parse AI Output",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "document",
+        "operation": "create",
+        "collection": "userCheckIns",
+        "fields": {
+          "userId": "={{$json[\"userId\"]}}",
+          "timestamp": "={{$now}}",
+          "originalText": "={{$json[\"text\"]}}",
+          "sentiment": "={{$json[\"sentiment\"]}}",
+          "sentimentScore": "={{$json[\"sentimentScore\"]}}",
+          "emotionalKeywords": "={{$json[\"emotionalKeywords\"]}}",
+          "suggestedSupport": "={{$json[\"suggestedSupport\"]}}"
+        }
+      },
+      "name": "Store Check-in Data Securely",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        450
+      ],
+      "credentials": {
+        "mongoDb": "MongoDB Credential"
+      }
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Send Daily Check-in Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Daily Check-in Prompt": {
+      "main": [
+        []
+      ]
+    },
+    "Listen for User Response": {
+      "main": [
+        [
+          {
+            "node": "Perform Sentiment Analysis & Insights",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Perform Sentiment Analysis & Insights": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Output": {
+      "main": [
+        [
+          {
+            "node": "Check for Negative Sentiment",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Store Check-in Data Securely",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check for Negative Sentiment": {
+      "main": [
+        [
+          {
+            "node": "Send SMS Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Send SMS Alert": {
+      "main": [
+        []
+      ]
+    },
+    "Store Check-in Data Securely": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "executionTimeout": 300
+  }
+}
