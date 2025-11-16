@@ -1,0 +1,146 @@
+{
+  "name": "Ethical AI Usage Compliance Monitor & Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.organization.com/ai-usage/metrics",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Fetch AI Usage Metrics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  This Function node analyzes usage metrics to detect potential ethical AI guideline violations.\n  Example checks:\n  - Usage beyond defined limits\n  - Use of banned AI features or datasets\n  - Excessive request rates\n*/\n\nconst usageData = items[0].json.metrics;\nconst violations = [];\n\n// Example rule: Check if any AI tool usage exceeds allowed daily limit\nconst allowedDailyLimit = 1000;\n\nusageData.forEach(tool => {\n  if (tool.usageCount > allowedDailyLimit) {\n    violations.push({\n      toolName: tool.name,\n      issue: `Usage count ${tool.usageCount} exceeds allowed limit of ${allowedDailyLimit}`\n    });\n  }\n\n  // Example rule: Detect banned AI features\n  if (tool.featuresUsed.includes(\"facial_recognition\")) {\n    violations.push({\n      toolName: tool.name,\n      issue: 'Use of banned feature: facial_recognition'\n    });\n  }\n\n  // Example rule: Detect use of unapproved sensitive datasets\n  if (tool.datasets.some(ds => ds.unapproved === true)) {\n    violations.push({\n      toolName: tool.name,\n      issue: 'Use of unapproved sensitive datasets detected'\n    });\n  }\n});\n\nreturn [{ json: { violations } }];"
+      },
+      "name": "Detect Violations",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Format detected violations as a log entry with timestamp\n*/\nconst violations = items[0].json.violations;\n\nif (violations.length === 0) {\n  return [];\n}\n\nconst timestamp = new Date().toISOString();\n\nconst incidentLog = violations.map(v => ({\n  timestamp,\n  toolName: v.toolName,\n  issue: v.issue\n}));\n\nreturn incidentLog.map(log => ({ json: log }));"
+      },
+      "name": "Format Incident Logs",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "resource": "sheetRow",
+        "spreadsheetId": "YOUR_SPREADSHEET_ID",
+        "sheetName": "AI Compliance Incidents",
+        "options": {},
+        "fields": "timestamp,toolName,issue"
+      },
+      "name": "Log Incidents to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        250
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": "Google Sheets OAuth2"
+      }
+    },
+    {
+      "parameters": {
+        "recipientEmail": "=getWorkflowStaticData('global').complianceOfficerEmail",
+        "subject": "ALERT: Ethical AI Usage Violation Detected",
+        "text": "Dear Compliance Officer,\n\nThe system has detected potential ethical AI guideline violations in the organization's AI tool usage:\n\n{{$json.issue}} in {{$json.toolName}} at {{$json.timestamp}}.\n\nPlease review these incidents and take necessary corrective actions.\n\nBest regards,\nEthical AI Compliance Monitor"
+      },
+      "name": "Send Alert Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        350
+      ],
+      "credentials": {
+        "smtp": "SMTP Credentials"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Prepare alert emails for all violations\n*/\nconst incident = items[0].json;\n\nreturn [{\n  json: {\n    recipientEmail: getWorkflowStaticData('global').complianceOfficerEmail || 'compliance@organization.com',\n    subject: `ALERT: Ethical AI Usage Violation Detected in ${incident.toolName}`,\n    issue: incident.issue,\n    timestamp: incident.timestamp,\n    toolName: incident.toolName\n  }\n}];"
+      },
+      "name": "Prepare Alert Messages",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        350
+      ]
+    }
+  ],
+  "connections": {
+    "Fetch AI Usage Metrics": {
+      "main": [
+        [
+          {
+            "node": "Detect Violations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect Violations": {
+      "main": [
+        [
+          {
+            "node": "Format Incident Logs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Incident Logs": {
+      "main": [
+        [
+          {
+            "node": "Log Incidents to Google Sheets",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Alert Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Alert Messages": {
+      "main": [
+        [
+          {
+            "node": "Send Alert Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "id": "1"
+}
