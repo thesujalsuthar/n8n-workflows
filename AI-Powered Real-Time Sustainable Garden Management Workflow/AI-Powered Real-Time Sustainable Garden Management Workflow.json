@@ -1,0 +1,306 @@
+{
+  "name": "AI-Driven Smart Sustainable Gardening Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "sensor-data",
+        "responseMode": "onReceived",
+        "responseData": "allEntries"
+      },
+      "name": "Receive Sensor Data",
+      "type": "n8n-nodes-base.httpTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const sensorData = items[0].json;\nreturn [{ json: {\n  soilMoisture: sensorData.soilMoisture,\n  temperature: sensorData.temperature,\n  lightLevel: sensorData.lightLevel\n}}];"
+      },
+      "name": "Parse Sensor Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "none",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $credentials.openAI.apiKey }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "model",
+              "value": "gpt-4"
+            },
+            {
+              "name": "messages",
+              "value": "[\n  {\"role\": \"system\", \"content\": \"You are an expert horticulturist AI specializing in sustainable gardening. Provide personalized plant care recommendations based on sensor data.\"},\n  {\"role\": \"user\", \"content\": \"Soil Moisture: {{ $json.soilMoisture }}\\nTemperature: {{ $json.temperature }}\\nLight Level: {{ $json.lightLevel }}\\nProvide recommendations for watering, fertilizing, and any warnings about plant health or environment.\"}\n]"
+            },
+            {
+              "name": "max_tokens",
+              "value": 300
+            },
+            {
+              "name": "temperature",
+              "value": 0.7
+            }
+          ]
+        }
+      },
+      "name": "AI Plant Care Recommendations",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        700,
+        300
+      ],
+      "credentials": {
+        "openAIApi": {
+          "id": "1",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const aiResponse = items[0].json.choices[0].message.content;\n\n// Extract tasks from AI recommendations\nconst watering = aiResponse.match(/water(ing)?\\s*:?\\s*([^\\n\\.]*)/i);\nconst fertilizing = aiResponse.match(/fertiliz(ing)?\\s*:?\\s*([^\\n\\.]*)/i);\nconst alerts = aiResponse.match(/warn(ing|ings)?|alert(s)?|issue(s)?\\s*:?\\s*([^\\n\\.]*)/gi);\n\nreturn [{ json: {\n  aiResponse,\n  watering: watering ? watering[2].trim() : null,\n  fertilizing: fertilizing ? fertilizing[2].trim() : null,\n  alerts: alerts ? alerts.map(a => a.trim()).join('; ') : null\n}}];"
+      },
+      "name": "Extract Tasks from AI Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const wateringInstruction = items[0].json.watering;\n\n// If watering task exists and is not 'no watering needed', schedule watering\nif (wateringInstruction && wateringInstruction.toLowerCase() !== 'no watering needed') {\n  return [{ json: {\n    task: 'water plants',\n    instruction: wateringInstruction\n  }}];\n}\n\nreturn [];"
+      },
+      "name": "Schedule Watering Task",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const fertilizingInstruction = items[0].json.fertilizing;\n\n// If fertilizing task exists and is not 'no fertilizing needed', schedule fertilizing\nif (fertilizingInstruction && fertilizingInstruction.toLowerCase() !== 'no fertilizing needed') {\n  return [{ json: {\n    task: 'fertilize plants',\n    instruction: fertilizingInstruction\n  }}];\n}\n\nreturn [];"
+      },
+      "name": "Schedule Fertilizing Task",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const alerts = items[0].json.alerts;\n\nif (alerts) {\n  return [{ json: { alertMessage: `Plant Health/Environmental Alert: ${alerts}` } }];\n}\n\nreturn [];"
+      },
+      "name": "Prepare Alerts",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        550
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "gardening-system@yourdomain.com",
+        "toEmail": "user@example.com",
+        "subject": "Plant Health or Environment Alert",
+        "text": "={{$json[\"alertMessage\"]}}",
+        "html": "=<p>{{$json[\"alertMessage\"]}}</p>"
+      },
+      "name": "Send Alert Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        550
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "1",
+          "name": "SMTP Email"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "path": "/garden-tasks/schedule-water",
+        "method": "POST",
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "task",
+              "value": "water plants"
+            },
+            {
+              "name": "instruction",
+              "value": "={{$json.instruction}}"
+            },
+            {
+              "name": "schedule",
+              "value": "daily"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Create Watering Schedule",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "path": "/garden-tasks/schedule-fertilize",
+        "method": "POST",
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "task",
+              "value": "fertilize plants"
+            },
+            {
+              "name": "instruction",
+              "value": "={{$json.instruction}}"
+            },
+            {
+              "name": "schedule",
+              "value": "weekly"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Create Fertilizing Schedule",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Receive Sensor Data": {
+      "main": [
+        [
+          {
+            "node": "Parse Sensor Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Sensor Data": {
+      "main": [
+        [
+          {
+            "node": "AI Plant Care Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Plant Care Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Extract Tasks from AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Tasks from AI Response": {
+      "main": [
+        [
+          {
+            "node": "Schedule Watering Task",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Schedule Fertilizing Task",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Watering Task": {
+      "main": [
+        [
+          {
+            "node": "Create Watering Schedule",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Fertilizing Task": {
+      "main": [
+        [
+          {
+            "node": "Create Fertilizing Schedule",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Alerts": {
+      "main": [
+        [
+          {
+            "node": "Send Alert Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "id": "ai-driven-smart-sustainable-gardening-workflow"
+}
