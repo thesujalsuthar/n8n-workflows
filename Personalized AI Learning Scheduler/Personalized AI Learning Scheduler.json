@@ -1,0 +1,163 @@
+{
+  "name": "Personalized AI-Powered Learning Scheduler",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "get-personalized-content",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "name": "Receive User Input",
+      "type": "n8n-nodes-base.httpTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "generic",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "responseFormat": "json",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={\n  \"model\": \"gpt-4\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are an AI learning assistant that creates personalized learning schedules and recommends learning content based on user preferences, time availability, and progress. Suggest adaptive and optimized learning paths.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": $json['userPreferences']\n    }\n  ],\n  \"temperature\": 0.7\n}"
+      },
+      "name": "Generate Personalized Content",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        550,
+        300
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "1",
+          "name": "OpenAI API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oauth2",
+        "operation": "createEvent",
+        "calendarId": "primary",
+        "options": {},
+        "event": {
+          "summary": "={{$json[\"summary\"]}}",
+          "description": "={{$json[\"description\"]}}",
+          "start": {
+            "dateTime": "={{$json[\"start\"]}}",
+            "timeZone": "={{$json[\"timeZone\"] || 'UTC'}}"
+          },
+          "end": {
+            "dateTime": "={{$json[\"end\"]}}",
+            "timeZone": "={{$json[\"timeZone\"] || 'UTC'}}"
+          }
+        }
+      },
+      "name": "Create Calendar Events",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "2",
+          "name": "Google Calendar API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "append",
+        "sheetId": "1A2B3C4D5E6F7G8H9I0J",        
+        "range": "Progress!A1:D1",
+        "options": {},
+        "data": [
+          {
+            "json": {
+              "Date": "={{$now.format('YYYY-MM-DD')}}",
+              "Task": "={{$json[\"summary\"]}}",
+              "Status": "Scheduled",
+              "Notes": "={{$json[\"description\"]}}"
+            }
+          }
+        ]
+      },
+      "name": "Track Progress in Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        300
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "3",
+          "name": "Google Sheets API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const content = items[0].json.choices[0].message.content;\n\n// Parse AI response assuming JSON output\ntry {\n  return [{ json: JSON.parse(content) }];\n} catch (error) {\n  throw new Error('AI response not valid JSON: ' + content);\n}"
+      },
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        700,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Receive User Input": {
+      "main": [
+        [
+          {
+            "node": "Generate Personalized Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Personalized Content": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Create Calendar Events",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Track Progress in Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  ],
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
