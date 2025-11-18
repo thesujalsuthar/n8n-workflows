@@ -1,0 +1,299 @@
+{
+  "name": "Unified Social Media Engagement Aggregator",
+  "nodes": [
+    {
+      "parameters": {
+        "interval": 15,
+        "unit": "minutes"
+      },
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "post",
+        "operation": "getMetrics",
+        "userId": "me",
+        "additionalFields": {
+          "fields": [
+            "likes.limit(0).summary(true)",
+            "shares",
+            "comments.limit(0).summary(true)",
+            "followers_count"
+          ]
+        }
+      },
+      "name": "Facebook Metrics",
+      "type": "n8n-nodes-base.facebookGraphApi",
+      "typeVersion": 1,
+      "position": [
+        600,
+        100
+      ],
+      "credentials": {
+        "facebookGraphApiOAuth2Api": "Facebook OAuth2"
+      }
+    },
+    {
+      "parameters": {
+        "resource": "user",
+        "operation": "getUserTweets",
+        "userId": "me",
+        "additionalFields": {
+          "tweet.fields": [
+            "public_metrics"
+          ],
+          "max_results": 100
+        }
+      },
+      "name": "Twitter Metrics",
+      "type": "n8n-nodes-base.twitter",
+      "typeVersion": 1,
+      "position": [
+        600,
+        250
+      ],
+      "credentials": {
+        "twitterApi": "Twitter OAuth1"
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "endpoint": "me?fields=followers_count,media_count,media{like_count,comments_count}"
+      },
+      "name": "Instagram Metrics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        600,
+        400
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "user": "",
+          "password": ""
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "organization",
+        "operation": "getStatistics",
+        "fields": [
+          "followersCount",
+          "likes",
+          "comments",
+          "shares"
+        ]
+      },
+      "name": "LinkedIn Metrics",
+      "type": "n8n-nodes-base.linkedin",
+      "typeVersion": 1,
+      "position": [
+        600,
+        550
+      ],
+      "credentials": {
+        "linkedInOAuth2Api": "LinkedIn OAuth2"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const facebookData = items[0].json;\nconst twitterData = items[1].json;\nconst instagramData = items[2].json;\nconst linkedinData = items[3].json;\n\nreturn [{\n  json: {\n    facebook: {\n      likes: facebookData.likes ? facebookData.likes.summary.total_count : 0,\n      shares: facebookData.shares ? facebookData.shares.count : 0,\n      comments: facebookData.comments ? facebookData.comments.summary.total_count : 0,\n      followers: facebookData.followers_count || 0\n    },\n    twitter: {\n      likes: twitterData.data ? twitterData.data.reduce((acc, tweet) => acc + (tweet.public_metrics.like_count || 0), 0) : 0,\n      retweets: twitterData.data ? twitterData.data.reduce((acc, tweet) => acc + (tweet.public_metrics.retweet_count || 0), 0) : 0,\n      replies: twitterData.data ? twitterData.data.reduce((acc, tweet) => acc + (tweet.public_metrics.reply_count || 0), 0) : 0,\n      followers: twitterData.meta ? twitterData.meta.result_count : 0\n    },\n    instagram: {\n      likes: instagramData.media ? instagramData.media.reduce((acc, media) => acc + (media.like_count || 0), 0) : 0,\n      comments: instagramData.media ? instagramData.media.reduce((acc, media) => acc + (media.comments_count || 0), 0) : 0,\n      followers: instagramData.followers_count || 0\n    },\n    linkedin: {\n      followers: linkedinData.followersCount || 0,\n      likes: linkedinData.likes || 0,\n      comments: linkedinData.comments || 0,\n      shares: linkedinData.shares || 0\n    }\n  }\n}];"
+      },
+      "name": "Aggregate Metrics",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "spreadsheet",
+        "operation": "append",
+        "sheetId": "your_google_sheet_id_here",
+        "range": "Sheet1!A1",
+        "valueInputMode": "USER_ENTERED",
+        "values": [
+          [
+            "={{$now}}",
+            "={{$json.facebook.likes}}",
+            "={{$json.facebook.shares}}",
+            "={{$json.facebook.comments}}",
+            "={{$json.facebook.followers}}",
+            "={{$json.twitter.likes}}",
+            "={{$json.twitter.retweets}}",
+            "={{$json.twitter.replies}}",
+            "={{$json.twitter.followers}}",
+            "={{$json.instagram.likes}}",
+            "={{$json.instagram.comments}}",
+            "={{$json.instagram.followers}}",
+            "={{$json.linkedin.likes}}",
+            "={{$json.linkedin.comments}}",
+            "={{$json.linkedin.shares}}",
+            "={{$json.linkedin.followers}}"
+          ]
+        ]
+      },
+      "name": "Append To Google Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        350
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": "Google Sheets OAuth2"
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json.facebook.likes + $json.twitter.likes + $json.instagram.likes + $json.linkedin.likes}}",
+              "operation": "greaterThan",
+              "value2": 1000
+            }
+          ]
+        }
+      },
+      "name": "Check Milestone Likes",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "message": "Social media likes milestone reached! Total likes: {{$json.facebook.likes + $json.twitter.likes + $json.instagram.likes + $json.linkedin.likes}}."
+      },
+      "name": "Send Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1700,
+        250
+      ],
+      "credentials": {
+        "slackApi": "Slack API"
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Facebook Metrics",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Twitter Metrics",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Instagram Metrics",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "LinkedIn Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Facebook Metrics": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Twitter Metrics": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Metrics",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Instagram Metrics": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Metrics",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "LinkedIn Metrics": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Metrics",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Aggregate Metrics": {
+      "main": [
+        [
+          {
+            "node": "Append To Google Sheet",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Check Milestone Likes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Milestone Likes": {
+      "main": [
+        [
+          {
+            "node": "Send Notification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
