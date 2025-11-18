@@ -1,0 +1,385 @@
+{
+  "name": "AI-Driven Real-Time Urban Air Quality Alert and Health Advisory System",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.openaq.org/v2/latest",
+        "responseFormat": "json",
+        "options": {},
+        "queryParametersUi": {
+          "parameter": []
+        }
+      },
+      "name": "Fetch OpenAQ Data",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        150,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.weather.com/v3/airQuality/currentConditions",
+        "responseFormat": "json",
+        "options": {},
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "apiKey",
+              "value": "YOUR_WEATHER_API_KEY"
+            },
+            {
+              "name": "geocode",
+              "value": "={{$json[\"location\"][\"latitude\"] + ',' + $json[\"location\"][\"longitude\"]}}"
+            },
+            {
+              "name": "format",
+              "value": "json"
+            }
+          ]
+        }
+      },
+      "name": "Fetch Weather.com Air Quality Data",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        150,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const openAQ = $items(\"Fetch OpenAQ Data\")[0].json;\nconst weatherData = $items(\"Fetch Weather.com Air Quality Data\")[0].json;\n\n// Example: Merge and normalize data from both sources\n// Assume OpenAQ returns an array of measurements\n\nconst combinedData = {\n  pm25: null,\n  pm10: null,\n  o3: null,\n  no2: null,\n  so2: null,\n  co: null\n};\n\nif (openAQ && openAQ.results && openAQ.results.length > 0) {\n  openAQ.results[0].measurements.forEach(m => {\n    combinedData[m.parameter.toLowerCase()] = m.value;\n  });\n}\n\nif (weatherData && weatherData.airQuality) {\n  if (!combinedData.pm25 && weatherData.airQuality.pm25) combinedData.pm25 = weatherData.airQuality.pm25;\n  if (!combinedData.pm10 && weatherData.airQuality.pm10) combinedData.pm10 = weatherData.airQuality.pm10;\n  if (!combinedData.o3 && weatherData.airQuality.o3) combinedData.o3 = weatherData.airQuality.o3;\n  if (!combinedData.no2 && weatherData.airQuality.no2) combinedData.no2 = weatherData.airQuality.no2;\n  if (!combinedData.so2 && weatherData.airQuality.so2) combinedData.so2 = weatherData.airQuality.so2;\n  if (!combinedData.co && weatherData.airQuality.co) combinedData.co = weatherData.airQuality.co;\n}\n\nreturn [{\n  json: {\n    combinedAirQualityData: combinedData,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "name": "Normalize and Merge AQ Data",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        400,
+        300
+      ],
+      "notesInFlow": true,
+      "notes": "Combine data from multiple sources into unified structure"
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Send combinedAirQualityData and user profile/location data to AI API to assess health risks.\n  Assume AI API expects POST with JSON body containing pollution data and user health profile.\n  AI returns health risk level and personalized advice.\n*/\n\nconst aiApiKey = $credentials.AI_API.apiKey;\n\nconst combinedData = $json.combinedAirQualityData;\nconst userProfiles = [\n  {\n    id: \"user1\",\n    name: \"Alice\",\n    location: { latitude: 40.7128, longitude: -74.006 },\n    healthConditions: [\"asthma\"]\n  },\n  {\n    id: \"user2\",\n    name: \"Bob\",\n    location: { latitude: 40.73061, longitude: -73.935242 },\n    healthConditions: []\n  }\n];\n\n// For demo, map all users with same combined data (in practice, vary by location)\n\nreturn userProfiles.map(user => {\n  return {\n    json: {\n      userId: user.id,\n      userName: user.name,\n      userLocation: user.location,\n      healthConditions: user.healthConditions,\n      pollutionData: combinedData\n    }\n  };\n});"
+      },
+      "name": "Prepare AI Input per User",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.youraihealthservice.com/analyze",
+        "options": {},
+        "headers": {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer {{$credentials.AI_API.apiKey}}"
+        },
+        "bodyContentType": "json",
+        "bodyParametersJson": "={\n  \"pollutionData\": $json.pollutionData,\n  \"healthConditions\": $json.healthConditions\n}"
+      },
+      "name": "AI Health Risk Assessment",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nPrepare personalized alert message based on AI response\nExpected AI response fields: riskLevel, recommendations\n*/\n\nconst aiResponse = $json;\nconst userName = $node[\"Prepare AI Input per User\"].json.userName;\nconst riskLevel = aiResponse.riskLevel || \"Unknown\";\nconst recommendations = aiResponse.recommendations || [];\n\nconst message = `Hello ${userName},\\n\\nAir quality health risk level: ${riskLevel}.\\n` +\n  `Recommendations:\\n- ${recommendations.join('\\n- ')}\\n\\nStay safe!`;\n\nreturn [{ json: { message, userId: $node[\"Prepare AI Input per User\"].json.userId } }];"
+      },
+      "name": "Format Personalized Alert",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "alerts@urbanhealth.com",
+        "toEmail": "={{$json.userId}}@example.com",
+        "subject": "Real-Time Air Quality Health Alert",
+        "text": "={{$json.message}}"
+      },
+      "name": "Send Email Alert",
+      "type": "emailSend",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "to": "={{'+' + $json.userPhone}}",
+        "message": "={{$json.message}}"
+      },
+      "name": "Send SMS Alert",
+      "type": "twilio",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insertOne",
+        "collection": "air_quality_logs",
+        "database": "urban_health_db",
+        "data": "={\n  airQualityData: $items(\"Normalize and Merge AQ Data\")[0].json.combinedAirQualityData,\n  timestamp: new Date().toISOString()\n}"
+      },
+      "name": "Log Air Quality Data",
+      "type": "mongodb",
+      "typeVersion": 1,
+      "position": [
+        400,
+        500
+      ],
+      "credentials": {
+        "mongodb": {
+          "user": "MONGO_USERNAME",
+          "password": "MONGO_PASSWORD",
+          "database": "urban_health_db",
+          "connectionString": "mongodb+srv://cluster0.mongodb.net"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insertOne",
+        "collection": "user_alert_logs",
+        "database": "urban_health_db",
+        "data": "={\n  userId: $json.userId,\n  alertMessage: $json.message,\n  timestamp: new Date().toISOString()\n}"
+      },
+      "name": "Log User Alerts",
+      "type": "mongodb",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        300
+      ],
+      "credentials": {
+        "mongodb": {
+          "user": "MONGO_USERNAME",
+          "password": "MONGO_PASSWORD",
+          "database": "urban_health_db",
+          "connectionString": "mongodb+srv://cluster0.mongodb.net"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Generate periodic health impact report based on historic logged data.\n  This node expects historic data from MongoDB.\n*/\n\nconst logs = $items(\"Get Historical Data\").map(item => item.json);\n\n// Simple aggregation: average PM2.5 over period\n\nlet sumPm25 = 0;\nlet count = 0;\n\nlogs.forEach(log => {\n  if (log.airQualityData && log.airQualityData.pm25) {\n    sumPm25 += log.airQualityData.pm25;\n    count++;\n  }\n});\n\nconst avgPm25 = count > 0 ? sumPm25 / count : null;\n\nconst report = `Community Health Impact Report:\\nPeriod: Last 30 days\\nAverage PM2.5 Levels: ${avgPm25 ? avgPm25.toFixed(2) : 'No data'} µg/m³\\nRecommendations: Reduce outdoor activities on high pollution days, increase green spaces.`;\n\nreturn [{ json: { report, generatedAt: new Date().toISOString() } }];"
+      },
+      "name": "Generate Periodic Health Report",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        400,
+        750
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "find",
+        "collection": "air_quality_logs",
+        "database": "urban_health_db",
+        "query": "{\"timestamp\": {\"$gte\": \"=new Date(new Date().setDate(new Date().getDate() - 30)).toISOString()\"}}",
+        "options": {}
+      },
+      "name": "Get Historical Data",
+      "type": "mongodb",
+      "typeVersion": 1,
+      "position": [
+        150,
+        750
+      ],
+      "credentials": {
+        "mongodb": {
+          "user": "MONGO_USERNAME",
+          "password": "MONGO_PASSWORD",
+          "database": "urban_health_db",
+          "connectionString": "mongodb+srv://cluster0.mongodb.net"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "reports@urbanhealth.com",
+        "toEmail": "community@urbanhealth.com",
+        "subject": "Monthly Community Health Impact Report",
+        "text": "={{$json.report}}"
+      },
+      "name": "Send Community Report Email",
+      "type": "emailSend",
+      "typeVersion": 1,
+      "position": [
+        700,
+        750
+      ]
+    }
+  ],
+  "connections": {
+    "Fetch OpenAQ Data": {
+      "main": [
+        [
+          {
+            "node": "Normalize and Merge AQ Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Weather.com Air Quality Data": {
+      "main": [
+        [
+          {
+            "node": "Normalize and Merge AQ Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Normalize and Merge AQ Data": {
+      "main": [
+        [
+          {
+            "node": "Log Air Quality Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare AI Input per User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Air Quality Data": {
+      "main": [
+        []
+      ]
+    },
+    "Prepare AI Input per User": {
+      "main": [
+        [
+          {
+            "node": "AI Health Risk Assessment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Health Risk Assessment": {
+      "main": [
+        [
+          {
+            "node": "Format Personalized Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Personalized Alert": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send SMS Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log User Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email Alert": {
+      "main": [
+        []
+      ]
+    },
+    "Send SMS Alert": {
+      "main": [
+        []
+      ]
+    },
+    "Log User Alerts": {
+      "main": [
+        []
+      ]
+    },
+    "Get Historical Data": {
+      "main": [
+        [
+          {
+            "node": "Generate Periodic Health Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Periodic Health Report": {
+      "main": [
+        [
+          {
+            "node": "Send Community Report Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Community Report Email": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "credentials": {
+    "AI_API": {
+      "id": "1",
+      "name": "AI Health Service API Key"
+    },
+    "mongodb": {
+      "id": "2",
+      "name": "MongoDB Urban Health DB"
+    },
+    "twilio": {
+      "id": "3",
+      "name": "Twilio SMS"
+    },
+    "emailSend": {
+      "id": "4",
+      "name": "Email Service"
+    }
+  }
+}
