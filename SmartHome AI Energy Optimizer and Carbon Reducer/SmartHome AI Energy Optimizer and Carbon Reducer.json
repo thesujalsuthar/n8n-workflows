@@ -1,0 +1,166 @@
+{
+  "name": "SmartHome AI Energy Optimizer and Carbon Reducer",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.smarthomeenergy.com/v1/energy-usage/realtime",
+        "responseFormat": "json",
+        "jsonParameters": true
+      },
+      "name": "Fetch Real-Time Energy Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "1",
+          "name": "SmartHomeAPI Credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const forecastHorizonHours = 24;\n// Extract historical hourly usage from current data or API\nconst historicalUsage = items[0].json.historicalUsage;\n\n// Simple forecast: moving average of last 24 hours\nfunction movingAverage(data, window) {\n  let result = [];\n  for (let i = 0; i < data.length - window + 1; i++) {\n    const windowSlice = data.slice(i, i + window);\n    const avg = windowSlice.reduce((a, b) => a + b, 0) / window;\n    result.push(avg);\n  }\n  return result;\n}\n\nconst recentUsage = historicalUsage.slice(-forecastHorizonHours);\n\nconst forecastedUsage = [];\nconst avgUsage = recentUsage.reduce((a, b) => a + b, 0) / recentUsage.length;\n\nfor (let i = 0; i < forecastHorizonHours; i++) {\n  // For simplicity, forecast constant average usage\n  forecastedUsage.push(avgUsage);\n}\n\nreturn [{ json: { forecastedUsage, avgUsage } }];"
+      },
+      "name": "Forecast Energy Consumption",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ],
+      "notesInFlow": true,
+      "notes": "Simple forecast based on recent average usage"
+    },
+    {
+      "parameters": {
+        "functionCode": "const forecast = items[0].json.forecastedUsage;\nconst avgUsage = items[0].json.avgUsage;\n\nlet recommendations = [];\n\n// Simple energy cost bands and carbon factors\nconst peakHours = [17,18,19,20,21];\nconst carbonFactorKgPerKwh = 0.45; // average carbon emitted per kWh\n\n// Check if usage during peak hours is high\nconst currentHour = new Date().getHours();\nconst currentUsage = items[1].json.energyNow || avgUsage;\n\nif (peakHours.includes(currentHour) && currentUsage > avgUsage * 1.1) {\n  recommendations.push(\"Consider shifting heavy appliance use to off-peak hours to reduce costs and carbon footprint.\");\n}\n\n// General tips\nrecommendations.push(\"Turn off unused devices to save energy.\");\n\n// Carbon reduction calculation\nconst expectedDailyUsage = forecast.reduce((a,b) => a + b, 0);\nconst expectedCarbon = expectedDailyUsage * carbonFactorKgPerKwh;\n\nreturn [{ json: { recommendations, expectedDailyUsage, expectedCarbon } }];"
+      },
+      "name": "Analyze and Create Recommendations",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.smarthomeenergy.com/v1/energy-usage/current",
+        "responseFormat": "json",
+        "jsonParameters": true
+      },
+      "name": "Fetch Current Energy Usage",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        150
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "1",
+          "name": "SmartHomeAPI Credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "sendMessage",
+        "operation": "send",
+        "chatId": "123456789",
+        "text": "Energy Usage Forecast: {{ $json.expectedDailyUsage.toFixed(2) }} kWh\nEstimated Carbon Footprint: {{ $json.expectedCarbon.toFixed(2) }} kg CO2\n\nRecommendations:\n- {{ $json.recommendations.join('\\n- ') }}"
+      },
+      "name": "Send Alert via Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "2",
+          "name": "Telegram API"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [
+        100,
+        225
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Fetch Current Energy Usage",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Real-Time Energy Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Current Energy Usage": {
+      "main": [
+        [
+          {
+            "node": "Analyze and Create Recommendations",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch Real-Time Energy Data": {
+      "main": [
+        [
+          {
+            "node": "Forecast Energy Consumption",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Forecast Energy Consumption": {
+      "main": [
+        [
+          {
+            "node": "Analyze and Create Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze and Create Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Send Alert via Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
