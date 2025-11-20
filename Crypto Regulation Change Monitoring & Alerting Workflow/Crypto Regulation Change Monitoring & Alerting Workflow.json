@@ -1,0 +1,215 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://regulatory-api.example.com/v1/crypto-regulations/changes",
+        "options": {},
+        "responseFormat": "json",
+        "jsonParameters": true
+      },
+      "name": "Fetch Regulatory Updates",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "1"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const previousData = $item(0).$node[\"Set Previous Data\"].json.regulations || [];\nconst currentData = $json.regulations || [];\n\n// Identify new or updated regulations\nconst changes = [];\n\nconst previousMap = new Map();\npreviousData.forEach(r => previousMap.set(r.id, r));\n\ncurrentData.forEach(reg => {\n  const prev = previousMap.get(reg.id);\n  if (!prev) {\n    changes.push({...reg, changeType: 'New Regulation'});\n  } else if (JSON.stringify(prev) !== JSON.stringify(reg)) {\n    changes.push({...reg, changeType: 'Updated Regulation'});\n  }\n});\n\nreturn changes.length ? changes : [{}];"
+      },
+      "name": "Detect Changes",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "keepKeyMatches",
+        "keys": [
+          "changeType"
+        ]
+      },
+      "name": "Filter Changes",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "queueName": "compliance-alerts",
+        "message": "={{JSON.stringify($json)}}",
+        "connection": "default"
+      },
+      "name": "Send Alerts to Queue",
+      "type": "n8n-nodes-base.rabbitMq",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ],
+      "credentials": {
+        "rabbitMq": {
+          "id": "2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "filePath": "data/previousRegulations.json",
+        "options": {
+          "createIfNotExists": true
+        }
+      },
+      "name": "Set Previous Data",
+      "type": "n8n-nodes-base.readFile",
+      "typeVersion": 1,
+      "position": [
+        50,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "filePath": "data/previousRegulations.json",
+        "dataPropertyName": "regulations"
+      },
+      "name": "Save Current Data",
+      "type": "n8n-nodes-base.writeFile",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "service": "gmail",
+        "resource": "message",
+        "operation": "send",
+        "toEmail": "compliance-team@example.com",
+        "subject": "Crypto Regulation Change Alert: {{$json.changeType}}",
+        "text": "Regulation Change Details:\nID: {{$json.id}}\nRegion: {{$json.region}}\nDescription: {{$json.description}}\nEffective Date: {{$json.effectiveDate}}\n\nPlease review and take necessary actions.",
+        "additionalFields": {}
+      },
+      "name": "Send Email Alert",
+      "type": "n8n-nodes-base.googleGmail",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        150
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "3"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Set Previous Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Previous Data": {
+      "main": [
+        [
+          {
+            "node": "Fetch Regulatory Updates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Regulatory Updates": {
+      "main": [
+        [
+          {
+            "node": "Detect Changes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect Changes": {
+      "main": [
+        [
+          {
+            "node": "Filter Changes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Changes": {
+      "main": [
+        [
+          {
+            "node": "Send Alerts to Queue",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Alerts to Queue": {
+      "main": [
+        [
+          {
+            "node": "Save Current Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email Alert": {
+      "main": [
+        []
+      ]
+    },
+    "Save Current Data": {
+      "main": [
+        []
+      ]
+    }
+  }
+}
