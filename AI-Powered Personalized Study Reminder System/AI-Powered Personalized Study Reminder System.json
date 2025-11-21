@@ -1,0 +1,209 @@
+{
+  "name": "AI-Powered Personalized Study Companion",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 7,
+              "minute": 0
+            },
+            {
+              "hour": 18,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Scheduled Trigger - Daily Reminders",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const now = new Date();\n\n// Simulate fetch user data (learning style, performance, preferences)\n// In production, this could be a DB call or API fetch\nreturn [{\n  json: {\n    userId: \"user_12345\",\n    learningStyle: \"visual\",\n    performanceMetrics: {\n      lastTestScore: 82,\n      averageStudyTime: 90,\n      weakTopics: [\"calculus\", \"organic chemistry\"]\n    },\n    studyPreferences: {\n      preferredStudyTimes: [\"morning\", \"evening\"],\n      subjects: [\"math\", \"chemistry\", \"history\"]\n    },\n    lastStudySession: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString()\n  }\n}];"
+      },
+      "name": "Fetch User Profile & Performance",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const {learningStyle, performanceMetrics, studyPreferences} = items[0].json;\n\n// Generate dynamic content suggestions adapting to weak topics & learning style\nconst contentSuggestions = [];\n\n// Example content pool\nconst contentPool = {\n  calculus: {\n    visual: [\"Graphical explanations of derivatives\", \"Video: Calculus in real life\"],\n    auditory: [\"Podcast: Calculus concepts\", \"Audio summaries of derivatives\"],\n    kinesthetic: [\"Hands-on derivative experiments\", \"Interactive calculus quizzes\"]\n  },\n  \"organic chemistry\": {\n    visual: [\"3D Models of Molecules\", \"Reaction mechanism videos\"],\n    auditory: [\"Lecture recordings\", \"Discussion podcasts\"],\n    kinesthetic: [\"Lab simulations\", \"Practice reaction balancing\"]\n  },\n  math: {\n    visual: [\"Infographics for formulas\", \"Problem-solving videos\"],\n    auditory: [\"Math theory podcasts\", \"Concept explanations\"],\n    kinesthetic: [\"Interactive problem sets\", \"Math puzzles\"]\n  },\n  chemistry: {\n    visual: [\"Structure diagrams\", \"Visual chemical reactions\"],\n    auditory: [\"Chemistry podcasts\", \"Lecture audio\"],\n    kinesthetic: [\"Virtual lab activities\", \"Experiment simulations\"]\n  },\n  history: {\n    visual: [\"Timeline infographics\", \"Documentary videos\"],\n    auditory: [\"History podcasts\", \"Storytelling audios\"],\n    kinesthetic: [\"Roleplay scenarios\", \"Interactive quizzes\"]\n  }\n};\n\nfor (const topic of performanceMetrics.weakTopics) {\n  if (contentPool[topic] && contentPool[topic][learningStyle]) {\n    contentPool[topic][learningStyle].forEach(content => {\n      contentSuggestions.push({topic, content});\n    });\n  }\n}\n\n// Filter to preferred subjects\nconst filteredSuggestions = contentSuggestions.filter(s => studyPreferences.subjects.includes(s.topic));\n\nreturn [{\n  json: {\n    contentSuggestions: filteredSuggestions,\n    studyPreferences,\n    performanceMetrics\n  }\n}];"
+      },
+      "name": "Generate Content Suggestions",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const {performanceMetrics, studyPreferences} = items[0].json;\n\nconst motivationalFeedback = [];\n\n// Motivation logic tailored to recent performance\nif (performanceMetrics.lastTestScore >= 90) {\n  motivationalFeedback.push(\"Excellent work! You're acing your tests. Keep up the great effort!\");\n} else if (performanceMetrics.lastTestScore >= 75) {\n  motivationalFeedback.push(\"Good progress! Aim to review weak topics to boost your scores.\");\n} else {\n  motivationalFeedback.push(\"Don't worry about the last test. Focus on practice and don't hesitate to ask for help.\");\n}\n\n// Add encouragement for study time habits\nif (performanceMetrics.averageStudyTime < 60) {\n  motivationalFeedback.push(\"Try to increase your daily study time to at least an hour for better retention.\");\n} else {\n  motivationalFeedback.push(\"Great job maintaining consistent study sessions!\");\n}\n\nreturn [{\n  json: {\n    motivationalFeedback\n  }\n}];"
+      },
+      "name": "Generate Motivational Feedback",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        700,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const {contentSuggestions, studyPreferences} = items[0].json;\n\n// Compose a personalized reminder message including dynamic content suggestions\nconst preferredTimes = studyPreferences.preferredStudyTimes.join(' and ');\n\nlet message = `Hi! It's your scheduled study reminder. Based on your learning profile, here are some recommended content to explore today:\\n\\n`;\n\ncontentSuggestions.slice(0, 5).forEach((item, index) => {\n  message += `${index + 1}. [${item.topic.toUpperCase()}] - ${item.content}\\n`;\n});\n\nmessage += `\\nTry to study during your preferred times: ${preferredTimes}. Keep up the great work!`;\n\nreturn [{json: { reminderMessage: message }}];"
+      },
+      "name": "Compose Study Reminder",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "studybuddy@n8n.ai",
+        "toEmail": "={{$json[\"userId\"] + \"@example.com\"}}",
+        "subject": "Your Personalized Study Reminder & Recommendations",
+        "text": "={{$json[\"reminderMessage\"]}}"
+      },
+      "name": "Send Email Reminder",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const {contentSuggestions, motivationalFeedback} = items[0].json;\n\nreturn [{\n  json: {\n    feedbackSummary: motivationalFeedback.join(' '),\n    topSuggestions: contentSuggestions.slice(0, 3)\n  }\n}];"
+      },
+      "name": "Prepare Summary for Dashboard",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "database",
+        "operation": "upsert",
+        "collection": "userStudyData",
+        "data": "={{ {\n  userId: items[0].json.userId,\n  lastStudySession: new Date().toISOString(),\n  contentSuggestions: items[0].json.contentSuggestions,\n  motivationalFeedback: items[1].json.motivationalFeedback\n} }}",
+        "options": {}
+      },
+      "name": "Update User Study Data in DB",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "Scheduled Trigger - Daily Reminders": {
+      "main": [
+        [
+          {
+            "node": "Fetch User Profile & Performance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch User Profile & Performance": {
+      "main": [
+        [
+          {
+            "node": "Generate Content Suggestions",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate Motivational Feedback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Content Suggestions": {
+      "main": [
+        [
+          {
+            "node": "Compose Study Reminder",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Update User Study Data in DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Motivational Feedback": {
+      "main": [
+        [
+          {
+            "node": "Prepare Summary for Dashboard",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Update User Study Data in DB",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Compose Study Reminder": {
+      "main": [
+        [
+          {
+            "node": "Send Email Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Summary for Dashboard": {
+      "main": [
+        []
+      ]
+    },
+    "Send Email Reminder": {
+      "main": [
+        []
+      ]
+    },
+    "Update User Study Data in DB": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
