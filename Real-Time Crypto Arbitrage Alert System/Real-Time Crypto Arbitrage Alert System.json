@@ -1,0 +1,221 @@
+{
+  "name": "Real-Time Cryptocurrency Price Arbitrage Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.binance.com/api/v3/ticker/price?symbol={{$json[\"symbol\"]}}",
+        "responseFormat": "json",
+        "jsonParameters": false,
+        "option": {}
+      },
+      "name": "Binance Price Fetch",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        150,
+        300
+      ],
+      "credentials": {}
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.pro.coinbase.com/products/{{ $json[\"symbolCoinbase\"] }}/ticker",
+        "responseFormat": "json",
+        "jsonParameters": false,
+        "option": {}
+      },
+      "name": "Coinbase Price Fetch",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        150,
+        450
+      ],
+      "credentials": {}
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.kraken.com/0/public/Ticker?pair={{$json[\"symbolKraken\"]}}",
+        "responseFormat": "json",
+        "jsonParameters": false,
+        "option": {}
+      },
+      "name": "Kraken Price Fetch",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        150,
+        600
+      ],
+      "credentials": {}
+    },
+    {
+      "parameters": {
+        "functionCode": "const fees = {\n  binance: 0.001,       // 0.1%\n  coinbase: 0.005,      // 0.5%\n  kraken: 0.0026        // 0.26%\n};\nconst transferTimes = {\n  binance: 10,  // minutes\n  coinbase: 15,\n  kraken: 20\n};\n\n// Extract prices\nconst binancePrice = parseFloat(items.find(i => i.name === 'Binance Price Fetch').json.price);\nconst coinbasePrice = parseFloat(items.find(i => i.name === 'Coinbase Price Fetch').json.price);\nconst krakenTicker = items.find(i => i.name === 'Kraken Price Fetch').json.result;\n// Kraken returns nested object with pair key\nconst krakenPriceValue = Object.values(krakenTicker)[0].c[0];\nconst krakenPrice = parseFloat(krakenPriceValue);\n\n// Prepare pairs for comparison\nconst prices = {\n  binance: binancePrice,\n  coinbase: coinbasePrice,\n  kraken: krakenPrice\n};\n\n// Compute arbitrage opportunities\nconst opportunities = [];\nconst exchanges = Object.keys(prices);\n\nfor (let i = 0; i < exchanges.length; i++) {\n  for (let j = 0; j < exchanges.length; j++) {\n    if (i === j) continue;\n    const buyEx = exchanges[i];\n    const sellEx = exchanges[j];\n    const buyPrice = prices[buyEx] * (1 + fees[buyEx]);\n    const sellPrice = prices[sellEx] * (1 - fees[sellEx]);\n    const profitRaw = sellPrice - buyPrice;\n\n    // Consider transfer time penalty (e.g., price uncertainty or cost)\n    const timePenalty = (transferTimes[buyEx] + transferTimes[sellEx]) * 0.0005; // arbitrary penalty factor\n    const profitAdj = profitRaw - timePenalty * buyPrice;\n\n    if (profitAdj > 0) {\n      opportunities.push({\n        buyFrom: buyEx,\n        sellTo: sellEx,\n        buyPrice: buyPrice.toFixed(6),\n        sellPrice: sellPrice.toFixed(6),\n        profitRaw: profitRaw.toFixed(6),\n        profitAdj: profitAdj.toFixed(6),\n        transferTimeMinutes: transferTimes[buyEx] + transferTimes[sellEx]\n      });\n    }\n  }\n}\n\nreturn [{ json: { opportunities } }];"
+      },
+      "name": "Arbitrage Analyzer",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json[\"opportunities\"].length }}",
+              "operation": "greaterThan",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "name": "Check Arbitrage Present",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        650,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{$credentials.telegramChatId}}",
+        "message": "={{\n  '🚨 Arbitrage Opportunity Detected!\\n' +\n  $json[\"opportunities\"].map(o =>\n    `Buy on ${o.buyFrom} at $${o.buyPrice}, sell on ${o.sellTo} at $${o.sellPrice}, profit margin: $${o.profitAdj} after fees and transfer (~${o.transferTimeMinutes} min)`\n  ).join('\\n\\n')\n}}"
+      },
+      "name": "Send Telegram Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        900,
+        350
+      ],
+      "credentials": {
+        "telegramApi": "Telegram API"
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{$credentials.smtpEmail}}",
+        "toEmail": "={{$json[\"alertEmail\"]}}",
+        "subject": "Arbitrage Opportunity Alert",
+        "text": "={{\n  '🚨 Arbitrage Opportunity Detected!\\n\\n' +\n  $json[\"opportunities\"].map(o =>\n    `Buy on ${o.buyFrom} at $${o.buyPrice}, sell on ${o.sellTo} at $${o.sellPrice}, profit margin: $${o.profitAdj} after fees and transfer (~${o.transferTimeMinutes} min)`\n  ).join('\\n\\n')\n}}"
+      },
+      "name": "Send Email Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        900,
+        550
+      ],
+      "credentials": {
+        "smtp": "SMTP Account"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: { symbol: 'BTCUSDT', symbolCoinbase: 'BTC-USD', symbolKraken: 'XBTUSD', alertEmail: 'user@example.com' } }];"
+      },
+      "name": "Set Crypto Symbols & Alert Config",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        10,
+        450
+      ]
+    }
+  ],
+  "connections": {
+    "Set Crypto Symbols & Alert Config": {
+      "main": [
+        [
+          {
+            "node": "Binance Price Fetch",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Coinbase Price Fetch",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Kraken Price Fetch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Binance Price Fetch": {
+      "main": [
+        [
+          {
+            "node": "Arbitrage Analyzer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Coinbase Price Fetch": {
+      "main": [
+        [
+          {
+            "node": "Arbitrage Analyzer",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Kraken Price Fetch": {
+      "main": [
+        [
+          {
+            "node": "Arbitrage Analyzer",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Arbitrage Analyzer": {
+      "main": [
+        [
+          {
+            "node": "Check Arbitrage Present",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Arbitrage Present": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
