@@ -1,0 +1,266 @@
+{
+  "name": "Adaptive AI-Powered Personalized Study Planner",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "user-input",
+        "options": {}
+      },
+      "name": "Receive User Input",
+      "type": "n8n-nodes-base.httpTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Extract and structure user data:\n  {\n    userId,\n    learningStyle,\n    currentProgress,\n    availableTimes\n  }\n*/\n\nconst body = items[0].json;\n\nreturn [\n  {\n    json: {\n      userId: body.userId || null,\n      learningStyle: body.learningStyle || \"visual\",\n      currentProgress: body.currentProgress || {},\n      availableTimes: body.availableTimes || []\n    }\n  }\n];"
+      },
+      "name": "Parse User Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "temperature": 0.7,
+        "topP": 1,
+        "frequencyPenalty": 0,
+        "presencePenalty": 0,
+        "maxTokens": 800,
+        "options": {},
+        "prompt": "You are an expert educational AI. Given a user's learning style, current progress in a subject, and available study times, provide a fully customized study plan broken down by day and time, with methods tailored to the learning style. Include adaptive tips for motivation and efficiency. Format the output as JSON with the following structure:\n{\n  \"dailyPlan\": [\n    {\n      \"day\": \"YYYY-MM-DD\",\n      \"sessions\": [\n        {\n          \"time\": \"HH:MM\",\n          \"subject\": \"string\",\n          \"method\": \"string\",\n          \"durationMinutes\": number\n        }\n      ]\n    }\n  ],\n  \"adaptiveTips\": [\"string\"]\n}\n\nUser data:\nLearning Style: {{$json[\"learningStyle\"]}}\nCurrent Progress: {{$json[\"currentProgress\"]}}\nAvailable Times: {{$json[\"availableTimes\"]}}"
+      },
+      "name": "Generate Study Plan with AI",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        670,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Parse the AI response from string to JSON\n*/\n\nconst aiResponse = items[0].json.choices[0].message.content;\n\nlet plan = {};\n\ntry {\n  plan = JSON.parse(aiResponse);\n} catch (error) {\n  throw new Error('Failed to parse AI response JSON: ' + error.message);\n}\n\nreturn [{ json: plan }];"
+      },
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "multiple",
+        "values": {
+          "string": [
+            {
+              "name": "subject",
+              "value": "={{$item().json.sessions[$index].subject}}"
+            },
+            {
+              "name": "time",
+              "value": "={{$item().json.sessions[$index].time}}"
+            },
+            {
+              "name": "durationMinutes",
+              "value": "={{$item().json.sessions[$index].durationMinutes}}"
+            },
+            {
+              "name": "method",
+              "value": "={{$item().json.sessions[$index].method}}"
+            },
+            {
+              "name": "day",
+              "value": "={{$item().json.day}}"
+            },
+            {
+              "name": "userId",
+              "value": "={{$json[\"userId\"]}}"
+            }
+          ]
+        }
+      },
+      "name": "Split Sessions for Reminders",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Convert day and time to ISO 8601 datetime for scheduling reminders\n*/\n\nconst day = items[0].json.day;\nconst time = items[0].json.time;\n\nconst dateTimeString = `${day}T${time}:00`;\n\nitems[0].json.reminderDateTime = dateTimeString;\n\nreturn items;"
+      },
+      "name": "Format Reminder DateTime",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "title": "Study Session Reminder: {{$json[\"subject\"]}}",
+        "text": "Hi! It's time for your scheduled study session on {{$json[\"subject\"]}} using the {{$json[\"method\"]}} method for {{$json[\"durationMinutes\"]}} minutes.",
+        "userIds": [
+          "={{$json[\"userId\"]}}"
+        ],
+        "dateTime": "={{$json[\"reminderDateTime\"]}}"
+      },
+      "name": "Schedule Reminder",
+      "type": "n8n-nodes-base.pushNotification",
+      "typeVersion": 1,
+      "position": [
+        1550,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: { message: \"All reminders scheduled successfully.\" } }];"
+      },
+      "name": "Confirm Scheduling",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const tips = items[0].json.adaptiveTips || [];\nconst formattedTips = tips.map((tip, index) => `${index + 1}. ${tip}`).join('\\n');\n\nreturn [{ json: { adaptiveTipsFormatted: formattedTips } }];"
+      },
+      "name": "Format Adaptive Tips",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "channel": "{{$json[\"userId\"]}}",
+        "text": "Here are some personalized adaptive tips for your study plan:\n{{$json[\"adaptiveTipsFormatted\"]}}"
+      },
+      "name": "Send Adaptive Tips",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "Receive User Input": {
+      "main": [
+        [
+          {
+            "node": "Parse User Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse User Data": {
+      "main": [
+        [
+          {
+            "node": "Generate Study Plan with AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Study Plan with AI": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Format Adaptive Tips",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Split Sessions for Reminders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Sessions for Reminders": {
+      "main": [
+        [
+          {
+            "node": "Format Reminder DateTime",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Reminder DateTime": {
+      "main": [
+        [
+          {
+            "node": "Schedule Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Reminder": {
+      "main": [
+        [
+          {
+            "node": "Confirm Scheduling",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Adaptive Tips": {
+      "main": [
+        [
+          {
+            "node": "Send Adaptive Tips",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
