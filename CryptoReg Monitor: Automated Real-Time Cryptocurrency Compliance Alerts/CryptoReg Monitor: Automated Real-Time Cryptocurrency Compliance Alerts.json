@@ -1,0 +1,278 @@
+{
+  "name": "Real-Time Cryptocurrency Regulatory Compliance Monitoring and Alert Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 0,
+              "minute": 0
+            },
+            {
+              "hour": 6,
+              "minute": 0
+            },
+            {
+              "hour": 12,
+              "minute": 0
+            },
+            {
+              "hour": 18,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "id": "1",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://cryptocurrency-news-api.example.com/v1/news",
+        "options": {
+          "queryParameters": [
+            {
+              "name": "category",
+              "value": "regulation"
+            },
+            {
+              "name": "languages",
+              "value": "en"
+            },
+            {
+              "name": "limit",
+              "value": "20"
+            }
+          ]
+        },
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$credentials.CryptocurrencyNewsApi.apiKey}}"
+            }
+          ]
+        },
+        "responseFormat": "json",
+        "jsonParameters": true
+      },
+      "id": "2",
+      "name": "Fetch Cryptocurrency News",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        500,
+        120
+      ],
+      "credentials": {
+        "CryptocurrencyNewsApi": {
+          "id": "cred-newsapikey-id",
+          "name": "CryptocurrencyNewsApi"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://government-regulations-api.example.com/v1/announcements",
+        "options": {
+          "queryParameters": [
+            {
+              "name": "topic",
+              "value": "cryptocurrency"
+            },
+            {
+              "name": "country",
+              "value": ""
+            },
+            {
+              "name": "limit",
+              "value": "20"
+            }
+          ]
+        },
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$credentials.GovernmentRegulationsApi.apiKey}}"
+            }
+          ]
+        },
+        "responseFormat": "json",
+        "jsonParameters": true
+      },
+      "id": "3",
+      "name": "Fetch Regulatory Announcements",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        500,
+        480
+      ],
+      "credentials": {
+        "GovernmentRegulationsApi": {
+          "id": "cred-govapikey-id",
+          "name": "GovernmentRegulationsApi"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "item",
+        "operation": "getPortfolio",
+        "portfolioId": "={{$json.portfolioId || $json.portfolio_id || $json.id || ''}}"
+      },
+      "name": "Fetch User Portfolio",
+      "type": "n8n-nodes-base.cryptoPortfolio",
+      "typeVersion": 1,
+      "position": [
+        500,
+        680
+      ],
+      "id": "4"
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Aggregate data from news, government announcements, and user portfolio\n  Analyze regulatory changes and assess their potential impact on the portfolio\n  Produce actionable compliance recommendations and alerts\n*/\n\nconst newsItems = $input.item.json.news || $input.item[0].json.data || [];\nconst regulatoryAnnouncements = $input.item[1].json.announcements || [];\nconst portfolio = $input.item[2].json || {};\n\nfunction extractImportantChanges(items) {\n  // Simple keyword filter and date relevance\n  return items.filter(item => {\n    const text = (item.title || '') + ' ' + (item.description || '') + ' ' + (item.content || '');\n    const keywords = ['ban', 'restriction', 'regulation', 'compliance', 'legal', 'tax'];\n    const lowerText = text.toLowerCase();\n    return keywords.some(keyword => lowerText.includes(keyword));\n  });\n}\n\nconst importantNews = extractImportantChanges(newsItems);\nconst importantAnnouncements = extractImportantChanges(regulatoryAnnouncements);\n\n// Impact analysis stub\nfunction assessImpact(portfolio, changes) {\n  if (!portfolio || !portfolio.holdings) {\n    return [];\n  }\n  const impacts = [];\n  changes.forEach(change => {\n    portfolio.holdings.forEach(holding => {\n      const symbol = holding.symbol.toLowerCase();\n      const changeText = (change.title + ' ' + (change.description || '')).toLowerCase();\n      if (changeText.includes(symbol)) {\n        impacts.push({\n          coin: holding.symbol,\n          changeTitle: change.title,\n          impact: 'Potential compliance risk or requirement',\n          recommendation: `Review regulations regarding ${holding.symbol} in detail and adjust portfolio or reporting if needed.`\n        });\n      }\n    });\n  });\n  return impacts;\n}\n\nconst impacts = assessImpact(portfolio, importantNews.concat(importantAnnouncements));\n\nreturn [\n  {\n    json: {\n      news: importantNews,\n      announcements: importantAnnouncements,\n      impacts\n    }\n  }\n];"
+      },
+      "id": "5",
+      "name": "Analyze Impact and Generate Recommendations",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "toEmail": "={{$credentials.AlertEmail.address}}",
+        "subject": "Crypto Regulatory Compliance Alert - {{$now.toLocaleDateString()}}",
+        "text": "The latest regulatory updates affecting your crypto portfolio have been detected.\n\n{{#each $json.impacts}}\nCoin: {{this.coin}}\nChange: {{this.changeTitle}}\nImpact: {{this.impact}}\nRecommendation: {{this.recommendation}}\n\n{{/each}}\n\nPlease review the details and adjust your portfolio accordingly.\n\nFor full updates, please check your n8n dashboard or contact compliance support.",
+        "html": "<h3>Crypto Regulatory Compliance Alert - {{$now.toLocaleDateString()}}</h3><p>The latest regulatory updates affecting your crypto portfolio have been detected.</p><ul>{{#each $json.impacts}}<li><strong>{{this.coin}}</strong>: {{this.changeTitle}}<br><em>Impact:</em> {{this.impact}}<br><em>Recommendation:</em> {{this.recommendation}}</li>{{/each}}</ul><p>Please review the details and adjust your portfolio accordingly.</p><p>For full updates, please check your n8n dashboard or contact compliance support.</p>",
+        "options": {}
+      },
+      "id": "6",
+      "name": "Send Compliance Alert Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        320
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "cred-smtp-id",
+          "name": "SMTP Credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{$credentials.MessagingPlatform.chatId}}",
+        "text": "Crypto Regulatory Compliance Alert - {{$now.toLocaleDateString()}}\n\nThe following impacts on your portfolio were found:\n\n{{#each $json.impacts}}- {{this.coin}}: {{this.changeTitle}}\n  Impact: {{this.impact}}\n  Recommendation: {{this.recommendation}}\n\n{{/each}}Please review promptly.",
+        "options": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "7",
+      "name": "Send Messaging Platform Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        480
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "cred-telegram-id",
+          "name": "Telegram API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Cryptocurrency News",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Regulatory Announcements",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch User Portfolio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Cryptocurrency News": {
+      "main": [
+        [
+          {
+            "node": "Analyze Impact and Generate Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Regulatory Announcements": {
+      "main": [
+        [
+          {
+            "node": "Analyze Impact and Generate Recommendations",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch User Portfolio": {
+      "main": [
+        [
+          {
+            "node": "Analyze Impact and Generate Recommendations",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Analyze Impact and Generate Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Send Compliance Alert Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Messaging Platform Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "workflow-crypto-regulatory-monitor"
+}
