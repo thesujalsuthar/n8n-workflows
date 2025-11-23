@@ -1,0 +1,239 @@
+{
+  "name": "AI-Powered Personalized Wildlife Conservation Assistant",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://public-wildlife-api.example.org/populations?region={{$json.region}}",
+        "responseFormat": "json",
+        "timeout": 30000
+      },
+      "name": "Fetch Wildlife Population Data",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        100,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.drone-surveillance.example.com/feeds?location={{$json.region}}",
+        "responseFormat": "json",
+        "timeout": 30000,
+        "options": {}
+      },
+      "name": "Fetch Drone Surveillance Feed",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const populations = items[0].json.data || [];\nconst droneData = items[1].json.data || [];\n\nreturn [{ json: { populations, droneData } }];"
+      },
+      "name": "Combine Wildlife & Drone Data",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        350,
+        225
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Prepare data input for AI habitat condition analysis model.\n  This step formats and filters relevant data.\n*/\nconst populations = items[0].json.populations;\nconst droneData = items[0].json.droneData;\n\nconst habitatInput = {\n  populations,\n  droneOverview: droneData.map(d => ({\n    timestamp: d.timestamp,\n    habitatImages: d.images,\n    detectedSpecies: d.speciesDetected\n  }))\n};\n\nreturn [{ json: { habitatInput } }];"
+      },
+      "name": "Prepare AI Model Input",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        600,
+        225
+      ]
+    },
+    {
+      "parameters": {
+        "model": "habitat-condition-analyzer-v1",
+        "task": "predict",
+        "input": "={{JSON.stringify($json.habitatInput)}}"
+      },
+      "name": "AI Habitat Condition Analysis",
+      "type": "openAi",
+      "typeVersion": 1,
+      "position": [
+        850,
+        225
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "resource": "userPreferences",
+        "operation": "getAll",
+        "filters": {
+          "filterType": "location_interest"
+        }
+      },
+      "name": "Fetch Registered Users",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        100,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Filter and personalize alerts based on user location and interests.\n  The AI output includes habitat risks and species data.\n*/\nconst users = items[0].json.users || [];\nconst analysis = $json;\n\nconst alerts = users.reduce((acc, user) => {\n  const matchingPopulations = analysis.populations ? analysis.populations.filter(p => p.region === user.location) : [];\n  const riskFactors = analysis.risks || [];\n\n  const userInterests = user.interests || [];\n\n  if (matchingPopulations.length === 0) return acc;\n\n  const relevantRisks = riskFactors.filter(risk => userInterests.includes(risk.type));\n\n  if (relevantRisks.length === 0) return acc;\n\n  acc.push({\n    userId: user.id,\n    email: user.email,\n    phone: user.phone,\n    pushToken: user.pushToken,\n    alerts: relevantRisks.map(r => ({\n      message: `Alert for ${r.type}: ${r.description}`,\n      recommendation: r.recommendation\n    }))\n  });\n\n  return acc;\n}, []);\n\nreturn alerts.map(alert => ({ json: alert }));"
+      },
+      "name": "Generate User-Specific Alerts",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        375
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "toEmail": "={{$json.email}}",
+        "subject": "Wildlife Conservation Alert",
+        "text": "={{$json.alerts.map(a => a.message + '\\nRecommendation: ' + a.recommendation).join('\\n\\n')}}"
+      },
+      "name": "Send Email Alerts",
+      "type": "emailSend",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "phoneNumber": "={{$json.phone}}",
+        "message": "={{$json.alerts.map(a => a.message + ' - ' + a.recommendation).join('; ')}}"
+      },
+      "name": "Send SMS Alerts",
+      "type": "twilio",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "sendPushNotification",
+        "deviceToken": "={{$json.pushToken}}",
+        "title": "Wildlife Conservation Alert",
+        "body": "={{$json.alerts.map(a => a.message).join('; ')}}",
+        "data": "={{{ alerts: $json.alerts }}}"
+      },
+      "name": "Send Mobile Push Notifications",
+      "type": "pushNotification",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "Fetch Wildlife Population Data": {
+      "main": [
+        [
+          {
+            "node": "Combine Wildlife & Drone Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Drone Surveillance Feed": {
+      "main": [
+        [
+          {
+            "node": "Combine Wildlife & Drone Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Combine Wildlife & Drone Data": {
+      "main": [
+        [
+          {
+            "node": "Prepare AI Model Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare AI Model Input": {
+      "main": [
+        [
+          {
+            "node": "AI Habitat Condition Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Habitat Condition Analysis": {
+      "main": [
+        [
+          {
+            "node": "Fetch Registered Users",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Registered Users": {
+      "main": [
+        [
+          {
+            "node": "Generate User-Specific Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate User-Specific Alerts": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alerts",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send SMS Alerts",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Mobile Push Notifications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
