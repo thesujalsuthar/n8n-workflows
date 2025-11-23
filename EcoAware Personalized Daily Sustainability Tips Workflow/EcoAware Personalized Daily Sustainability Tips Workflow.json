@@ -1,0 +1,207 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "={{`https://api.youruserdatabase.com/users/${$json[\"userId\"]}`}}",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_API_KEY"
+            }
+          ]
+        }
+      },
+      "name": "Get User Profile",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const user = items[0].json;\n// Assuming user has preferences and location\nreturn [{\n  json: {\n    preferences: user.preferences || {},\n    location: user.location || {}\n  }\n}];"
+      },
+      "name": "Extract Preferences",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{`https://api.environmentdata.com/local?lat=${$json.location.latitude}&lon=${$json.location.longitude}`}}",
+        "responseFormat": "json",
+        "jsonParameters": true,
+        "options": {},
+        "queryParametersJson": "{}"
+      },
+      "name": "Get Local Environmental Data",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const prefs = items[0].json.preferences;\nconst env = items[1].json;\n\n/**\n * Simple example logic to generate a personalized sustainability tip\n * based on user preferences and local data.\n */\n\nfunction generateTip(preferences, environment) {\n  let tips = [];\n\n  if (preferences.energy && environment.airQualityIndex < 50) {\n    tips.push(\"Great air quality today! Consider airing out your home and saving energy by using natural light.\");\n  }\n  if (preferences.water) {\n    tips.push(\"Remember to reduce water usage today by taking shorter showers.\");\n  }\n  if (preferences.transportation && environment.weather === 'rainy') {\n    tips.push(\"It's rainy today — consider using public transport or carpooling to reduce emissions.\");\n  }\n  if (tips.length === 0) {\n    tips.push(\"Practice waste reduction by recycling and composting.\");\n  }\n  return tips[Math.floor(Math.random() * tips.length)];\n}\n\nconst tip = generateTip(prefs, env);\n\nreturn [{ json: { tip }}];"
+      },
+      "name": "Generate Personalized Tip",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "ecoaware@yourdomain.com",
+        "toEmail": "={{$json.userEmail}}",
+        "subject": "Your EcoAware Daily Sustainability Tip",
+        "text": "={{`Hello! Here is your personalized sustainability tip for today:\n\n${$json.tip}\n\nKeep up the great work forming eco-friendly habits!`}}"
+      },
+      "name": "Send Email Notification",
+      "type": "emailSend",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{$json.chatId}}",
+        "text": "={{`🌿 Daily EcoAware Tip:\n${$json.tip}`}}",
+        "additionalFields": {}
+      },
+      "name": "Send Chat Notification",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.map(item => {\n  return {\n    json: {\n      userId: item.json.userId,\n      userEmail: item.json.email,\n      chatId: item.json.chatId\n    }\n  };\n});"
+      },
+      "name": "Format User Data",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        50,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.youruserdatabase.com/users",
+        "responseFormat": "json",
+        "jsonParameters": false,
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_API_KEY"
+            }
+          ]
+        }
+      },
+      "name": "Fetch All Users",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        100
+      ]
+    }
+  ],
+  "connections": {
+    "Fetch All Users": {
+      "main": [
+        [
+          {
+            "node": "Format User Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format User Data": {
+      "main": [
+        [
+          {
+            "node": "Get User Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get User Profile": {
+      "main": [
+        [
+          {
+            "node": "Extract Preferences",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Preferences": {
+      "main": [
+        [
+          {
+            "node": "Get Local Environmental Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Local Environmental Data": {
+      "main": [
+        [
+          {
+            "node": "Generate Personalized Tip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Personalized Tip": {
+      "main": [
+        [
+          {
+            "node": "Send Email Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Chat Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
