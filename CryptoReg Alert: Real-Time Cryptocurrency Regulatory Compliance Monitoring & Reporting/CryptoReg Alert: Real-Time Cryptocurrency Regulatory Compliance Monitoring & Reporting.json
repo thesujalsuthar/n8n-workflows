@@ -1,0 +1,182 @@
+{
+  "name": "Real-Time Cryptocurrency Regulatory Compliance Monitoring with Automated Alerting and Reporting",
+  "nodes": [
+    {
+      "parameters": {
+        "urls": [
+          {
+            "url": "https://www.sec.gov/spotlight/cybersecurity"
+          },
+          {
+            "url": "https://www.fca.org.uk/news/statements"
+          },
+          {
+            "url": "https://www.mas.gov.sg/news-and-publications/announcements"
+          },
+          {
+            "url": "https://www.finma.ch/en/news/"
+          },
+          {
+            "url": "https://www.esma.europa.eu/press-news"
+          }
+        ],
+        "options": {
+          "followRedirect": true,
+          "jsonResponse": true,
+          "responseFormat": "json",
+          "fullResponse": false
+        }
+      },
+      "name": "Fetch Regulatory Updates",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const cryptoKeywords = ['crypto', 'cryptocurrency', 'blockchain', 'digital asset', 'token', 'bitcoin', 'ethereum'];\n\nconst relevantUpdates = [];\n\nfor (const item of items) {\n  const title = (item.json.title || '').toLowerCase();\n  const description = (item.json.description || '').toLowerCase();\n  if (cryptoKeywords.some(keyword => title.includes(keyword) || description.includes(keyword))) {\n    relevantUpdates.push({\n      title: item.json.title || 'No Title',\n      link: item.json.link || '',\n      date: item.json.pubDate || item.json.published || '',\n      content: item.json.description || ''\n    });\n  }\n}\n\nreturn relevantUpdates.map(update => ({ json: update }));"
+      },
+      "name": "Filter Crypto Regulation Updates",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const impactRules = [\n  { keyword: 'ban', impact: 'High', reason: 'Potential ban on crypto activity' },\n  { keyword: 'restriction', impact: 'Medium', reason: 'Imposition of restrictions' },\n  { keyword: 'license', impact: 'Medium', reason: 'New licensing requirements' },\n  { keyword: 'tax', impact: 'Low', reason: 'New tax rules' },\n  { keyword: 'reporting', impact: 'Low', reason: 'Reporting obligations added' }\n];\n\nfunction assessImpact(content) {\n  const lowerContent = content.toLowerCase();\n  for (const rule of impactRules) {\n    if (lowerContent.includes(rule.keyword)) {\n      return {\n        impact: rule.impact,\n        reason: rule.reason\n      };\n    }\n  }\n  return {\n    impact: 'Unclear',\n    reason: 'No clear impact keywords found'\n  };\n}\n\nreturn items.map(item => {\n  const {impact, reason} = assessImpact(item.json.content);\n  return {\n    json: {\n      ...item.json,\n      impactLevel: impact,\n      impactReason: reason\n    }\n  };\n});"
+      },
+      "name": "Analyze Impact on Assets and Portfolios",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "compliance-team@yourcompany.com",
+        "toEmail": "compliance-team@yourcompany.com",
+        "subject": "Crypto Regulatory Update Alert - {{$json[\"title\"]}}",
+        "text": "A new regulatory update relevant to crypto has been detected:\n\nTitle: {{$json[\"title\"]}}\nDate: {{$json[\"date\"]}}\nImpact Level: {{$json[\"impactLevel\"]}}\nReason: {{$json[\"impactReason\"]}}\nLink: {{$json[\"link\"]}}\n\nPlease review and take necessary action."
+      },
+      "name": "Send Email Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "webhookUri": "",
+        "channel": "#compliance-alerts",
+        "text": "Crypto Regulatory Update Alert:\n*{{$json[\"title\"]}}*\nDate: {{$json[\"date\"]}}\nImpact Level: {{$json[\"impactLevel\"]}}\nReason: {{$json[\"impactReason\"]}}\n<{{$json[\"link\"]}}|Read more>"
+      },
+      "name": "Send Slack Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        450
+      ],
+      "credentials": {
+        "slackApi": "Slack API"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const date = new Date().toISOString().split('T')[0];\n\nlet reportContent = \"# Daily Crypto Regulatory Compliance Report - \" + date + \"\\n\\n\";\n\nitems.forEach((item, index) => {\n  reportContent += `${index + 1}. **${item.json.title}**\\n   - Date: ${item.json.date}\\n   - Impact Level: ${item.json.impactLevel}\\n   - Reason: ${item.json.impactReason}\\n   - Link: ${item.json.link}\\n\\n`;\n});\n\nreturn [{ json: { report: reportContent }}];"
+      },
+      "name": "Generate Compliance Report",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "compliance-reports@yourcompany.com",
+        "toEmail": "stakeholders@yourcompany.com",
+        "subject": "Daily Crypto Regulatory Compliance Report - {{ $json.date }}",
+        "text": "{{ $json.report }}"
+      },
+      "name": "Send Compliance Report Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        600
+      ]
+    }
+  ],
+  "connections": {
+    "Fetch Regulatory Updates": {
+      "main": [
+        [
+          {
+            "node": "Filter Crypto Regulation Updates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Crypto Regulation Updates": {
+      "main": [
+        [
+          {
+            "node": "Analyze Impact on Assets and Portfolios",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Impact on Assets and Portfolios": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Slack Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate Compliance Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Compliance Report": {
+      "main": [
+        [
+          {
+            "node": "Send Compliance Report Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "workflowTimeout": 3600
+  }
+}
