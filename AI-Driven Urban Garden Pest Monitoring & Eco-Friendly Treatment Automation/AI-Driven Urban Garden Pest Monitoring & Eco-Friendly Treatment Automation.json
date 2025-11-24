@@ -1,0 +1,208 @@
+{
+  "name": "AI-Powered Smart Urban Garden Pest Monitoring & Eco-Friendly Treatment Scheduler",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.pestdetection.example.com/v1/detect",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "location",
+              "value": "={{$json[\"gardenLocation\"]}}"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{new Date().toISOString()}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Pest Detection API",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const pestData = $json;\n\n// Example logic to analyze pest presence and severity\nconst pestsDetected = pestData.pests || [];\nlet alertNeeded = false;\nlet treatmentType = null;\nlet alertMessage = '';\n\nif (pestsDetected.length === 0) {\n  alertMessage = 'No pests detected in your garden at this time. Continue routine monitoring.';\n} else {\n  alertNeeded = true;\n  // Prioritize pests by severity or known threat\n  const severePests = pestsDetected.filter(p => p.severity >= 7);\n  if (severePests.length > 0) {\n    treatmentType = 'corrective';\n    alertMessage = `High pest activity detected: ${severePests.map(p=>p.name).join(', ')}. Immediate eco-friendly treatment scheduled.`;\n  } else {\n    treatmentType = 'preventive';\n    alertMessage = `Pests detected: ${pestsDetected.map(p=>p.name).join(', ')}. Preventive eco-friendly measures recommended.`;\n  }\n}\n\nreturn [{\n  json: {\n    alertNeeded,\n    treatmentType,\n    alertMessage,\n    pestsDetected\n  }\n}];"
+      },
+      "name": "Analyze Pest Data",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "calendarId": "eco-friendly-garden-treatments",
+        "resource": "events",
+        "operation": "create",
+        "summary": "={{$json[\"treatmentType\"] === 'corrective' ? 'Immediate Eco-friendly Treatment' : 'Preventive Eco-friendly Treatment'}}",
+        "start": "={{new Date().toISOString()}}",
+        "end": "={{new Date(new Date().getTime() + 2 * 3600000).toISOString()}}",
+        "description": "Automated schedule for {{$json[\"treatmentType\"]}} pest treatment based on AI analysis. Targets pests: {{$json[\"pestsDetected\"].map(p => p.name).join(\", \")}}.",
+        "status": "confirmed"
+      },
+      "name": "Schedule Treatment",
+      "type": "googleCalendar",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ],
+      "credentials": {
+        "googleCalendarApi": "Google Calendar Account"
+      }
+    },
+    {
+      "parameters": {
+        "message": "={{$json[\"alertMessage\"]}}",
+        "phoneNumber": "={{$json[\"userPhoneNumber\"]}}",
+        "additionalFields": {}
+      },
+      "name": "Send SMS Alert",
+      "type": "twilio",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        250
+      ],
+      "credentials": {
+        "twilioApi": "Twilio Account"
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "channel": "email",
+        "toEmail": "={{$json[\"userEmail\"]}}",
+        "subject": "Smart Urban Garden Pest Alert and Treatment Schedule",
+        "text": "={{$json[\"alertMessage\"] + '\\n\\nScheduled Treatment Details:\\n' + 'Type: ' + $json[\"treatmentType\"] + '\\nTarget Pests: ' + $json[\"pestsDetected\"].map(p => p.name).join(', ')}}"
+      },
+      "name": "Send Email Alert",
+      "type": "emailSend",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        350
+      ],
+      "credentials": {
+        "smtp": "SMTP Account"
+      }
+    },
+    {
+      "parameters": {
+        "value": "123 Main St, Example City, Country",
+        "name": "gardenLocation"
+      },
+      "name": "Set Garden Location",
+      "type": "set",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "value": "user@example.com",
+        "name": "userEmail"
+      },
+      "name": "Set User Email",
+      "type": "set",
+      "typeVersion": 1,
+      "position": [
+        100,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "value": "+1234567890",
+        "name": "userPhoneNumber"
+      },
+      "name": "Set User Phone Number",
+      "type": "set",
+      "typeVersion": 1,
+      "position": [
+        100,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "Set Garden Location": {
+      "main": [
+        [
+          {
+            "node": "Set User Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set User Email": {
+      "main": [
+        [
+          {
+            "node": "Set User Phone Number",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set User Phone Number": {
+      "main": [
+        [
+          {
+            "node": "Pest Detection API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pest Detection API": {
+      "main": [
+        [
+          {
+            "node": "Analyze Pest Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Pest Data": {
+      "main": [
+        [
+          {
+            "node": "Schedule Treatment",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send SMS Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
