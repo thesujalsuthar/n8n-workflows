@@ -1,0 +1,283 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "submit-expense",
+        "responseMode": "lastNode",
+        "responseData": "firstNode",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const { description, amount } = items[0].json;\nreturn [{ json: { prompt: `Categorize this expense: \"${description}\" with amount ${amount}` } }];"
+      },
+      "name": "Prepare Prompt",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "options": {},
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an assistant that categorizes daily expenses into categories such as Food, Transportation, Utilities, Entertainment, Health, Other."
+          },
+          {
+            "role": "user",
+            "content": "={{$json[\"prompt\"]}}"
+          }
+        ],
+        "temperature": 0
+      },
+      "name": "AI Categorize Expense",
+      "type": "n8n-nodes-base.openai",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const categoryText = items[0].json.choices[0].message.content.trim();\nreturn [{ json: {\n  ...items[0].json,\n  category: categoryText\n} }];"
+      },
+      "name": "Extract Category",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "sheetId": "YOUR_GOOGLE_SHEET_ID",
+        "range": "Sheet1!A:D",
+        "valueInputMode": "RAW",
+        "options": {},
+        "dataPropertyName": "data",
+        "fields": {
+          "values": [
+            "={{new Date().toISOString().split('T')[0]}}",
+            "={{$json[\"description\"]}}",
+            "={{$json[\"amount\"]}}",
+            "={{$json[\"category\"]}}"
+          ]
+        }
+      },
+      "name": "Append to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": "GOOGLE_SHEETS_CREDENTIALS"
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const date = new Date().toISOString().split('T')[0];\nreturn [{ json: { date } }];"
+      },
+      "name": "Prepare Summary Date",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        250,
+        650
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "sheetId": "YOUR_GOOGLE_SHEET_ID",
+        "range": "Sheet1!A:D",
+        "returnAll": true
+      },
+      "name": "Get All Expenses",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [
+        450,
+        650
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": "GOOGLE_SHEETS_CREDENTIALS"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const date = items[0].json.date;\nconst rows = items[1].json.data.values;\n\n// headers in first row\nconst expenses = rows.slice(1).filter(row => row[0] === date);\n\nconst sumByCategory = {};\n\nfor (const row of expenses) {\n  const category = row[3] || 'Other';\n  const amount = parseFloat(row[2]) || 0;\n  if (!sumByCategory[category]) sumByCategory[category] = 0;\n  sumByCategory[category] += amount;\n}\n\nlet summary = `Daily Expense Summary for ${date}\\n`;\nfor (const [category, total] of Object.entries(sumByCategory)) {\n  summary += `${category}: $${total.toFixed(2)}\\n`;\n}\n\nreturn [{ json: { summary } }];"
+      },
+      "name": "Generate Summary",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        650
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "no-reply@yourdomain.com",
+        "toEmail": "USER_EMAIL",
+        "subject": "Daily Expense Summary",
+        "text": "={{$json[\"summary\"]}}"
+      },
+      "name": "Send Email Summary",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        850,
+        550
+      ],
+      "credentials": {
+        "smtp": "SMTP_CREDENTIALS"
+      ]
+    },
+    {
+      "parameters": {
+        "channel": "YOUR_SLACK_CHANNEL",
+        "text": "={{$json[\"summary\"]}}"
+      },
+      "name": "Send Slack Summary",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        850,
+        750
+      ],
+      "credentials": {
+        "slackApi": "SLACK_CREDENTIALS"
+      ]
+    },
+    {
+      "parameters": {
+        "time": "23:59",
+        "cronExpression": "0 23 * * *"
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        50,
+        650
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Prompt": {
+      "main": [
+        [
+          {
+            "node": "AI Categorize Expense",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Categorize Expense": {
+      "main": [
+        [
+          {
+            "node": "Extract Category",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Category": {
+      "main": [
+        [
+          {
+            "node": "Append to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Prepare Summary Date",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Summary Date": {
+      "main": [
+        [
+          {
+            "node": "Get All Expenses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get All Expenses": {
+      "main": [
+        [
+          {
+            "node": "Generate Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Summary": {
+      "main": [
+        [
+          {
+            "node": "Send Email Summary",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Slack Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
