@@ -1,0 +1,79 @@
+{
+  "name": "AI-Driven Community SkillSwap Scheduler and Matcher",
+  "description": "Workflow to schedule and match community members based on skills and learning interests, enabling automated event creation, notifications, and feedback collection.",
+  "nodes": [
+    {
+      "id": "1",
+      "type": "database.query",
+      "name": "Fetch Members and Skills",
+      "parameters": {
+        "query": "SELECT member_id, member_name, skills_offered, skills_interested FROM community_members"
+      },
+      "next": ["2"]
+    },
+    {
+      "id": "2",
+      "type": "function",
+      "name": "Match Members by Skill",
+      "parameters": {
+        "code": "function matchMembers(members) {\n  const matches = [];\n  const visited = new Set();\n\n  members.forEach(member => {\n    member.skills_interested.forEach(skill => {\n      members.forEach(potentialPartner => {\n        if (member.member_id !== potentialPartner.member_id && !visited.has(member.member_id + '-' + potentialPartner.member_id)) {\n          if (potentialPartner.skills_offered.includes(skill) &&\n              potentialPartner.skills_interested.some(s => member.skills_offered.includes(s))) {\n            matches.push({\n              member1: member,\n              member2: potentialPartner,\n              skill: skill\n            });\n            visited.add(member.member_id + '-' + potentialPartner.member_id);\n            visited.add(potentialPartner.member_id + '-' + member.member_id);\n          }\n        }\n      });\n    });\n  });\n  return matches;\n}\n\nreturn matchMembers(items);"
+      },
+      "input": ["1"],
+      "next": ["3"]
+    },
+    {
+      "id": "3",
+      "type": "calendar.createEvent",
+      "name": "Create SkillSwap Events",
+      "parameters": {
+        "calendarId": "community_skills_calendar",
+        "events": "matches.map(match => ({\n  title: `SkillSwap: ${match.skill} (${match.member1.member_name} & ${match.member2.member_name})`,\n  attendees: [match.member1.member_email, match.member2.member_email],\n  dateTime: getNextAvailableSlot(),\n  description: `A session to share and learn ${match.skill} between ${match.member1.member_name} and ${match.member2.member_name}.`\n}))"
+      },
+      "input": ["2"],
+      "next": ["4"]
+    },
+    {
+      "id": "4",
+      "type": "messaging.sendNotification",
+      "name": "Send Event Notifications",
+      "parameters": {
+        "recipients": "event.attendees",
+        "subject": "SkillSwap Session Scheduled",
+        "body": "Hello! Your SkillSwap session for {{event.title}} is scheduled on {{event.dateTime}}. Please check your calendar."
+      },
+      "input": ["3"],
+      "next": ["5"]
+    },
+    {
+      "id": "5",
+      "type": "feedback.collect",
+      "name": "Collect Session Feedback",
+      "parameters": {
+        "eventId": "event.id",
+        "questions": [
+          "How useful was the session?",
+          "What would you like to improve?",
+          "Any additional comments?"
+        ]
+      },
+      "trigger": "event.ends",
+      "next": ["6"]
+    },
+    {
+      "id": "6",
+      "type": "database.insert",
+      "name": "Store Feedback",
+      "parameters": {
+        "table": "session_feedback",
+        "data": "feedback"
+      },
+      "input": ["5"]
+    }
+  ],
+  "functions": [
+    {
+      "name": "getNextAvailableSlot",
+      "code": "function getNextAvailableSlot() {\n  const now = new Date();\n  now.setDate(now.getDate() + 1);\n  now.setHours(18, 0, 0, 0);\n  return now.toISOString();\n}"
+    }
+  ]
+}
