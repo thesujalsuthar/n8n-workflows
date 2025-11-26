@@ -1,0 +1,209 @@
+{
+  "name": "Real-Time Cryptocurrency Portfolio Risk Monitoring and Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "accessTokenHeaderAuth",
+        "requestMethod": "GET",
+        "url": "https://api.coingecko.com/api/v3/simple/price",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "ids",
+              "value": "={{ $json[\"portfolio\"].map(item => item.id).join(\",\") }}"
+            },
+            {
+              "name": "vs_currencies",
+              "value": "usd"
+            },
+            {
+              "name": "include_24hr_change",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Fetch Market Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Input: items with JSON containing portfolio array and market prices.\n  Output: enhanced portfolio with current prices, 24h changes, individual value,\n  and risk factor estimates.\n*/\n\nconst portfolio = items[0].json.portfolio;\nconst prices = items[1].json;\n\nconst RISK_THRESHOLD = 0.2; // example risk factor threshold\n\nconst enhancedPortfolio = portfolio.map(coin => {\n  const coinPriceData = prices[coin.id];\n  if (!coinPriceData) {\n    return {\n      ...coin,\n      current_price_usd: null,\n      change_24h_percent: null,\n      value_usd: null,\n      risk_factor: null\n    };\n  }\n\n  const currentPrice = coinPriceData.usd;\n  const change24h = coinPriceData.usd_24h_change;\n  const value = currentPrice * coin.amount;\n\n  // Simple risk factor: volatility proxy (abs 24h change) * allocation percent\n  // Allocation percent calculated after total portfolio value\n  return {\n    ...coin,\n    current_price_usd: currentPrice,\n    change_24h_percent: change24h,\n    value_usd: value\n  };\n});\n\n// Calculate total portfolio value\nconst totalValue = enhancedPortfolio.reduce((acc, coin) => acc + (coin.value_usd || 0), 0);\n\n// Add allocation percent and risk factor\nconst portfolioWithRisk = enhancedPortfolio.map(coin => {\n  const allocation = totalValue ? (coin.value_usd / totalValue) : 0;\n  const riskFactor = Math.abs(coin.change_24h_percent || 0) * allocation;\n  return {\n    ...coin,\n    allocation_percent: allocation,\n    risk_factor: riskFactor\n  };\n});\n\n// Calculate overall portfolio risk\nconst overallRisk = portfolioWithRisk.reduce((acc, coin) => acc + coin.risk_factor, 0);\n\nreturn [{\n  json: {\n    portfolio: portfolioWithRisk,\n    overallRisk: overallRisk,\n    totalValue: totalValue,\n    riskExceeded: overallRisk > RISK_THRESHOLD\n  }\n}];"
+      },
+      "name": "Assess Risk",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ],
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json[\"riskExceeded\"]}}",
+              "operation": "equal",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "Check Risk Threshold",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "alerts@cryptomonitor.com",
+        "toEmail": "={{$node[\"Trigger\"].json[\"userEmail\"]}}",
+        "subject": "Portfolio Risk Alert: Threshold Exceeded",
+        "text": "Your cryptocurrency portfolio risk score has exceeded the threshold.\n\nOverall Risk Score: {{$json[\"overallRisk\"].toFixed(3)}}\nTotal Portfolio Value: ${{$json[\"totalValue\"].toFixed(2)}}\n\nCoin Breakdown:\n{{$json[\"portfolio\"].map(c => `- ${c.name} (${c.symbol.toUpperCase()}): $${c.value_usd.toFixed(2)} (24h Change: ${c.change_24h_percent.toFixed(2)}%, Risk Factor: ${c.risk_factor.toFixed(3)})`).join('\\n')}}\n\nPlease consider reviewing your portfolio to mitigate risk."
+      },
+      "name": "Send Risk Alert Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        900,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.twilio.com/2010-04-01/Accounts/{{ $credentials.twilioAccountSid }}/Messages.json",
+        "options": {},
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "From",
+              "value": "{{ $credentials.twilioPhoneNumber }}"
+            },
+            {
+              "name": "To",
+              "value": "={{$node[\"Trigger\"].json[\"userPhone\"]}}"
+            },
+            {
+              "name": "Body",
+              "value": "Alert: Your crypto portfolio risk score is high ({{$json[\"overallRisk\"].toFixed(3)}}). Check email for details."
+            }
+          ]
+        },
+        "authentication": "basicAuth",
+        "responseFormat": "json",
+        "requestMethod": "POST"
+      },
+      "name": "Send SMS Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        900,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "interval": 300,
+        "mode": "trigger",
+        "options": {}
+      },
+      "name": "Trigger",
+      "type": "n8n-nodes-base.interval",
+      "typeVersion": 1,
+      "position": [
+        50,
+        300
+      ],
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "functionCode": "/* User portfolio and contact info configuration */\nreturn [{\n  json: {\n    portfolio: [\n      {id: \"bitcoin\", symbol: \"btc\", name: \"Bitcoin\", amount: 1.5},\n      {id: \"ethereum\", symbol: \"eth\", name: \"Ethereum\", amount: 10},\n      {id: \"cardano\", symbol: \"ada\", name: \"Cardano\", amount: 5000}\n    ],\n    userEmail: \"user@example.com\",\n    userPhone: \"+1234567890\"\n  }\n}];"
+      },
+      "name": "Set User Portfolio",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        150,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Trigger": {
+      "main": [
+        [
+          {
+            "node": "Set User Portfolio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set User Portfolio": {
+      "main": [
+        [
+          {
+            "node": "Fetch Market Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Market Data": {
+      "main": [
+        [
+          {
+            "node": "Assess Risk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assess Risk": {
+      "main": [
+        [
+          {
+            "node": "Check Risk Threshold",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Risk Threshold": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Send Risk Alert Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send SMS Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
