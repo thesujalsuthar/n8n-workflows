@@ -1,0 +1,296 @@
+{
+  "name": "AI-Powered Personalized Carbon Footprint Reduction Plan Generator",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "fetch-activity-data",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "name": "Webhook - Fetch User Activity",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const userData = items[0].json;\n\n// Assume userData contains { userId, dateRange }\n// Here we simulate fetch from an external habit tracking API with their credentials\n\nconst apiEndpoint = 'https://api.habittrack.com/v1/activities';\nconst apiKey = $credentials.habitTrackApi.apiKey;\n\nreturn axios({\n  method: 'GET',\n  url: `${apiEndpoint}?userId=${userData.userId}&start=${userData.dateRange.start}&end=${userData.dateRange.end}`,\n  headers: { 'Authorization': `Bearer ${apiKey}` }\n}).then(response => {\n  return [{ json: response.data }];\n}).catch(error => {\n  throw new Error('Habit Tracking API fetch failed: ' + error.message);\n});"
+      },
+      "name": "HTTP Request - Get Activity Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        550,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const activityData = items[0].json;\n\n// Process activityData to format suitable for carbon footprint API\n// Example: aggregate activities by type and amount\n\nlet aggregated = {};\nactivityData.activities.forEach(activity => {\n  if (!aggregated[activity.type]) {\n    aggregated[activity.type] = 0;\n  }\n  aggregated[activity.type] += activity.amount;\n});\n\nreturn [{ json: { aggregatedActivities: aggregated } }];"
+      },
+      "name": "Function - Aggregate Activities",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.carbonfootprint.com/v2/calculate",
+        "method": "POST",
+        "responseFormat": "json",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={\"activities\": $json[\"aggregatedActivities\"]}"
+      },
+      "name": "HTTP Request - Calculate Carbon Footprint",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "1",
+          "name": "carbonFootprintApi"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const footprintData = items[0].json;\n\n// AI prompt generation for personalized plan\nconst prompt = `User's carbon footprint data: ${JSON.stringify(footprintData)}. Suggest a personalized carbon footprint reduction plan focusing on their top emission sources.`;\n\nreturn [{ json: { prompt } }];"
+      },
+      "name": "Function - Generate AI Prompt",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "temperature": 0.7,
+        "maxTokens": 400,
+        "prompt": "={{$json[\"prompt\"]}}"
+      },
+      "name": "OpenAI - Generate Reduction Plan",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: { plan: $json.choices[0].message.content } }];"
+      },
+      "name": "Function - Extract Plan Text",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "subscribe-weekly-reminder",
+        "responseMode": "lastNode"
+      },
+      "name": "Webhook - Setup Reminder",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const reminderRequest = items[0].json;\n// Extract user info, plan id or user id\nconst userId = reminderRequest.userId;\nconst reminderTime = reminderRequest.time || '09:00';\n\n// Return data for scheduling reminders\nreturn [{json: {userId, reminderTime}}];"
+      },
+      "name": "Function - Prepare Reminder Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "everyWeek",
+        "weekDay": 1,
+        "atTime": "09:00"
+      },
+      "name": "Cron - Weekly Reminder",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        750,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: { message: 'Time to review your weekly carbon footprint progress and update your reduction plan!' } }];"
+      },
+      "name": "Function - Reminder Message",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "to": "={{$json[\"userId\"]}}",
+        "message": "={{$json[\"message\"]}}"
+      },
+      "name": "Notification - Send Reminder",
+      "type": "n8n-nodes-base.notification",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        600
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook - Fetch User Activity": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - Get Activity Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - Get Activity Data": {
+      "main": [
+        [
+          {
+            "node": "Function - Aggregate Activities",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Function - Aggregate Activities": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - Calculate Carbon Footprint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - Calculate Carbon Footprint": {
+      "main": [
+        [
+          {
+            "node": "Function - Generate AI Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Function - Generate AI Prompt": {
+      "main": [
+        [
+          {
+            "node": "OpenAI - Generate Reduction Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI - Generate Reduction Plan": {
+      "main": [
+        [
+          {
+            "node": "Function - Extract Plan Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook - Setup Reminder": {
+      "main": [
+        [
+          {
+            "node": "Function - Prepare Reminder Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Function - Prepare Reminder Data": {
+      "main": [
+        [
+          {
+            "node": "Cron - Weekly Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cron - Weekly Reminder": {
+      "main": [
+        [
+          {
+            "node": "Function - Reminder Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Function - Reminder Message": {
+      "main": [
+        [
+          {
+            "node": "Notification - Send Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "credentials": {
+    "habitTrackApi": {
+      "id": "1",
+      "name": "Habit Track API Key"
+    },
+    "carbonFootprintApi": {
+      "id": "1",
+      "name": "Carbon Footprint API Key"
+    }
+  }
+}
