@@ -1,0 +1,214 @@
+{
+  "name": "AI-Powered Personalized Sustainable Travel and Carbon Offset Planner",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "plan-trip",
+        "options": {}
+      },
+      "id": "startTrigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const data = items[0].json;\n\n// Extract user preferences and trip details\nconst { origin, destination, departureDate, returnDate, travelers, preferences } = data;\n\nreturn [{\n  json: {\n    origin,\n    destination,\n    departureDate,\n    returnDate,\n    travelers,\n    preferences\n  }\n}];"
+      },
+      "id": "extractTripDetails",
+      "name": "Extract Trip Details",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.travelpayouts.com/v2/prices/cheap",
+        "method": "GET",
+        "jsonParameters": true,
+        "options": {},
+        "queryParametersJson": "={\n  \"origin\": $json.origin,\n  \"destination\": $json.destination,\n  \"depart_date\": $json.departureDate,\n  \"return_date\": $json.returnDate,\n  \"currency\": \"USD\",\n  \"sorting\": \"price\",\n  \"trip_class\": 0,\n  \"limit\": 5\n}"
+      },
+      "id": "getTravelOptions",
+      "name": "Fetch Travel Options",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        750,
+        300
+      ],
+      "credentials": {
+        "httpBasicAuth": "travelAPI"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const travelOptions = items[0].json.data || [];\n\n// Filter for sustainable options (e.g., train, bus, electric vehicles) and rank\nconst sustainableOptions = travelOptions.filter(option => {\n  const airline = option.provider || '';\n  const segments = option.flight ? option.flight.length : 0;\n  // For this sample, filter out options involving long haul flights if any\n  return option.flight ? option.flight.every(flight => flight.aircraft_type && flight.aircraft_type.includes('electric') || flight.operating_carrier === 'eco-friendly') : true;\n}).slice(0, 5);\n\nreturn [{ json: { sustainableOptions: sustainableOptions.length ? sustainableOptions : travelOptions.slice(0,5) } }];"
+      },
+      "id": "filterSustainableOptions",
+      "name": "Filter Sustainable Travel Options",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        950,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const origin = items[0].json.origin;\nconst destination = items[0].json.destination;\nconst departureDate = items[0].json.departureDate;\nconst returnDate = items[0].json.returnDate || '';\n\n// Placeholder: simplified carbon footprint calculation based on distance\n// Real implementation would call a carbon API or calculate accurately\n\nfunction getDistanceKm(origin, destination) {\n  // Example static distances or real calculation can be done here\n  // For demonstration, use a mock distance\n  return 1000;\n}\n\nconst distance = getDistanceKm(origin, destination);\nconst estimatedCarbonPerKmPerPerson = 0.2; // kg CO2 eq per km per person average\nconst travelers = items[0].json.travelers || 1;\n\nconst totalCarbon = distance * 2 * travelers * estimatedCarbonPerKmPerPerson;\n\nreturn [{ json: { carbonFootprintKgCO2: totalCarbon.toFixed(2) } }];"
+      },
+      "id": "calculateCarbonFootprint",
+      "name": "Calculate Carbon Footprint",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.carbonscape.io/v1/offsets/recommendations",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={\n  \"amount\": Number($json.carbonFootprintKgCO2),\n  \"currency\": \"USD\",\n  \"preferences\": {\n    \"projectTypes\": [\"reforestation\", \"renewable_energy\"],\n    \"regions\": [\"global\"]\n  }\n}"
+      },
+      "id": "offsetRecommendations",
+      "name": "Get Carbon Offset Recommendations",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        1350,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": "carbonOffsetAPI"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const sustainableOptions = $items(\"Filter Sustainable Travel Options\")[0].json.sustainableOptions;\nconst carbonFootprint = $items(\"Calculate Carbon Footprint\")[0].json.carbonFootprintKgCO2;\nconst offsetRecs = items[0].json.offsets || [];\n\nconst message = {\n  tripSummary: {\n    sustainableOptions,\n    carbonFootprintKgCO2: carbonFootprint,\n    offsetRecommendations: offsetRecs\n  }\n};\n\nreturn [{ json: message }];"
+      },
+      "id": "composeSummaryMessage",
+      "name": "Compose Summary Message",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1550,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "channel": "email",
+        "subject": "Your Sustainable Travel Plan & Carbon Offset Recommendations",
+        "text": "={{JSON.stringify($json.tripSummary, null, 2)}}",
+        "toEmail": "={{$json.email || $node[\"Webhook Trigger\"].json.body.email}}"
+      },
+      "id": "sendNotificationEmail",
+      "name": "Send Notification Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1750,
+        300
+      ],
+      "credentials": {
+        "smtp": "smtpEmail"
+      }
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Extract Trip Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Trip Details": {
+      "main": [
+        [
+          {
+            "node": "Fetch Travel Options",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Travel Options": {
+      "main": [
+        [
+          {
+            "node": "Filter Sustainable Travel Options",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Sustainable Travel Options": {
+      "main": [
+        [
+          {
+            "node": "Calculate Carbon Footprint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Carbon Footprint": {
+      "main": [
+        [
+          {
+            "node": "Get Carbon Offset Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Carbon Offset Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Compose Summary Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose Summary Message": {
+      "main": [
+        [
+          {
+            "node": "Send Notification Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
