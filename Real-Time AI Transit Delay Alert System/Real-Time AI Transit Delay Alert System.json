@@ -1,0 +1,153 @@
+{
+  "name": "Real-Time AI Transit Delay Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "={{$json[\"transitApiUrl\"]}}",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "api_key",
+              "value": "={{$json[\"transitApiKey\"]}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Fetch Transit Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        150,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  AI-based delay prediction simulation\n  Expects input from 'Fetch Transit Data' node,\n  performs analysis, and outputs predicted delays with confidence scores.\n*/\n\nconst transitData = items[0].json;\n\n// Simulate AI prediction logic (replace with real AI model integration if available)\n\nfunction predictDelay(vehicle) {\n  // Sample dummy prediction\n  const delay = Math.max(0, vehicle.currentDelay + Math.random() * 5 - 2.5);\n  const confidence = 0.7 + Math.random() * 0.3;\n  return { delay: delay.toFixed(2), confidence: confidence.toFixed(2) };\n}\n\nconst predictions = transitData.vehicles.map(vehicle => {\n  const pred = predictDelay(vehicle);\n  return {\n    routeId: vehicle.routeId,\n    vehicleId: vehicle.id,\n    currentDelay: vehicle.currentDelay,\n    predictedDelay: parseFloat(pred.delay),\n    confidence: parseFloat(pred.confidence),\n    stopsAffected: vehicle.stopsAffected\n  };\n});\n\nreturn [{ json: { predictions } }];"
+      },
+      "name": "AI Delay Prediction",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  User Route Matching:\n  - Load user routes\n  - Match predicted delays against user routes\n  - Identify impacted users and routes\n*/\n\nconst predictions = items[0].json.predictions;\nconst users = [\n  {\n    userId: \"user1\",\n    email: \"user1@example.com\",\n    phone: \"+10000000001\",\n    routes: [\"1\", \"5A\"]\n  },\n  {\n    userId: \"user2\",\n    email: \"user2@example.com\",\n    phone: \"+10000000002\",\n    routes: [\"3\", \"7B\"]\n  }\n];\n\n// Find users impacted by delays\nconst alerts = [];\n\nfor (const user of users) {\n  for (const prediction of predictions) {\n    if (user.routes.includes(prediction.routeId) && prediction.predictedDelay > 2) { // threshold 2 minutes\n      alerts.push({\n        userId: user.userId,\n        email: user.email,\n        phone: user.phone,\n        routeId: prediction.routeId,\n        predictedDelay: prediction.predictedDelay,\n        confidence: prediction.confidence\n      });\n    }\n  }\n}\n\nreturn alerts.map(alert => ({ json: alert }));"
+      },
+      "name": "Match Users with Delays",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Generate Alternative Route Suggestions\n  This dummy logic returns a simple alternative message;\n  integration with routing APIs can replace this.\n*/\n\nconst alert = items[0].json;\n\nfunction getAlternativeRoute(routeId) {\n  return `Alternative routes available for route ${routeId} include nearby lines or shared bike services.`;\n}\n\nalert.alternativeRouteSuggestion = getAlternativeRoute(alert.routeId);\n\nreturn [{ json: alert }];"
+      },
+      "name": "Generate Alternative Routes",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "alerts@transitalerts.com",
+        "toEmail": "={{$json[\"email\"]}}",
+        "subject": "Transit Delay Alert for Route {{$json[\"routeId\"]}}",
+        "text": "Dear User,\n\nThere is a predicted delay of {{$json[\"predictedDelay\"]}} minutes on your route {{$json[\"routeId\"]}} with confidence {{$json[\"confidence\"]}}.\n\n{{$json[\"alternativeRouteSuggestion\"]}}\n\nPlease plan accordingly.\n\nBest Regards,\nTransit Alerts Team"
+      },
+      "name": "Send Email Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        230
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "to": "={{$json[\"phone\"]}}",
+        "text": "Transit delay alert: Route {{$json[\"routeId\"]}} has a predicted delay of {{$json[\"predictedDelay\"]}} mins. {{$json[\"alternativeRouteSuggestion\"]}}"
+      },
+      "name": "Send SMS Alert",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        370
+      ],
+      "credentials": {
+        "twilioApi": {
+          "id": "YOUR_TWILIO_CREDENTIAL_ID",
+          "name": "Twilio API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Fetch Transit Data": {
+      "main": [
+        [
+          {
+            "node": "AI Delay Prediction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Delay Prediction": {
+      "main": [
+        [
+          {
+            "node": "Match Users with Delays",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Match Users with Delays": {
+      "main": [
+        [
+          {
+            "node": "Generate Alternative Routes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Alternative Routes": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send SMS Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
