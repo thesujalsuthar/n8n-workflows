@@ -1,0 +1,282 @@
+{
+  "name": "AI-Powered Smart Home Energy Optimizer and Carbon Footprint Reducer",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.energyprovider.com/v1/consumption/realtime",
+        "responseFormat": "json",
+        "options": {},
+        "queryParametersUi": {
+          "parameter": []
+        },
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$credentials.energyProviderApi.apiKey}}"
+            }
+          ]
+        }
+      },
+      "name": "Fetch Real-Time Energy Consumption",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        100,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": "energyProviderApi"
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://api.weather.com/v3/wx/conditions/current",
+        "responseFormat": "json",
+        "options": {},
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "geocode",
+              "value": "{{$json.coordinates.latitude}},{{$json.coordinates.longitude}}"
+            },
+            {
+              "name": "format",
+              "value": "json"
+            },
+            {
+              "name": "language",
+              "value": "en-US"
+            },
+            {
+              "name": "apiKey",
+              "value": "{{$credentials.weatherApi.apiKey}}"
+            }
+          ]
+        },
+        "headerParametersUi": {
+          "parameter": []
+        }
+      },
+      "name": "Fetch Weather Data",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        100,
+        400
+      ],
+      "credentials": {}
+    },
+    {
+      "parameters": {
+        "functionCode": "const consumption = items[0].json.energy_consumption_kwh || 0;\nconst applianceStatus = items[1].json.status || {};\nconst weather = items[2].json;\nconst energyPrice = items[3].json.current_price_per_kwh;\n\n// Simple carbon footprint calculation: average kg CO2 per kWh\nconst co2PerKwh = 0.45;\n\nconst carbonFootprint = consumption * co2PerKwh;\n\n// Build usage pattern insights\nconst usagePattern = consumption > 5 ? 'High' : 'Normal';\n\n// Recommendations based on weather and energy price\nlet recommendations = [];\n\nif(weather.temperature > 25) {\n  recommendations.push('Consider using ceiling fans instead of AC to save energy.');\n}\n\nif(energyPrice > 0.20) {\n  recommendations.push('Energy prices are high now; delay heavy appliance use if possible.');\n}\n\nif(usagePattern === 'High') {\n  recommendations.push('Your energy consumption is high; consider turning off unused appliances.');\n}\n\nreturn [{\n  json: {\n    consumption,\n    applianceStatus,\n    weather,\n    energyPrice,\n    carbonFootprint,\n    usagePattern,\n    recommendations\n  }\n}];"
+      },
+      "name": "Analyze Data and Generate Recommendations",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "device",
+        "operation": "control",
+        "deviceId": "{{$json.applianceStatus.deviceId}}",
+        "command": "turnOff",
+        "additionalFields": {}
+      },
+      "name": "Control Smart Appliances",
+      "type": "n8n-nodes-base.iot",
+      "position": [
+        700,
+        300
+      ],
+      "notesInFlow": true,
+      "disabled": false,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "channel": "email",
+        "toEmail": "user@example.com",
+        "subject": "Energy Usage Alert and Recommendations",
+        "message": "Your current energy consumption is {{$json.consumption}} kWh.\nCarbon footprint approx: {{$json.carbonFootprint}} kg CO2.\n\nRecommendations:\n{{$json.recommendations.join('\\n- ')}}\n\nStay energy smart!"
+      },
+      "name": "Send Email Alerts",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        700,
+        500
+      ],
+      "credentials": {
+        "smtp": "userEmailSmtp"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: { coordinates: { latitude: 40.7128, longitude: -74.006 } } }];"
+      },
+      "name": "Set Home Coordinates",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        100,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.energyprovider.com/v1/pricing/current",
+        "responseFormat": "json",
+        "options": {},
+        "queryParametersUi": {
+          "parameter": []
+        },
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$credentials.energyProviderApi.apiKey}}"
+            }
+          ]
+        }
+      },
+      "name": "Fetch Current Energy Pricing",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": "energyProviderApi"
+      }
+    },
+    {
+      "parameters": {
+        "openAIApi": "openAiApi",
+        "model": "gpt-4",
+        "prompt": "You are a home energy optimization assistant. Given the following data:\nEnergy consumption (kWh): {{$json.consumption}}\nAppliance status: {{$json.applianceStatus}}\nWeather conditions: {{$json.weather}}\nCurrent energy price: ${{$json.energyPrice}}\nCarbon footprint: {{$json.carbonFootprint}} kg CO2\n\nProvide a personalized smart home energy optimization plan with prioritized actions to reduce consumption and carbon footprint, factoring in outdoor temperature, appliance states, and energy cost.\n\nPlan:",
+        "temperature": 0.7,
+        "maxTokens": 300,
+        "topP": 1,
+        "frequencyPenalty": 0,
+        "presencePenalty": 0,
+        "stopSequences": [
+          "\n"
+        ]
+      },
+      "name": "Generate AI Optimization Plan",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        500,
+        500
+      ],
+      "credentials": {
+        "openAIApi": "openAiApi"
+      }
+    },
+    {
+      "parameters": {
+        "resource": "device",
+        "operation": "control",
+        "deviceId": "smartThermostat01",
+        "command": "setTemperature",
+        "additionalFields": {
+          "temperature": "{{$json.aiOptimization.temperatureSetting}}"
+        }
+      },
+      "name": "Adjust Thermostat",
+      "type": "n8n-nodes-base.iot",
+      "position": [
+        900,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Set Home Coordinates": {
+      "main": [
+        [
+          {
+            "node": "Fetch Weather Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Weather Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze Data and Generate Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Real-Time Energy Consumption": {
+      "main": [
+        [
+          {
+            "node": "Analyze Data and Generate Recommendations",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch Current Energy Pricing": {
+      "main": [
+        [
+          {
+            "node": "Analyze Data and Generate Recommendations",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Analyze Data and Generate Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Generate AI Optimization Plan",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Email Alerts",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Generate AI Optimization Plan": {
+      "main": [
+        [
+          {
+            "node": "Adjust Thermostat",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Control Smart Appliances",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
