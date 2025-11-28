@@ -1,0 +1,264 @@
+{
+  "name": "AI-Powered Sustainable Urban Mobility Optimizer",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "PublicTransitAPI",
+        "endpoint": "GetRealtimeVehiclePositions"
+      },
+      "name": "Fetch Public Transit Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ],
+      "credentials": {
+        "httpOAuth2Api": {
+          "id": "1",
+          "name": "Public Transit API OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.urbantraffic.example.com/traffic_sensors/realtime",
+        "jsonParameters": true,
+        "options": {
+          "headers": {
+            "Accept": "application/json"
+          }
+        }
+      },
+      "name": "Fetch Traffic Sensor Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        200,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://user-feedback.example.com/api/feedbacks?since={{$now.toISOString()}}",
+        "options": {
+          "headers": {
+            "Authorization": "Bearer {{ $credentials.userFeedbackAPI.apiKey }}"
+          }
+        }
+      },
+      "name": "Fetch User Feedback",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        200,
+        700
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "2",
+          "name": "User Feedback API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nParse and combine data from transit, traffic sensors, and user feedback\nNormalize and prepare data for AI processing\n*/\n\nconst transitData = items.find(item => item.json.source === 'Fetch Public Transit Data')?.json || {};\nconst trafficData = items.find(item => item.json.source === 'Fetch Traffic Sensor Data')?.json || {};\nconst feedbackData = items.find(item => item.json.source === 'Fetch User Feedback')?.json || {};\n\n// Mock normalization and merging logic\nconst combinedData = {\n  transit: transitData,\n  traffic: trafficData,\n  feedback: feedbackData\n};\n\nreturn [{ json: combinedData }];"
+      },
+      "name": "Normalize and Combine Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        600,
+        500
+      ],
+      "notesInFlow": "Aggregate and normalize data for AI model input"
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nSimulate AI prediction and route optimization\nInput combined data and output optimized routes, schedules, and emissions estimates\n*/\n\nconst combinedData = items[0].json;\n\n// Placeholder for AI optimization logic\nconst optimizedOutput = {\n  optimizedRoutes: [\n    { routeId: 'R1', schedule: ['08:00', '08:30', '09:00'], emissionsReducedKg: 5.3 },\n    { routeId: 'R2', schedule: ['08:15', '08:45', '09:15'], emissionsReducedKg: 4.7 }\n  ],\n  predictedCommuterSatisfaction: 92\n};\n\nreturn [{ json: optimizedOutput }];"
+      },
+      "name": "AI Optimize Routes & Scheduling",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "Database",
+        "operation": "upsert",
+        "table": "optimized_routes",
+        "data": "={{$json.optimizedRoutes}}"
+      },
+      "name": "Store Optimized Routes",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        450
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "3",
+          "name": "Urban Mobility Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "Database",
+        "operation": "upsert",
+        "table": "commuter_experience_metrics",
+        "data": "={predictedSatisfaction: $json.predictedCommuterSatisfaction}"
+      },
+      "name": "Store Commuter Satisfaction",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        550
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "3",
+          "name": "Urban Mobility Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nFormat notification for city planners and commuter app\n*/\n\nconst routes = $json.optimizedRoutes.map(r => `Route ${r.routeId}: Schedule ${r.schedule.join(\", \")}, Emissions Reduced: ${r.emissionsReducedKg}kg`).join(`\\n`);\nconst satisfaction = $json.predictedCommuterSatisfaction;\n\nreturn [{ json: { message: `AI-Powered Urban Mobility Optimization Completed.\\n${routes}\\nPredicted Commuter Satisfaction: ${satisfaction}%` } }];"
+      },
+      "name": "Format Notification Message",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "toEmail": "city.planners@urbanmobility.example.com",
+        "subject": "Daily AI Urban Mobility Optimization Report",
+        "body": "={{ $json.message }}",
+        "attachments": []
+      },
+      "name": "Email Report",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1800,
+        500
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "4",
+          "name": "SMTP Credentials"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Fetch Public Transit Data": {
+      "main": [
+        [
+          {
+            "node": "Normalize and Combine Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Traffic Sensor Data": {
+      "main": [
+        [
+          {
+            "node": "Normalize and Combine Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch User Feedback": {
+      "main": [
+        [
+          {
+            "node": "Normalize and Combine Data",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Normalize and Combine Data": {
+      "main": [
+        [
+          {
+            "node": "AI Optimize Routes & Scheduling",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Optimize Routes & Scheduling": {
+      "main": [
+        [
+          {
+            "node": "Store Optimized Routes",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Store Commuter Satisfaction",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "Format Notification Message",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Store Optimized Routes": {
+      "main": [
+        []
+      ]
+    },
+    "Store Commuter Satisfaction": {
+      "main": [
+        []
+      ]
+    },
+    "Format Notification Message": {
+      "main": [
+        [
+          {
+            "node": "Email Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Report": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
