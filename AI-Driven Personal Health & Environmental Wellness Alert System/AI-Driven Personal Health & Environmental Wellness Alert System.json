@@ -1,0 +1,193 @@
+{
+  "name": "AI-Powered Personal Health and Wellness Tracker with Real-Time Environmental Alerts",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "user",
+        "operation": "getData",
+        "additionalFields": {}
+      },
+      "name": "Fitness Tracker API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        200,
+        200
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "fitnessTrackerOAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "sleep",
+        "operation": "getData",
+        "additionalFields": {}
+      },
+      "name": "Sleep Data API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        200,
+        400
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "sleepDataOAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://api.airquality.example.com/latest",
+        "method": "GET",
+        "headers": {},
+        "queryParameters": [],
+        "options": {}
+      },
+      "name": "Air Quality Sensor API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        600,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.noiselevel.example.com/current",
+        "method": "GET",
+        "headers": {},
+        "queryParameters": [],
+        "options": {}
+      },
+      "name": "Noise Level Sensor API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        600,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const fitnessData = items[0].json;\nconst sleepData = items[1].json;\nconst airQualityData = items[2].json;\nconst noiseLevelData = items[3].json;\n\nconst recommendations = [];\nconst alerts = [];\n\n// Analyze fitness data\nif (fitnessData.steps < 5000) {\n  recommendations.push('Try to increase your daily steps to at least 7000 for better cardiovascular health.');\n}\n\n// Analyze sleep data\nif (sleepData.hours < 7) {\n  recommendations.push('Aim for 7-8 hours of sleep for optimal recovery and mental health.');\n}\n\n// Analyze air quality\nif (airQualityData.aqi > 100) {\n  alerts.push('Air quality is poor today (AQI ' + airQualityData.aqi + '). Limit outdoor activities.');\n}\n\n// Analyze noise levels\nif (noiseLevelData.decibels > 70) {\n  alerts.push('Noise levels are high (' + noiseLevelData.decibels + ' dB). Consider using ear protection.');\n}\n\nreturn [{\n  json: {\n    recommendations,\n    alerts\n  }\n}];"
+      },
+      "name": "AI-Powered Analysis",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "your-email@example.com",
+        "toEmail": "={{$json[\"userEmail\"] || \"user@example.com\"}}",
+        "subject": "Personal Health Recommendations and Environmental Alerts",
+        "text": "{{$json[\"recommendations\"].length ? 'Health Recommendations:\\n' + $json[\"recommendations\"].join('\\n') + '\\n\\n' : ''}}{{$json[\"alerts\"].length ? 'Environmental Alerts:\\n' + $json[\"alerts\"].join('\\n') : 'All environmental conditions are normal. Have a great day!'}}"
+      },
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        250
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "smtpCredentialsId"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "from": "+1234567890",
+        "to": "={{$json[\"userPhone\"] || \"+10000000000\"}}",
+        "message": "={{$json[\"alerts\"].length ? 'ALERT: ' + $json[\"alerts\"].join('; ') : 'No environmental alerts at this time.'}}"
+      },
+      "name": "Send SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        400
+      ],
+      "credentials": {
+        "twilioApi": {
+          "id": "twilioCredentialsId"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Fitness Tracker API": {
+      "main": [
+        [
+          {
+            "node": "AI-Powered Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sleep Data API": {
+      "main": [
+        [
+          {
+            "node": "AI-Powered Analysis",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Air Quality Sensor API": {
+      "main": [
+        [
+          {
+            "node": "AI-Powered Analysis",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Noise Level Sensor API": {
+      "main": [
+        [
+          {
+            "node": "AI-Powered Analysis",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "AI-Powered Analysis": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "ai-powered-personal-health-wellness-tracker"
+}
