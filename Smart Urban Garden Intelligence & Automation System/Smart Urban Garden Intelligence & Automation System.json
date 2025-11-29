@@ -1,0 +1,351 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "deviceId": "garden-soil-moisture-sensor-01",
+        "resource": "sensorData",
+        "options": {
+          "frequency": "5m"
+        }
+      },
+      "name": "Soil Moisture Sensor",
+      "type": "n8n-nodes-base.iotSensorGet",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "deviceId": "garden-camera-01",
+        "resource": "image",
+        "options": {
+          "interval": "10m"
+        }
+      },
+      "name": "Garden Camera",
+      "type": "n8n-nodes-base.iotCameraGet",
+      "typeVersion": 1,
+      "position": [
+        250,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.openweathermap.org/data/2.5/forecast",
+        "queryParameters": {
+          "q": "Urban City",
+          "appid": "={{$credentials.openWeatherMap.apiKey}}",
+          "units": "metric"
+        },
+        "options": {}
+      },
+      "name": "Weather Forecast API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        500
+      ],
+      "credentials": {
+        "openWeatherMapApi": {
+          "id": "1",
+          "name": "OpenWeatherMap API Credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const soilMoisture = items[0].json.moisture_level;\n\n// Extract weather forecast (next 12 hours average rainfall mm)\nconst forecastData = items[1].json.list.slice(0, 4);\nlet rainSum = 0;\nforecastData.forEach(entry => {\n  rainSum += entry.rain && entry.rain['3h'] ? entry.rain['3h'] : 0;\n});\n\n// Determine watering need\nconst shouldWater = soilMoisture < 30 && rainSum < 2;\n\nreturn [{ json: { shouldWater, soilMoisture, rainSum } }];"
+      },
+      "name": "Watering Decision Logic",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "deviceId": "garden-watering-system-01",
+        "action": "turnOn",
+        "duration": 300
+      },
+      "name": "Activate Watering System",
+      "type": "n8n-nodes-base.iotDeviceControl",
+      "typeVersion": 1,
+      "position": [
+        650,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: { \n  cameraImageUrl: items[0].json.imageUrl \n} }];"
+      },
+      "name": "Extract Camera Image URL",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "language": "en",
+        "model": "general-detection",
+        "imageUrl": "={{$json.cameraImageUrl}}"
+      },
+      "name": "Plant Health & Pest Detection AI",
+      "type": "n8n-nodes-base.aiVisionDetect",
+      "typeVersion": 1,
+      "position": [
+        650,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const detections = items[0].json.detections;\n\nconst pests = detections.filter(d => d.type === 'pest');\nconst plantIssues = detections.filter(d => d.type === 'disease' || d.type === 'nutrient_deficiency');\n\nlet alerts = [];\n\nif(pests.length > 0) {\n  alerts.push(`Detected pests: ${pests.map(p => p.name).join(', ')}`);\n}\n\nif(plantIssues.length > 0) {\n  alerts.push(`Plant health issues detected: ${plantIssues.map(i => i.name).join(', ')}`);\n}\n\nreturn [{ json: { alerts, pests, plantIssues } }];"
+      },
+      "name": "Analyze AI Detection Results",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const alerts = items[0].json.alerts;\nif(alerts.length === 0) {\n  return [];\n}\n\nconst messages = [];\nif(alerts.length > 0) {\n  messages.push(`SmartUrban Garden Alert:\\n${alerts.join('\\n')}`);\n}\n\nreturn [{ json: { message: messages.join('\\n') } }];"
+      },
+      "name": "Prepare Alert Message",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "garden-owner-chat-id",
+        "text": "={{$json.message}}"
+      },
+      "name": "Send Pest/Health Alerts",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        100
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "2",
+          "name": "Telegram API Credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const soilMoisture = items[0].json.soilMoisture;\nconst pests = items[1].json.pests;\nconst plantIssues = items[1].json.plantIssues;\n\nconst treatmentSchedule = [];\n\nif(pests.length > 0) {\n  treatmentSchedule.push({ type: 'eco-friendly pesticide', time: new Date(Date.now() + 3600 * 1000).toISOString() });\n}\nif(plantIssues.length > 0) {\n  treatmentSchedule.push({ type: 'natural fertilizer', time: new Date(Date.now() + 7200 * 1000).toISOString() });\n}\n\nreturn [{ json: { treatmentSchedule } }];"
+      },
+      "name": "Generate Treatment Schedule",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "garden-owner-chat-id",
+        "text": "={{'Eco-friendly treatment scheduled:\\n' + items[0].json.treatmentSchedule.map(t => `${t.type} at ${new Date(t.time).toLocaleTimeString()}`).join('\\n')}}"
+      },
+      "name": "Send Treatment Schedule Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "2",
+          "name": "Telegram API Credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const tips = [];\nconst soilMoisture = items[0].json.soilMoisture;\nconst pests = items[1].json.pests;\n\nif(soilMoisture < 30) {\n  tips.push('Soil moisture is low; consider watering soon.');\n} else if(soilMoisture > 70) {\n  tips.push('Soil moisture is high; avoid overwatering to prevent root rot.');\n} else {\n  tips.push('Soil moisture is optimal.');\n}\n\nif(pests.length > 0) {\n  tips.push('Watch for pest infestation; apply eco-friendly treatments promptly.');\n} else {\n  tips.push('No pests detected; keep monitoring regularly.');\n}\n\n\t// General seasonal tip\nconst currentMonth = new Date().getMonth() + 1;\nif(currentMonth >= 3 && currentMonth <= 5) {\n  tips.push('Spring is ideal for planting new herbs and vegetables.');\n} else if(currentMonth >= 6 && currentMonth <= 8) {\n  tips.push('Summer care: maintain hydration and provide shade if needed.');\n} else if(currentMonth >= 9 && currentMonth <= 11) {\n  tips.push('Prepare plants for autumn and cooler weather.');\n} else {\n  tips.push('Winter: protect plants from frost and reduce watering frequency.');\n}\n\nreturn [{ json: { tips: tips.join('\\n') } }];"
+      },
+      "name": "Generate Personalized Gardening Tips",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "garden-owner-chat-id",
+        "text": "={{$json.tips}}"
+      },
+      "name": "Send Gardening Tips",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        500
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "2",
+          "name": "Telegram API Credentials"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Soil Moisture Sensor": {
+      "main": [
+        [
+          {
+            "node": "Watering Decision Logic",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate Personalized Gardening Tips",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Weather Forecast API": {
+      "main": [
+        [
+          {
+            "node": "Watering Decision Logic",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Watering Decision Logic": {
+      "main": [
+        [
+          {
+            "node": "Activate Watering System",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Garden Camera": {
+      "main": [
+        [
+          {
+            "node": "Extract Camera Image URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Camera Image URL": {
+      "main": [
+        [
+          {
+            "node": "Plant Health & Pest Detection AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plant Health & Pest Detection AI": {
+      "main": [
+        [
+          {
+            "node": "Analyze AI Detection Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze AI Detection Results": {
+      "main": [
+        [
+          {
+            "node": "Prepare Alert Message",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate Treatment Schedule",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate Personalized Gardening Tips",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Prepare Alert Message": {
+      "main": [
+        [
+          {
+            "node": "Send Pest/Health Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Treatment Schedule": {
+      "main": [
+        [
+          {
+            "node": "Send Treatment Schedule Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Personalized Gardening Tips": {
+      "main": [
+        [
+          {
+            "node": "Send Gardening Tips",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
