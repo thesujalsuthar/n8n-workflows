@@ -1,0 +1,93 @@
+{
+  "studyPlanner": {
+    "features": {
+      "adaptiveScheduling": {
+        "studySessions": true,
+        "breaks": true,
+        "revisionTimings": true,
+        "criteria": [
+          "learnerProgress",
+          "energyLevels",
+          "deadlineUrgency"
+        ]
+      },
+      "integrations": {
+        "calendarApps": [
+          "Google Calendar",
+          "Apple Calendar",
+          "Outlook Calendar"
+        ]
+      },
+      "notifications": {
+        "personalizedReminders": true
+      },
+      "analytics": {
+        "progressTracking": true,
+        "energyLevelAnalysis": true,
+        "deadlineApproachAnalysis": true
+      }
+    },
+    "userData": {
+      "learnerProgress": {
+        "subjects": [],
+        "topics": [],
+        "completionPercentages": {}
+      },
+      "energyLevels": {
+        "timeOfDay": {},
+        "selfReportedScores": []
+      },
+      "deadlines": [
+        {
+          "subject": "",
+          "topic": "",
+          "deadlineDate": "",
+          "urgencyLevel": ""
+        }
+      ]
+    },
+    "schedulingEngine": {
+      "inputParameters": [
+        "learnerProgress",
+        "energyLevels",
+        "deadlineUrgency"
+      ],
+      "output": {
+        "sessionSchedule": [
+          {
+            "dateTime": "",
+            "sessionType": "study|break|revision",
+            "subject": "",
+            "topic": "",
+            "durationMinutes": 0
+          }
+        ]
+      }
+    },
+    "reminderSystem": {
+      "reminderTypes": [
+        "sessionStart",
+        "upcomingDeadline",
+        "progressCheck"
+      ],
+      "deliveryMethods": [
+        "pushNotification",
+        "email",
+        "sms"
+      ]
+    },
+    "progressAnalytics": {
+      "metricsTracked": [
+        "timeSpentPerSubject",
+        "completionRate",
+        "energyCorrelation",
+        "deadlineCompliance"
+      ],
+      "visualizations": [
+        "lineCharts",
+        "barGraphs",
+        "heatMaps"
+      ]
+    }
+  }
+}
