@@ -1,0 +1,318 @@
+{
+  "name": "Sustainable Travel Carbon Footprint and Offset Planner",
+  "nodes": [
+    {
+      "parameters": {
+        "mode": "manual",
+        "name": "Start"
+      },
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "properties": [
+          {
+            "name": "tripDistance",
+            "type": "number",
+            "default": 0,
+            "label": "Trip Distance (km)"
+          },
+          {
+            "name": "transportMode",
+            "type": "options",
+            "options": [
+              {
+                "name": "Car (petrol)",
+                "value": "car_petrol"
+              },
+              {
+                "name": "Car (diesel)",
+                "value": "car_diesel"
+              },
+              {
+                "name": "Bus",
+                "value": "bus"
+              },
+              {
+                "name": "Train",
+                "value": "train"
+              },
+              {
+                "name": "Domestic flight",
+                "value": "flight_domestic"
+              },
+              {
+                "name": "International flight",
+                "value": "flight_international"
+              },
+              {
+                "name": "Bicycle",
+                "value": "bicycle"
+              },
+              {
+                "name": "Walking",
+                "value": "walking"
+              }
+            ],
+            "default": "car_petrol",
+            "label": "Transport Mode"
+          },
+          {
+            "name": "tripType",
+            "type": "options",
+            "options": [
+              {
+                "name": "One-way",
+                "value": "oneway"
+              },
+              {
+                "name": "Return (round trip)",
+                "value": "return"
+              }
+            ],
+            "default": "return",
+            "label": "Trip Type"
+          },
+          {
+            "name": "numTravelers",
+            "type": "number",
+            "default": 1,
+            "label": "Number of Travelers"
+          }
+        ],
+        "options": {}
+      },
+      "name": "User Input",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const emissionFactors = {\n  car_petrol: 0.192,       // kg CO2 per km\n  car_diesel: 0.171,       // kg CO2 per km\n  bus: 0.105,\n  train: 0.041,\n  flight_domestic: 0.254,\n  flight_international: 0.195,\n  bicycle: 0.0,\n  walking: 0.0\n};\n\nconst tripDistance = parseFloat($input.item.json.tripDistance);\nconst transportMode = $input.item.json.transportMode;\nconst tripType = $input.item.json.tripType;\nconst numTravelers = parseInt($input.item.json.numTravelers);\n\n// Calculate distance based on trip type\nconst distanceMultiplier = tripType === 'return' ? 2 : 1;\n\n// Calculate emissions per person\nconst emissionFactor = emissionFactors[transportMode] || 0;\nconst totalEmissions = emissionFactor * tripDistance * distanceMultiplier * numTravelers; // total in kg CO2\n\nreturn [{ json: { totalEmissions, emissionFactor, tripDistance, tripType, numTravelers, transportMode } }];"
+      },
+      "name": "Calculate Carbon Footprint",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const totalEmissions = $input.item.json.totalEmissions;\n\n// Define sample carbon offset options with price per ton CO2\nconst offsetOptions = [\n  {\n    name: \"Plant Trees\",\n    description: \"Support reforestation projects to absorb CO2.\",\n    pricePerTonUSD: 10,\n    apiProductId: \"tree_planting\"\n  },\n  {\n    name: \"Renewable Energy Credits\",\n    description: \"Invest in renewable energy projects.\",\n    pricePerTonUSD: 15,\n    apiProductId: \"renewable_energy\"\n  },\n  {\n    name: \"Methane Capture\",\n    description: \"Reduce methane emissions from waste.\",\n    pricePerTonUSD: 20,\n    apiProductId: \"methane_capture\"\n  }\n];\n\n// Convert total emissions to tons\nconst emissionsTons = totalEmissions / 1000;\n\n// Calculate cost per option\nconst optionsWithCost = offsetOptions.map(option => {\n  return {\n    name: option.name,\n    description: option.description,\n    priceUSD: (option.pricePerTonUSD * emissionsTons).toFixed(2),\n    apiProductId: option.apiProductId\n  };\n});\n\nreturn [{ json: { optionsWithCost, emissionsTons, totalEmissions } }];"
+      },
+      "name": "Suggest Carbon Offset Options",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const travelMode = $input.item.json.transportMode;\n\n// Provide personalized sustainability tips based on transport mode\nconst tips = {\n  car_petrol: [\n    \"Carpool to reduce emissions per person.\",\n    \"Consider using a fuel-efficient or electric vehicle.\",\n    \"Maintain your vehicle regularly for better fuel economy.\"\n  ],\n  car_diesel: [\n    \"Try to combine trips to minimize driving.\",\n    \"Use diesel vehicles that meet the latest emission standards.\",\n    \"Consider alternative transport like bus or train.\"\n  ],\n  bus: [\n    \"Choose bus routes with higher passenger loads to maximize efficiency.\",\n    \"Support public transportation initiatives.\",\n    \"Consider off-peak travel to avoid congestion.\"\n  ],\n  train: [\n    \"Prefer electric trains when possible.\",\n    \"Bring reusable items to minimize waste during travel.\",\n    \"Plan trips around less crowded times to reduce energy use.\"\n  ],\n  flight_domestic: [\n    \"Travel direct flights to avoid extra takeoffs and landings.\",\n    \"Choose airlines with carbon offset programs.\",\n    \"Pack light to reduce aircraft weight and emissions.\"\n  ],\n  flight_international: [\n    \"Offset your flight emissions through verified programs.\",\n    \"Consider longer stay trips to reduce flight frequency.\",\n    \"Support airlines investing in sustainable aviation fuels.\"\n  ],\n  bicycle: [\n    \"Maintain your bicycle regularly for efficiency.\",\n    \"Use your bike for short trips to replace motorized transport.\",\n    \"Wear safety gear to ensure safe travel.\"\n  ],\n  walking: [\n    \"Choose safe and scenic walking routes.\",\n    \"Encourage walking groups for social and health benefits.\",\n    \"Wear comfortable footwear to prevent injury.\"\n  ]\n};\n\nreturn [{ json: { sustainabilityTips: tips[travelMode] || [] } }];"
+      },
+      "name": "Provide Sustainability Tips",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  This node expects input with fields:\n  - apiProductId (selected offset product id)\n  - emissionsTons\n  - priceUSD\n\n  This example assumes user selection comes in item.json.selectedOffsetProductId\n*/\n\nconst input = $input.all();\nconst offsetOptions = input.find(item => item.json.optionsWithCost).json.optionsWithCost;\nconst totalEmissions = input.find(item => item.json.totalEmissions).json.totalEmissions;\n\nconst selectedProductId = $input.item.json.selectedOffsetProductId;\n\n// Find selected product\nconst selectedOption = offsetOptions.find(opt => opt.apiProductId === selectedProductId);\n\nif (!selectedOption) {\n  throw new Error('Selected offset product id not found in options');\n}\n\nreturn [{ json: {\n  selectedOption,\n  totalEmissions,\n  message: `User selected to offset emissions with ${selectedOption.name} at cost $${selectedOption.priceUSD}`\n}}];"
+      },
+      "name": "Parse User Offset Selection",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.carbonoffsetprovider.com/purchase",
+        "method": "POST",
+        "responseFormat": "json",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={\n  \"product_id\": $json[\"selectedOption\"].apiProductId,\n  \"amount_ton_co2\": $json[\"totalEmissions\"] / 1000,\n  \"payment_method\": \"credit_card\",\n  \"user_details\": {\n    \"name\": \"={{$json[\"userName\"] || \"Traveler\"}}\",\n    \"email\": \"={{$json[\"userEmail\"] || \"user@example.com\"}}\"\n  }\n}"
+      },
+      "name": "Purchase Carbon Offset",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1550,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "1"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const currentDate = new Date().toISOString();\nconst totalEmissions = $input.item.json.totalEmissions;\nconst offsetUsed = $input.item.json.selectedOption ? $input.item.json.selectedOption.name : \"None\";\nconst offsetCost = $input.item.json.selectedOption ? $input.item.json.selectedOption.priceUSD : \"0\";\nconst transportMode = $input.item.json.transportMode || \"unknown\";\nconst numTravelers = $input.item.json.numTravelers || 1;\n\n// Create summary report\nconst report = {\n  date: currentDate,\n  transportMode: transportMode,\n  travelers: numTravelers,\n  totalEmissions_kgCO2: totalEmissions,\n  offsetUsed: offsetUsed,\n  offsetCostUSD: offsetCost,\n  message: `Trip emitted approx. ${totalEmissions.toFixed(2)} kg CO2. Offset option: ${offsetUsed} costing $${offsetCost} applied.`\n};\n\nreturn [{ json: report }];"
+      },
+      "name": "Generate Summary Report",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "binaryPropertyName": "",
+        "path": "carbon_footprint_reports.json",
+        "dataPropertyName": "data"
+      },
+      "name": "Save Report to File",
+      "type": "n8n-nodes-base.writeBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        2000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "text": "Your trip's estimated carbon footprint is {{$json[\"totalEmissions\"].toFixed(2)}} kg CO2. Suggested offset options include: {{$json[\"optionsWithCost\"].map(o => `${o.name} ($${o.priceUSD})`).join(', ')}}.\n\nPersonalized sustainability tips:\n{{$json[\"sustainabilityTips\"].map(tip => `- ${tip}`).join('\\n')}}\n\nYou can select an option to offset your emissions."
+      },
+      "name": "Send User Summary",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        520
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "User Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "User Input": {
+      "main": [
+        [
+          {
+            "node": "Calculate Carbon Footprint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Carbon Footprint": {
+      "main": [
+        [
+          {
+            "node": "Suggest Carbon Offset Options",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Provide Sustainability Tips",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Suggest Carbon Offset Options": {
+      "main": [
+        [
+          {
+            "node": "Send User Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Provide Sustainability Tips": {
+      "main": [
+        []
+      ]
+    },
+    "Send User Summary": {
+      "main": [
+        [
+          {
+            "node": "Parse User Offset Selection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse User Offset Selection": {
+      "main": [
+        [
+          {
+            "node": "Purchase Carbon Offset",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Purchase Carbon Offset": {
+      "main": [
+        [
+          {
+            "node": "Generate Summary Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Summary Report": {
+      "main": [
+        [
+          {
+            "node": "Save Report to File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Report to File": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
