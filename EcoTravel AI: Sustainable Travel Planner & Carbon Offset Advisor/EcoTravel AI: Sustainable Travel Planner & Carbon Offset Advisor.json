@@ -1,0 +1,261 @@
+{
+  "name": "EcoTravel AI: Sustainable Itinerary & Carbon Offset Planner",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "headerAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$credentials.travelApi.apiKey}}"
+        },
+        "url": "https://api.traveldata.com/v1/search",
+        "options": {},
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "origin",
+              "value": "={{$json.origin}}"
+            },
+            {
+              "name": "destination",
+              "value": "={{$json.destination}}"
+            },
+            {
+              "name": "departureDate",
+              "value": "={{$json.departureDate}}"
+            },
+            {
+              "name": "returnDate",
+              "value": "={{$json.returnDate}}"
+            }
+          ]
+        },
+        "responseFormat": "json"
+      },
+      "name": "Fetch Travel Options",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        250,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": "Travel API Credentials"
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "headerAuth": {
+          "name": "x-api-key",
+          "value": "={{$credentials.carbonApi.apiKey}}"
+        },
+        "url": "https://api.carbonfootprint.com/v1/calculate",
+        "options": {},
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "transportMode",
+              "value": "={{$json.transportMode}}"
+            },
+            {
+              "name": "distanceKm",
+              "value": "={{$json.distance}}"
+            }
+          ]
+        },
+        "responseFormat": "json"
+      },
+      "name": "Calculate Carbon Footprint",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        550,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": "Carbon API Credentials"
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "headerAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$credentials.offsetApi.apiToken}}"
+        },
+        "url": "https://api.carbonoffsetprojects.com/v1/projects",
+        "options": {},
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "maxResults",
+              "value": "5"
+            },
+            {
+              "name": "region",
+              "value": "={{$json.destinationRegion}}"
+            },
+            {
+              "name": "minRating",
+              "value": "4"
+            }
+          ]
+        },
+        "responseFormat": "json"
+      },
+      "name": "Fetch Carbon Offset Projects",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        850,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": "Carbon Offset API Credentials"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const travelOptions = items[0].json;\nconst carbonData = items[1].json;\nconst offsetProjects = items[2].json.projects;\n\nconst bestOptions = travelOptions.options.map(option => {\n  return {\n    transportMode: option.mode,\n    route: option.route,\n    distance: option.distanceKm,\n    carbonFootprint: carbonData[option.mode] || 0\n  };\n});\n\nreturn [{\n  json: {\n    itinerary: bestOptions,\n    offsetProjects: offsetProjects,\n    tips: [\n      \"Choose trains or buses over flights when possible.\",\n      \"Pack light to reduce carbon emissions.\",\n      \"Use reusable water bottles and minimize plastic use.\",\n      \"Offset your carbon footprint through verified projects.\"\n    ]\n  }\n}];"
+      },
+      "name": "Compile Sustainable Itinerary",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "ecotravel.ai@example.com",
+        "toEmail": "={{$json.email}}",
+        "subject": "Your Sustainable Travel Itinerary & Carbon Offset Plan",
+        "text": "Hello {{$json.name}},\n\nHere is your sustainable travel itinerary based on your preferences:\n\n{{$json.itinerary.map(i => `- Mode: ${i.transportMode}, Route: ${i.route}, Distance: ${i.distance} km, Estimated Carbon Footprint: ${i.carbonFootprint} kg CO2`).join('\\n')}}\n\nRecommended Carbon Offset Projects:\n{{$json.offsetProjects.map(p => `- ${p.name}: ${p.description} (Rating: ${p.rating}/5)`).join('\\n')}}\n\nSustainability Tips:\n{{$json.tips.map(tip => `- ${tip}`).join('\\n')}}\n\nSafe and eco-friendly travels!\nEcoTravel AI Team"
+      },
+      "name": "Send Sustainable Travel Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        300
+      ],
+      "credentials": {
+        "smtp": "EcoTravel SMTP Credentials"
+      }
+    },
+    {
+      "parameters": {
+        "schema": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "User's full name"
+            },
+            "email": {
+              "type": "string",
+              "description": "User's email address"
+            },
+            "origin": {
+              "type": "string",
+              "description": "Starting location"
+            },
+            "destination": {
+              "type": "string",
+              "description": "Trip destination"
+            },
+            "destinationRegion": {
+              "type": "string",
+              "description": "Destination region for offset project filtering"
+            },
+            "departureDate": {
+              "type": "string",
+              "format": "date",
+              "description": "Departure date"
+            },
+            "returnDate": {
+              "type": "string",
+              "format": "date",
+              "description": "Return date"
+            }
+          },
+          "required": [
+            "name",
+            "email",
+            "origin",
+            "destination",
+            "destinationRegion",
+            "departureDate",
+            "returnDate"
+          ]
+        }
+      },
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [
+        50,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Fetch Travel Options",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Travel Options": {
+      "main": [
+        [
+          {
+            "node": "Calculate Carbon Footprint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Carbon Footprint": {
+      "main": [
+        [
+          {
+            "node": "Fetch Carbon Offset Projects",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Carbon Offset Projects": {
+      "main": [
+        [
+          {
+            "node": "Compile Sustainable Itinerary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compile Sustainable Itinerary": {
+      "main": [
+        [
+          {
+            "node": "Send Sustainable Travel Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
