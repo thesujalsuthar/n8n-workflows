@@ -1,0 +1,331 @@
+{
+  "name": "EcoAware Daily Personalized Sustainability Tip Scheduler",
+  "nodes": [
+    {
+      "parameters": {
+        "functionCode": "return [\n  {\n    json: {\n      today: new Date().toISOString().slice(0, 10)\n    }\n  }\n];"
+      },
+      "name": "Set Current Date",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.openaq.org/v2/latest?city=Los Angeles&parameter=pm25",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": []
+        },
+        "queryParametersUi": {
+          "parameter": []
+        },
+        "responseFormat": "json",
+        "sendBody": "none"
+      },
+      "name": "Fetch Environmental Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.ecoaaware.com/user-preferences",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $credentials.EcoAwareApi.apiKey }}"
+            }
+          ]
+        },
+        "queryParametersUi": {
+          "parameter": []
+        },
+        "responseFormat": "json",
+        "sendBody": "none"
+      },
+      "name": "Get User Preferences",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        450,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const preferences = items[0].json;\nconst envData = items[1].json.results[0];\n\n// Extract PM2.5 value for air quality\nconst pm25 = envData && envData.measurements ? envData.measurements.find(m => m.parameter === 'pm25')?.value : null;\n\n// Determine environmental condition\nlet airQualityLevel = 'good';\nif (pm25 !== null) {\n  if (pm25 <= 12) airQualityLevel = 'good';\n  else if (pm25 <= 35.4) airQualityLevel = 'moderate';\n  else airQualityLevel = 'poor';\n}\n\n// Create tip categories based on preferences and air quality\nconst category = preferences.category || 'general';\n\n// Build tip message\nlet tip = '';\n\nif (category === 'energy') {\n  tip = 'Consider switching to energy-efficient LED bulbs to reduce electricity usage and your carbon footprint.';\n} else if (category === 'water') {\n  tip = 'Try reducing water waste by turning off taps while brushing your teeth.';\n} else if (category === 'waste') {\n  tip = 'Practice waste segregation to improve recycling efficiency in your area.';\n} else {\n  tip = 'Remember to use reusable bags while shopping to cut down on plastic waste.';\n}\n\n// Incorporate air quality info for relevance\nif (airQualityLevel === 'poor') {\n  tip += ' Also, since air quality is poor today, consider limiting outdoor activities to reduce exposure.';\n} else if (airQualityLevel === 'moderate') {\n  tip += ' The air quality is moderate today; consider wearing a mask if you have respiratory issues.';\n} else {\n  tip += ' Air quality is good today; it is a perfect day to enjoy nature responsibly!';\n}\n\nreturn [\n  {\n    json: {\n      email: preferences.email,\n      phone: preferences.phone,\n      preferredChannel: preferences.preferredChannel || 'email',\n      tipMessage: tip\n    }\n  }\n];"
+      },
+      "name": "Generate Personalized Tip",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        375
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "resource": "message",
+        "additionalFields": {},
+        "from": "no-reply@ecoaware.com",
+        "toEmail": "={{$json.email}}",
+        "subject": "Your Daily Sustainability Tip 🌿",
+        "text": "={{$json.tipMessage}}"
+      },
+      "name": "Send Email Notification",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        900,
+        275
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "from": "ECOAWARE",
+        "to": "={{$json.phone}}",
+        "text": "={{$json.tipMessage}}"
+      },
+      "name": "Send SMS Notification",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        900,
+        475
+      ],
+      "credentials": {
+        "twilioApi": {
+          "id": "1",
+          "name": "Twilio API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "if (items[0].json.preferredChannel === 'sms') {\n  return [null, items[0]];\n} else {\n  return [items[0], null];\n}"
+      },
+      "name": "Route by Preferred Channel",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        800,
+        375
+      ]
+    },
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 8,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Daily Trigger 8AM",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        50,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Daily Trigger 8AM": {
+      "main": [
+        [
+          {
+            "node": "Set Current Date",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Current Date": {
+      "main": [
+        [
+          {
+            "node": "Fetch Environmental Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get User Preferences",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Environmental Data": {
+      "main": [
+        []
+      ]
+    },
+    "Get User Preferences": {
+      "main": [
+        []
+      ]
+    },
+    "Fetch Environmental Data": {
+      "main": [
+        []
+      ]
+    },
+    "Get User Preferences": {
+      "main": [
+        []
+      ]
+    },
+    "Set Current Date": {
+      "main": [
+        []
+      ]
+    },
+    "Fetch Environmental Data": {
+      "main": [
+        []
+      ]
+    },
+    "Get User Preferences": {
+      "main": [
+        []
+      ]
+    },
+    "Generate Personalized Tip": {
+      "main": [
+        [
+          {
+            "node": "Route by Preferred Channel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Environmental Data": {
+      "main": [
+        []
+      ]
+    },
+    "Get User Preferences": {
+      "main": [
+        []
+      ]
+    },
+    "Set Current Date": {
+      "main": [
+        []
+      ]
+    },
+    "Fetch Environmental Data": {
+      "main": [
+        []
+      ]
+    },
+    "Get User Preferences": {
+      "main": [
+        []
+      ]
+    },
+    "Fetch Environmental Data": {
+      "main": [
+        []
+      ]
+    },
+    "Get User Preferences": {
+      "main": [
+        []
+      ]
+    },
+    "Set Current Date": {
+      "main": [
+        []
+      ]
+    },
+    "Fetch Environmental Data": {
+      "main": [
+        []
+      ]
+    },
+    "Get User Preferences": {
+      "main": [
+        []
+      ]
+    },
+    "Set Current Date": {
+      "main": [
+        [
+          {
+            "node": "Fetch Environmental Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get User Preferences",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Environmental Data": {
+      "main": [
+        [
+          {
+            "node": "Generate Personalized Tip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get User Preferences": {
+      "main": [
+        [
+          {
+            "node": "Generate Personalized Tip",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Route by Preferred Channel": {
+      "main": [
+        [
+          {
+            "node": "Send Email Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send SMS Notification",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
