@@ -1,0 +1,237 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "none",
+        "httpMethod": "GET",
+        "path": "start",
+        "responseMode": "onReceived",
+        "responseData": "={{$json}}",
+        "options": {}
+      },
+      "name": "Start",
+      "type": "n8n-nodes-base.httpTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const { origin, destination, constraints } = items[0].json;\n\n// Basic validation\nif (!origin || !destination) {\n  throw new Error('Origin and destination are required');\n}\n\nreturn [{ json: { origin, destination, constraints: constraints || {} } }];"
+      },
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.openrouteservice.org/v2/directions/foot-hiking",
+        "options": {},
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "start",
+              "value": "={{$json.origin.longitude}},{{$json.origin.latitude}}"
+            },
+            {
+              "name": "end",
+              "value": "={{$json.destination.longitude}},{{$json.destination.latitude}}"
+            }
+          ]
+        },
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "={{$credentials.openRouteServiceApi.apiKey}}"
+            }
+          ]
+        },
+        "responseFormat": "json",
+        "jsonParameters": false
+      },
+      "name": "Get Eco-friendly Route",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ],
+      "credentials": {
+        "openRouteServiceApi": {
+          "id": "1",
+          "name": "OpenRouteService API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const routeInfo = items[0].json.features[0];\n\n// Calculate approximate carbon emissions based on distance and travel mode (assume walking/hiking has near zero emissions)\n\nconst distanceMeters = routeInfo.properties.summary.distance;\nconst distanceKm = distanceMeters / 1000;\n\n// For demonstration: walking emissions ~0 g/km\nconst carbonEmissionsGrams = 0;\n\nreturn [{ json: { route: routeInfo, carbonEmissionsGrams, distanceKm } }];"
+      },
+      "name": "Estimate Carbon Emissions",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const distanceKm = items[0].json.distanceKm;\n\n// Assume $10 per ton CO2 offset cost\n// 1 ton = 1,000,000 grams\nconst costPerGram = 10 / 1000000;\nconst carbonOffsetCost = items[0].json.carbonEmissionsGrams * costPerGram;\n\n// For walking, zero emissions means no cost\n\nreturn [{ json: { carbonOffsetCost: carbonOffsetCost.toFixed(4), carbonOffsetOptions: [\n  {\n    option: 'Plant Trees',\n    description: 'Purchase tree planting offsets to compensate carbon footprint.',\n    estimatedCostUSD: carbonOffsetCost.toFixed(4)\n  },\n  {\n    option: 'Renewable Energy Credits',\n    description: 'Support renewable energy projects offsetting your travel carbon.',\n    estimatedCostUSD: carbonOffsetCost.toFixed(4)\n  }\n] } }];"
+      },
+      "name": "Calculate Carbon Offset Options",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "options": {},
+        "headers": {
+          "Authorization": "Bearer {{$credentials.openAIApi.apiKey}}",
+          "Content-Type": "application/json"
+        },
+        "bodyParametersJson": "={\n  \"model\": \"gpt-4\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You provide real-time sustainability travel tips.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": `Plan an eco-friendly trip from ${$json.origin.name || 'unknown origin'} to ${$json.destination.name || 'unknown destination'}. Provide practical sustainability tips during travel.`\n    }\n  ],\n  \"max_tokens\": 200\n}"
+      },
+      "name": "Get Sustainability Tips",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ],
+      "credentials": {
+        "openAIApi": {
+          "id": "2",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{\n  json: {\n    origin: items[0].json.origin,\n    destination: items[0].json.destination,\n    route: items[2].json.route,\n    distanceKm: items[3].json.distanceKm,\n    carbonEmissionsGrams: items[3].json.carbonEmissionsGrams,\n    carbonOffsetOptions: items[4].json.carbonOffsetOptions,\n    sustainabilityTips: items[5].json.choices[0].message.content\n  }\n}];"
+      },
+      "name": "Assemble Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "options": {},
+        "mode": "lastNode",
+        "output": "={{$json}}"
+      },
+      "name": "Respond",
+      "type": "n8n-nodes-base.httpResponse",
+      "typeVersion": 1,
+      "position": [
+        1650,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Get Eco-friendly Route",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Sustainability Tips",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Eco-friendly Route": {
+      "main": [
+        [
+          {
+            "node": "Estimate Carbon Emissions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Estimate Carbon Emissions": {
+      "main": [
+        [
+          {
+            "node": "Calculate Carbon Offset Options",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Carbon Offset Options": {
+      "main": [
+        [
+          {
+            "node": "Assemble Response",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Get Sustainability Tips": {
+      "main": [
+        [
+          {
+            "node": "Assemble Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assemble Response": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "EcoJourney_AI_Powered_Sustainable_Travel_Planner"
+}
