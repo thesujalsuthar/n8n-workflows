@@ -1,0 +1,180 @@
+{
+  "name": "EcoWearable: Real-Time Personal Environmental Exposure and Health Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "deviceId": "Your_Wearable_Device_ID",
+        "resource": "sensorData",
+        "operation": "getLatest",
+        "additionalFields": {},
+        "options": {}
+      },
+      "name": "Get Wearable Data",
+      "type": "n8n-nodes-base.wearableDevice",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.openaq.org/v2/latest",
+        "options": {
+          "queryParametersUi": {
+            "parameter": [
+              {
+                "name": "coordinates",
+                "value": "={{$json[\"wearableData\"][\"location\"]["latitude"]}},{{$json[\"wearableData\"][\"location\"]["longitude"]}}"
+              },
+              {
+                "name": "radius",
+                "value": "5000"
+              }
+            ]
+          }
+        },
+        "responseFormat": "json",
+        "httpMethod": "GET",
+        "jsonParameters": true
+      },
+      "name": "Get Local Air Quality Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        600,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.weather.com/v3/wx/conditions/current",
+        "options": {
+          "queryParametersUi": {
+            "parameter": [
+              {
+                "name": "geocode",
+                "value": "={{$json[\"wearableData\"][\"location\"][\"latitude\"]}},{{$json[\"wearableData\"][\"location\"][\"longitude\"]}}"
+              },
+              {
+                "name": "format",
+                "value": "json"
+              },
+              {
+                "name": "apiKey",
+                "value": "Your_Weather_API_Key"
+              }
+            ]
+          }
+        },
+        "responseFormat": "json",
+        "httpMethod": "GET",
+        "jsonParameters": true
+      },
+      "name": "Get Local Pollen and UV Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        600,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const wearable = $items(\"Get Wearable Data\")[0].json;\nconst airQuality = $items(\"Get Local Air Quality Data\")[0].json;\nconst envData = $items(\"Get Local Pollen and UV Data\")[0].json;\n\nfunction assessRisk(wearableData, airQualityData, envData) {\n  const heartRate = wearableData.heartRate || 70;\n  const uvExposure = wearableData.uvExposure || 0;\n  const airPollutionIndex = airQualityData.results[0]?.measurements.reduce((acc, m) => acc + m.value, 0) || 0;\n  const pollenCount = envData.pollenIndex || 0;\n  const uvIndex = envData.uvIndex || 0;\n\n  let riskScore = 0;\n\n  // Heart rate risk\n  if (heartRate > 100) riskScore += 2;\n  else if (heartRate > 85) riskScore += 1;\n\n  // Air pollution risk\n  if (airPollutionIndex > 100) riskScore += 3;\n  else if (airPollutionIndex > 50) riskScore += 1;\n\n  // Pollen risk\n  if (pollenCount > 50) riskScore += 2;\n\n  // UV exposure risk\n  if (uvExposure > 5 || uvIndex > 7) riskScore += 2;\n\n  return riskScore;\n}\n\nconst riskScore = assessRisk(wearable, airQuality, envData);\n\nlet alert = \"All clear. Environmental and health parameters are within normal limits.\";\nlet recommendations = \"No special actions needed.\";\n\nif (riskScore >= 6) {\n  alert = \"High health risk detected due to environmental exposure and physiological signs.\";\n  recommendations = \"Avoid outdoor activities, stay hydrated, and consider seeking medical advice.\";\n} else if (riskScore >= 3) {\n  alert = \"Moderate health risk detected.\";\n  recommendations = \"Minimize exposure, use protective gear like masks or sunscreen.\";\n} else if (riskScore > 0) {\n  alert = \"Low health risk detected.\";\n  recommendations = \"Stay aware and take preventive measures as appropriate.\";\n}\n\nreturn [{json: {alert, recommendations, riskScore}}];"
+      },
+      "name": "AI Health Risk Assessment",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ],
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "fromEmail": "alerts@ecowearable.com",
+        "toEmail": "={{$json[\"userEmail\"] || \"user@example.com\"}}",
+        "subject": "EcoWearable Health Alert",
+        "text": "={{\"Alert: \" + $json[\"alert\"] + \"\\n\\nRecommendations: \" + $json[\"recommendations\"]}}"
+      },
+      "name": "Send Email Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "to": "={{$json[\"userPhone\"] || \"+1234567890\"}}",
+        "message": "={{\"EcoWearable Alert: \" + $json[\"alert\"] + \". Recommendations: \" + $json[\"recommendations\"]}}"
+      },
+      "name": "Send SMS Alert",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        350
+      ]
+    }
+  ],
+  "connections": {
+    "Get Wearable Data": {
+      "main": [
+        [
+          {
+            "node": "Get Local Air Quality Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Local Pollen and UV Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Local Air Quality Data": {
+      "main": [
+        [
+          {
+            "node": "AI Health Risk Assessment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Local Pollen and UV Data": {
+      "main": [
+        [
+          {
+            "node": "AI Health Risk Assessment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Health Risk Assessment": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send SMS Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
