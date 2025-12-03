@@ -1,0 +1,160 @@
+{
+  "name": "Sustainable Grocery Assistant with Carbon Footprint Insights",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "groceries/plan",
+        "responseMode": "lastNode",
+        "responseData": "allEntries"
+      },
+      "name": "Webhook - Plan Groceries",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "lookup",
+        "query": "={{ $json[\"productName\"] }}",
+        "resource": "product",
+        "options": {}
+      },
+      "name": "Carbon Footprint Lookup",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "1",
+          "name": "CarbonFootprintAPI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const product = $json;\nconst carbonData = items[0].json;\n\n// Example carbon footprint data in kg CO2e per unit\nlet footprint = carbonData.carbon_footprint || null;\n\n// Fallback if no data found\nif (!footprint) {\n  footprint = 1.0; // default footprint\n}\n\n// Determine sustainability score by footprint threshold\nconst sustainabilityScore = footprint < 1 ? 'High' : (footprint < 3 ? 'Medium' : 'Low');\n\nreturn [{\n  json: {\n    productName: product.productName,\n    quantity: product.quantity || 1,\n    carbonFootprintPerUnit: footprint,\n    totalFootprint: footprint * (product.quantity || 1),\n    sustainabilityScore,\n  }\n}];"
+      },
+      "name": "Evaluate Product Footprint",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const footprint = $json.totalFootprint;\n\n// Prepare sustainable alternatives mock\nconst alternatives = [\n  {\n    name: 'Organic ' + $json.productName,\n    carbonFootprintPerUnit: footprint * 0.6,\n    sustainabilityScore: 'High'\n  },\n  {\n    name: 'Local ' + $json.productName,\n    carbonFootprintPerUnit: footprint * 0.5,\n    sustainabilityScore: 'High'\n  }\n];\n\nreturn [{\n  json: {\n    ...$json,\n    sustainableAlternatives: alternatives\n  }\n}];"
+      },
+      "name": "Suggest Alternatives",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "resource": "database",
+        "collection": "grocery_footprint",
+        "upsertKey": "userId",
+        "dataToSend": "={{{\n  userId: $json.userId || 'anonymous',\n  date: new Date().toISOString().slice(0,10),\n  footprintTotal: $json.totalFootprint\n}}}",
+        "options": {}
+      },
+      "name": "Track Footprint Over Time",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        300
+      ],
+      "credentials": {
+        "mongoDb": {
+          "id": "2",
+          "name": "MongoDB Atlas"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{\n  json: {\n    message: 'Grocery product processed',\n    product: {\n      name: $json.productName,\n      quantity: $json.quantity || 1,\n      carbonFootprintPerUnit: $json.carbonFootprintPerUnit,\n      totalCarbonFootprint: $json.totalFootprint,\n      sustainabilityScore: $json.sustainabilityScore,\n      sustainableAlternatives: $json.sustainableAlternatives\n    }\n  }\n}];"
+      },
+      "name": "Format Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook - Plan Groceries": {
+      "main": [
+        [
+          {
+            "node": "Carbon Footprint Lookup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Carbon Footprint Lookup": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Product Footprint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Product Footprint": {
+      "main": [
+        [
+          {
+            "node": "Suggest Alternatives",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Suggest Alternatives": {
+      "main": [
+        [
+          {
+            "node": "Track Footprint Over Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Track Footprint Over Time": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
