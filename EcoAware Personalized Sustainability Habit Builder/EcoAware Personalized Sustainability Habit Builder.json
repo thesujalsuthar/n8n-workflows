@@ -1,0 +1,202 @@
+{
+  "name": "EcoAware: AI-Driven Personalized Sustainability Tips & Habit Motivation",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "registerUser",
+        "options": {}
+      },
+      "name": "User Registration Trigger",
+      "type": "n8n-nodes-base.httpTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const user = {\n  id: $json.userId || $json.id || $json.email,\n  name: $json.name || \"User\",\n  email: $json.email || null,\n  preferences: {\n    focusAreas: $json.focusAreas || [\"energy\", \"water\", \"waste\"],\n    habitLevel: $json.habitLevel || \"beginner\",\n    notificationTime: $json.notificationTime || \"08:00\",\n    location: $json.location || \"\"\n  }\n};\nreturn [{ json: user }];"
+      },
+      "name": "Parse and Normalize User Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "resource": "document",
+        "collection": "users",
+        "data": "={{$json}}",
+        "filter": {
+          "id": "={{$json.id}}"
+        }
+      },
+      "name": "Store User Data",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ],
+      "credentials": {
+        "mongoDb": "MongoDB EcoAware"
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "dailyTip",
+        "options": {}
+      },
+      "name": "Daily Tip HTTP Trigger",
+      "type": "n8n-nodes-base.httpTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "find",
+        "resource": "document",
+        "collection": "users",
+        "filters": {
+          "id": "={{$json.userId || $json.id || $json.email}}"
+        }
+      },
+      "name": "Retrieve User Preferences",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        450,
+        600
+      ],
+      "credentials": {
+        "mongoDb": "MongoDB EcoAware"
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://api.openweathermap.org/data/2.5/air_quality?lat={{$json.preferences.location.latitude}}&lon={{$json.preferences.location.longitude}}&appid={{$credentials.openWeather.apiKey}}",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Fetch Local Environmental Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        650,
+        600
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "OpenWeather API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const focusAreas = $json.preferences.focusAreas;\nconst habitLevel = $json.preferences.habitLevel;\nconst airQuality = $json.quality || 50;\n\n// Simple logic to pick tip category based on air quality\nlet tipCategory = 'general';\nif (focusAreas.includes('air') && airQuality > 100) {\n  tipCategory = 'air';\n} else if (focusAreas.includes('energy')) {\n  tipCategory = 'energy';\n} else if (focusAreas.includes('water')) {\n  tipCategory = 'water';\n} else if (focusAreas.includes('waste')) {\n  tipCategory = 'waste';\n}\n\nconst tips = {\n  air: [\n    \"Reduce car use to lower air pollutants.\",\n    \"Use air purifiers during high pollution days.\",\n    \"Plant indoor plants that improve air quality.\"\n  ],\n  energy: [\n    \"Turn off unused electronics to save energy.\",\n    \"Switch to LED bulbs.\",\n    \"Unplug chargers when not in use to reduce standby power drain.\"\n  ],\n  water: [\n    \"Fix leaking taps promptly.\",n    \"Take shorter showers.\",n    \"Use rainwater for gardening.\"\n  ],\n  waste: [\n    \"Compost organic waste instead of throwing it away.\",\n    \"Bring reusable bags to reduce plastic waste.\",\n    \"Recycle paper and plastics where possible.\"\n  ],\n  general: [\n    \"Walk or bike instead of using motor vehicles.\",\n    \"Support local sustainable brands.\",\n    \"Avoid single-use plastics.\"\n  ]\n};\n\nconst habitMotivation = {\n  beginner: [\n    \"Start small: pick one tip today to try!\",\n    \"Every small step counts towards a greener planet.\",\n    \"You're doing great by caring about the environment!\"\n  ],\n  intermediate: [\n    \"Keep up the good work, try integrating another tip!\",\n    \"Challenge yourself: make sustainable choices a habit.\",\n    \"Your commitment inspires others.\"\n  ],\n  advanced: [\n    \"Lead by example, motivate your community!\",\n    \"Consider teaching others your sustainable habits.\",\n    \"Keep pushing boundaries for environmental impact.\"\n  ]\n};\n\nfunction randomFromArray(arr) {\n  return arr[Math.floor(Math.random() * arr.length)];\n}\n\nconst tip = randomFromArray(tips[tipCategory]);\nconst motivation = randomFromArray(habitMotivation[habitLevel] || habitMotivation['beginner']);\n\nreturn [{\n  json: {\n    tipCategory,\n    tip,\n    motivation\n  }\n}];"
+      },
+      "name": "Generate Personalized Tip & Motivation",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "respond",
+        "responseData": "={{$json}}",
+        "options": {}
+      },
+      "name": "Respond with Daily Tip & Motivation",
+      "type": "n8n-nodes-base.httpResponse",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        600
+      ]
+    }
+  ],
+  "connections": {
+    "User Registration Trigger": {
+      "main": [
+        [
+          {
+            "node": "Parse and Normalize User Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse and Normalize User Data": {
+      "main": [
+        [
+          {
+            "node": "Store User Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Tip HTTP Trigger": {
+      "main": [
+        [
+          {
+            "node": "Retrieve User Preferences",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retrieve User Preferences": {
+      "main": [
+        [
+          {
+            "node": "Fetch Local Environmental Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Local Environmental Data": {
+      "main": [
+        [
+          {
+            "node": "Generate Personalized Tip & Motivation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Personalized Tip & Motivation": {
+      "main": [
+        [
+          {
+            "node": "Respond with Daily Tip & Motivation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "id": "ecoa_ware_workflow_001"
+}
