@@ -1,0 +1,306 @@
+{
+  "name": "Quantum Computing Research Paper Aggregator and Summary Generator",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "http://export.arxiv.org/api/query",
+        "method": "GET",
+        "options": {},
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "search_query",
+              "value": "all:quantum+computing"
+            },
+            {
+              "name": "start",
+              "value": "0"
+            },
+            {
+              "name": "max_results",
+              "value": "20"
+            },
+            {
+              "name": "sortBy",
+              "value": "lastUpdatedDate"
+            },
+            {
+              "name": "sortOrder",
+              "value": "descending"
+            }
+          ]
+        }
+      },
+      "name": "Fetch arXiv Papers",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "credential": "IEEE Xplore API",
+        "url": "https://ieeexploreapi.ieee.org/api/v1/search/articles",
+        "method": "GET",
+        "options": {},
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "querytext",
+              "value": "quantum computing"
+            },
+            {
+              "name": "max_records",
+              "value": "20"
+            },
+            {
+              "name": "sort_order",
+              "value": "desc"
+            },
+            {
+              "name": "sort_field",
+              "value": "publication_year"
+            }
+          ]
+        }
+      },
+      "name": "Fetch IEEE Xplore Papers",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const parseString = require('xml2js').parseString;\n\n// Parse the Atom XML response from arXiv\nreturn new Promise((resolve, reject) => {\n  parseString(items[0].json, (err, result) => {\n    if (err) {\n      reject(err);\n    }\n    else {\n      const entries = result.feed.entry || [];\n      const papers = entries.map(entry => {\n        return {\n          id: entry.id[0],\n          title: entry.title[0].trim(),\n          abstract: entry.summary[0].trim(),\n          published: entry.published[0],\n          authors: entry.author.map(a => a.name[0]).join(\", \")\n        };\n      });\n      resolve(papers);\n    }\n  });\n});"
+      },
+      "name": "Parse arXiv Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ],
+      "notesInFlow": true,
+      "notes": "Parses XML response from arXiv into JSON array of paper objects"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Extract relevant data from IEEE Xplore API response\nconst articles = items[0].json.articles || [];\n\nconst papers = articles.map(article => {\n  return {\n    id: article.articleNumber || article.doi || \"\",\n    title: article.title || \"\",\n    abstract: article.abstract || \"\",\n    published: article.publicationYear ? article.publicationYear.toString() : \"\",\n    authors: article.authors ? article.authors.map(a => a.full_name).join(\", \") : \"\"\n  };\n});\n\nreturn papers;"
+      },
+      "name": "Parse IEEE Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const papersArxiv = items[0];\nconst papersIEEE = items[1];\n\n// Combine both arrays\nconst allPapers = [...papersArxiv, ...papersIEEE];\n\nreturn allPapers;"
+      },
+      "name": "Combine Papers",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        700,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "resource": "text",
+        "operation": "chatCompletion",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are a helpful assistant that summarizes research paper abstracts and key findings."
+          },
+          {
+            "role": "user",
+            "content": "Summarize the following quantum computing research papers abstracts and highlight key findings:\n\n{{$json[\"title\"]}}:\n{{$json[\"abstract\"]}}\n\n"
+          }
+        ],
+        "options": {},
+        "additionalFields": {}
+      },
+      "name": "Summarize Papers",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        900,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const summaries = items.map(item => `Title: ${item.json.title}\\nSummary: ${item.json.choices[0].message.content}\\n`);\n\nconst report = `Quantum Computing Research Papers Summary\\n\\n` + summaries.join('\\n---\\n');\n\nreturn [{ json: { report } }];"
+      },
+      "name": "Generate Report",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "your-email@example.com",
+        "toEmail": "recipient@example.com",
+        "subject": "Quantum Computing Research Papers Summary",
+        "text": "={{$json[\"report\"]}}"
+      },
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "channel": "your-slack-channel-id",
+        "text": "={{$json[\"report\"]}}"
+      },
+      "name": "Send Slack Message",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 8,
+              "minute": 0
+            }
+          ]
+        },
+        "triggerOn": "weekday"
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        50,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch arXiv Papers",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch IEEE Xplore Papers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch arXiv Papers": {
+      "main": [
+        [
+          {
+            "node": "Parse arXiv Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch IEEE Xplore Papers": {
+      "main": [
+        [
+          {
+            "node": "Parse IEEE Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse arXiv Response": {
+      "main": [
+        [
+          {
+            "node": "Combine Papers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse IEEE Response": {
+      "main": [
+        [
+          {
+            "node": "Combine Papers",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Combine Papers": {
+      "main": [
+        [
+          {
+            "node": "Summarize Papers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize Papers": {
+      "main": [
+        [
+          {
+            "node": "Generate Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Report": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Slack Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "quantum-computing-research-paper-aggregator-and-summary-generator"
+}
