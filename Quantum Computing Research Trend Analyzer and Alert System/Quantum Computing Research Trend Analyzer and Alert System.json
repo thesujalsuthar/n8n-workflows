@@ -1,0 +1,236 @@
+{
+  "name": "Quantum Computing Research Trend Analyzer and Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "http://export.arxiv.org/api/query?search_query=all:quantum+computing&start=0&max_results=50&sortBy=submittedDate&sortOrder=descending",
+        "responseFormat": "string",
+        "options": {}
+      },
+      "name": "Fetch arXiv Papers",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://ieeexploreapi.ieee.org/api/v1/search/articles?querytext=quantum%20computing&max_records=50&sort_order=desc&apikey={{$credentials.IEEE_API.apiKey}}",
+        "responseFormat": "json",
+        "options": {},
+        "authentication": "headerAuth",
+        "headerAuth": {
+          "name": "apiKey",
+          "value": "={{$credentials.IEEE_API.apiKey}}"
+        }
+      },
+      "name": "Fetch IEEE Xplore Papers",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const parseString = require('xml2js').parseStringPromise;\n\nasync function parseArxivData(xmlData) {\n  try {\n    const result = await parseString(xmlData);\n    const entries = (result.feed.entry || []).map(entry => {\n      return {\n        title: entry.title[0].trim(),\n        summary: entry.summary[0].trim(),\n        published: entry.published[0],\n        authors: entry.author.map(a => a.name[0]),\n        link: entry.id[0]\n      };\n    });\n    return entries;\n  } catch (error) {\n    return [];\n  }\n}\n\nreturn parseArxivData(items[0].json.body).then(data => ({json: {papers: data}}));"
+      },
+      "name": "Parse arXiv XML",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const ieeeArticles = items[0].json.articles || [];\n\nconst papers = ieeeArticles.map(article => {\n  return {\n    title: article.title,\n    summary: article.abstract || '',\n    published: article.publication_date || article.sort_date || '',\n    authors: article.authors ? article.authors.map(a => a.full_name) : [],\n    link: article.pdf_url || article.document_link || ''\n  };\n});\nreturn [{json: {papers}}];"
+      },
+      "name": "Parse IEEE JSON",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const arxivPapers = items[0].json.papers || [];\nconst ieeePapers = items[1].json.papers || [];\n\n// Merge and remove duplicates by title\nconst map = new Map();\n[...arxivPapers, ...ieeePapers].forEach(paper => {\n  if (!map.has(paper.title)) {\n    map.set(paper.title, paper);\n  }\n});\nconst mergedPapers = Array.from(map.values());\n\nreturn [{json: {mergedPapers}}];"
+      },
+      "name": "Merge Paper Lists",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const nlp = require('compromise');\n\nfunction extractTrends(papers) {\n  const topicFreq = {};\n\n  papers.forEach(paper => {\n    const text = (paper.title + ' ' + paper.summary).toLowerCase();\n\n    // Simple NLP: extract nouns and noun-phrases\n    const doc = nlp(text);\n    const nouns = doc.nouns().out('frequency');\n\n    nouns.forEach(item => {\n      if (item.normal.length > 2) {\n        topicFreq[item.normal] = (topicFreq[item.normal] || 0) + item.count;\n      }\n    });\n  });\n\n  // Sort topics by frequency\n  const sortedTopics = Object.entries(topicFreq)\n    .sort((a, b) => b[1] - a[1])\n    .slice(0, 10)\n    .map(e => e[0]);\n\n  return sortedTopics;\n}\n\nconst trends = extractTrends(items[0].json.mergedPapers);\nreturn [{json: {trendingTopics: trends}}];"
+      },
+      "name": "Analyze Trends with NLP",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const papers = items[0].json.mergedPapers;\nconst trends = items[1].json.trendingTopics;\n\nfunction summarizePapers(papers, trends) {\n  const trendSummaries = trends.map(trend => {\n    const relatedPapers = papers.filter(p => {\n      const text = (p.title + ' ' + p.summary).toLowerCase();\n      return text.includes(trend);\n    });\n\n    const titles = relatedPapers.slice(0, 3).map(p => `- ${p.title}`);\n\n    return `Trend: \"${trend}\"\nRelated Papers:\n${titles.join('\\n')}\n`;\n  });\n\n  return trendSummaries.join('\\n\\n');\n}\n\nconst summary = summarizePapers(papers, trends);\n\nreturn [{json: {summary}}];"
+      },
+      "name": "Summarize Key Insights",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "research-alerts@yourdomain.com",
+        "toEmail": "={{$json[\"userEmail\"] || $credentials.Email.email}}",
+        "subject": "Quantum Computing Research Trends Report",
+        "text": "={{$json[\"summary\"]}}",
+        "options": {}
+      },
+      "name": "Send Email Notification",
+      "type": "emailSend",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        100
+      ],
+      "credentials": {
+        "email": {
+          "id": "your-email-credential-id"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "#quantum-research",
+        "text": "={{`Quantum Computing Research Trends Report:\n\n${$json[\"summary\"]}`}}",
+        "options": {}
+      },
+      "name": "Send Slack Notification",
+      "type": "slack",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        300
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "your-slack-credential-id"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Fetch arXiv Papers": {
+      "main": [
+        [
+          {
+            "node": "Parse arXiv XML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch IEEE Xplore Papers": {
+      "main": [
+        [
+          {
+            "node": "Parse IEEE JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse arXiv XML": {
+      "main": [
+        [
+          {
+            "node": "Merge Paper Lists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse IEEE JSON": {
+      "main": [
+        [
+          {
+            "node": "Merge Paper Lists",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Paper Lists": {
+      "main": [
+        [
+          {
+            "node": "Analyze Trends with NLP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Trends with NLP": {
+      "main": [
+        [
+          {
+            "node": "Summarize Key Insights",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Paper Lists": {
+      "main": [
+        [
+          {
+            "node": "Summarize Key Insights",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize Key Insights": {
+      "main": [
+        [
+          {
+            "node": "Send Email Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Slack Notification",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
