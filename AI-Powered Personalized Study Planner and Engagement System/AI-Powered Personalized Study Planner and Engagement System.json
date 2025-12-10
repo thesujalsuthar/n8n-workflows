@@ -1,0 +1,353 @@
+{
+  "name": "AI-Driven Personalized Study Planner for Proactive Skill Development",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "headerAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$credentials.aiApi.key}}"
+        },
+        "requestMethod": "POST",
+        "url": "https://api.example-ai.com/v1/skill-assessment",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={\n  \"userData\": $json.userProfile\n}"
+      },
+      "name": "AI Skill Assessment",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        150,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "headerAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$credentials.googleCalendarApi.key}}"
+        },
+        "requestMethod": "GET",
+        "url": "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+        "queryParameters": [
+          {
+            "name": "timeMin",
+            "value": "={{new Date().toISOString()}}"
+          },
+          {
+            "name": "maxResults",
+            "value": "10"
+          },
+          {
+            "name": "singleEvents",
+            "value": "true"
+          },
+          {
+            "name": "orderBy",
+            "value": "startTime"
+          }
+        ]
+      },
+      "name": "Fetch Calendar Events",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        150,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const skillGaps = [];\nconst assessment = items[0].json.assessmentResults || {};\nconst targetSkills = assessment.skillsToDevelop || [];\nfor (const skill of targetSkills) {\n  skillGaps.push({ skill, priority: assessment.skillPriority[skill] || 1 });\n}\nskillGaps.sort((a, b) => b.priority - a.priority);\nreturn [{ json: { skillGaps } }];"
+      },
+      "name": "Identify Skill Gaps",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        350,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "headerAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$credentials.learningPlatformsApi.key}}"
+        },
+        "queryParameters": [
+          {
+            "name": "skills",
+            "value": "={{$json.skillGaps.map(gap => gap.skill).join(',')}}"
+          },
+          {
+            "name": "limit",
+            "value": "5"
+          }
+        ],
+        "requestMethod": "GET",
+        "url": "https://api.learningplatforms.com/v1/recommendations"
+      },
+      "name": "Fetch Learning Resources",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        550,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const events = items[0].json.items || [];\nconst skillSessions = [];\nlet scheduledCount = 0;\nconst maxDailySessions = 2;\nconst skillGaps = items[1].json.skillGaps || [];\nconst now = new Date();\n\n// Simple logic to suggest free slots in next 7 days\nfunction isFree(time) {\n  for (const event of events) {\n    const start = new Date(event.start.dateTime || event.start.date);\n    const end = new Date(event.end.dateTime || event.end.date);\n    if (time >= start && time < end) return false;\n  }\n  return true;\n}\n\nfor (let dayOffset = 1; dayOffset <= 7; dayOffset++) {\n  if (scheduledCount >= maxDailySessions * 7) break;\n  const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + dayOffset, 9, 0, 0);\n  for (let hour = 9; hour <= 17; hour += 2) {\n    if (scheduledCount >= maxDailySessions * 7) break;\n    const sessionTime = new Date(day.getFullYear(), day.getMonth(), day.getDate(), hour, 0, 0);\n    if (isFree(sessionTime)) {\n      const skill = skillGaps[scheduledCount % skillGaps.length]?.skill || \"General Skill\";\n      skillSessions.push({\n        summary: `Study Session: ${skill}`,\n        start: sessionTime.toISOString(),\n        end: new Date(sessionTime.getTime() + 60 * 60 * 1000).toISOString()\n      });\n      scheduledCount++;\n    }\n  }\n}\nreturn [{ json: { skillSessions } }];"
+      },
+      "name": "Schedule Learning Sessions",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "headerAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$credentials.googleCalendarApi.key}}"
+        },
+        "requestMethod": "POST",
+        "url": "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={\n  \"summary\": $json.skillSessions[$itemIndex].summary,\n  \"start\": { \"dateTime\": $json.skillSessions[$itemIndex].start },\n  \"end\": { \"dateTime\": $json.skillSessions[$itemIndex].end }\n}"
+      },
+      "name": "Add Events to Calendar",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        950,
+        300
+      ],
+      "maxTries": 3,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "functionCode": "const resources = items[0].json.resources || [];\nconst sessions = items[1].json.skillSessions || [];\n\nreturn [{ json: { resources, sessions } }];"
+      },
+      "name": "Merge Sessions and Resources",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "no-reply@studyplanner.ai",
+        "toEmail": "={{$json.userProfile.email}}",
+        "subject": "Your Personalized Study Plan and Learning Resources",
+        "text": "Hello {{$json.userProfile.name}},\n\nBased on your recent skill assessment, we have identified key areas for your skill development.\n\nYour scheduled learning sessions:\n{{$json.sessions.map(s => `- ${s.summary} on ${new Date(s.start).toLocaleString()}`).join('\\n')}}\n\nRecommended learning resources:\n{{$json.resources.map(r => `- ${r.title}: ${r.link}`).join('\\n')}}\n\nStay motivated and keep progressing!\n\nBest,\nAI-Driven Study Planner",
+        "replyTo": ""
+      },
+      "name": "Send Study Plan Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const now = new Date();\nconst reminders = [];\nconst sessions = items[0].json.skillSessions || [];\n\nfor (const session of sessions) {\n  const startTime = new Date(session.start);\n  const reminderTime = new Date(startTime.getTime() - 15 * 60000); // 15 mins before\n  if (reminderTime > now) {\n    reminders.push({\n      to: $json.userProfile.email,\n      message: `Reminder: Upcoming study session '${session.summary}' starts at ${startTime.toLocaleTimeString()}`,\n      sendAt: reminderTime.toISOString()\n    });\n  }\n}\nreturn reminders.map(r => ({ json: r }));"
+      },
+      "name": "Prepare Motivational Reminders",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        1550,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const now = new Date();\nconst reminder = items[0].json;\nif (new Date(reminder.sendAt) <= now) {\n  return [{ json: reminder }];\n}\nreturn [];"
+      },
+      "name": "Filter Due Reminders",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        1750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "to": "={{$json.to}}",
+        "message": "={{$json.message}}"
+      },
+      "name": "Send Reminder Notification",
+      "type": "n8n-nodes-base.notification",
+      "typeVersion": 1,
+      "position": [
+        1950,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: { userProfile: { name: 'User', email: 'user@example.com', currentSkills: ['JavaScript', 'HTML'], learningPreferences: { dailyHours: 2 } } } }];"
+      },
+      "name": "Dummy User Profile",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        50,
+        250
+      ]
+    }
+  ],
+  "connections": {
+    "Dummy User Profile": {
+      "main": [
+        [
+          {
+            "node": "AI Skill Assessment",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Calendar Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Skill Assessment": {
+      "main": [
+        [
+          {
+            "node": "Identify Skill Gaps",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Calendar Events": {
+      "main": [
+        [
+          {
+            "node": "Schedule Learning Sessions",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Identify Skill Gaps": {
+      "main": [
+        [
+          {
+            "node": "Fetch Learning Resources",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Schedule Learning Sessions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Learning Resources": {
+      "main": [
+        [
+          {
+            "node": "Merge Sessions and Resources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Learning Sessions": {
+      "main": [
+        [
+          {
+            "node": "Add Events to Calendar",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge Sessions and Resources",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "Prepare Motivational Reminders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Events to Calendar": {
+      "main": [
+        []
+      ]
+    },
+    "Merge Sessions and Resources": {
+      "main": [
+        [
+          {
+            "node": "Send Study Plan Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Motivational Reminders": {
+      "main": [
+        [
+          {
+            "node": "Filter Due Reminders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Due Reminders": {
+      "main": [
+        [
+          {
+            "node": "Send Reminder Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Study Plan Email": {
+      "main": [
+        []
+      ]
+    },
+    "Send Reminder Notification": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
