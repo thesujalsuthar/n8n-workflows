@@ -1,0 +1,309 @@
+{
+  "name": "AI-Driven Personal Carbon Footprint and Sustainable Behavior Tracker",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 8,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        200,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "name": "Request User Input",
+      "type": "n8n-nodes-base.httpIn",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ],
+      "webhookId": "user-activity-input",
+      "webhookPath": "user-activity-input",
+      "httpMethod": "POST"
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  This function formats the received activity and consumption data into\n  a structured payload suitable for the carbon footprint API.\n*/\nconst input = $json;\n\n// Normalize input: expect an array of activities with { type, amount, unit, description }\n// Example: [{type: 'car_travel', amount: 20, unit: 'km'}]\n\nconst formatDataForAPI = (activities) => {\n  return activities.map(activity => {\n    return {\n      activity_type: activity.type || \"\",\n      amount: activity.amount || 0,\n      unit: activity.unit || \"\",\n      description: activity.description || \"\"\n    };\n  });\n};\n\nreturn [{ json: { activities: formatDataForAPI(input.activities || []) } }];"
+      },
+      "name": "Format Input Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.carboninterface.com/v1/estimates",
+        "options": {},
+        "headers": {
+          "content-type": "application/json",
+          "Authorization": "Bearer YOUR_CARBONINTERFACE_API_KEY"
+        },
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "type",
+              "value": "custom"
+            },
+            {
+              "name": "parameters.activities",
+              "value": "={{$json[\"activities\"]}}"
+            }
+          ]
+        },
+        "responseFormat": "json"
+      },
+      "name": "Calculate Carbon Footprint",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Extract the total carbon footprint value from API response\n*/\nconst data = $json;\n\n// Example response structure from Carbon Interface API:\n// { data: { attributes: { carbon_lb: X, carbon_kg: Y, ... }}}\n\nconst footprintKg = data.data?.attributes?.carbon_kg || 0;\n\nreturn [{ json: { carbon_kg: footprintKg } }];"
+      },
+      "name": "Extract Footprint Value",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        950,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Generate personalized suggestions by analyzing footprint and activity types\n  Suggestions are hardcoded examples but simulate AI-driven outputs.\n*/\nconst carbonKg = $json.carbon_kg;\n\nconst suggestions = [];\n\nif (carbonKg > 5) {\n  suggestions.push(\"Consider reducing car travel by using public transport or carpooling.\");\n  suggestions.push(\"Switch to renewable energy sources at home to lower your energy footprint.\");\n}\nif (carbonKg > 2 && carbonKg <= 5) {\n  suggestions.push(\"Reduce meat consumption and try plant-based meals.\");\n  suggestions.push(\"Avoid single-use plastics and carry reusable bags.\");\n}\nif (carbonKg <= 2) {\n  suggestions.push(\"You're doing great! Maintain your sustainable habits.\");\n  suggestions.push(\"Share your eco-friendly tips with friends and family.\");\n}\n\nreturn [{ json: { suggestions } }];"
+      },
+      "name": "Generate Suggestions",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "item": [
+          {
+            "json": {}
+          }
+        ]
+      },
+      "name": "Get Existing User Data",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [
+        450,
+        600
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": "Google Sheets OAuth2"
+      },
+      "notes": "This node reads the user's historic data from a Google Sheet to track progress over time.",
+      "options": {
+        "sheetId": "YOUR_GOOGLE_SHEET_ID",
+        "range": "UserData!A:D",
+        "majorDimension": "ROWS"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Append today’s footprint and suggestions to historic data for progress tracking\n*/\nconst existing = $json['sheetData'] || [];\nconst today = new Date().toISOString().slice(0, 10);\nconst footprint = $items(\"Extract Footprint Value\")[0].json.carbon_kg;\nconst suggestions = $items(\"Generate Suggestions\")[0].json.suggestions.join('; ');\n\nconst newEntry = [today, footprint.toString(), suggestions, 'pending'];\n\nconst updatedData = [...existing, newEntry];\n\nreturn [{ json: { updatedData } }];"
+      },
+      "name": "Prepare Data for Saving",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        700,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "sheetId": "YOUR_GOOGLE_SHEET_ID",
+        "range": "UserData!A:D",
+        "valueInputMode": "USER_ENTERED",
+        "options": {},
+        "values": "={{$json[\"updatedData\"]}}"
+      },
+      "name": "Save Data to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [
+        950,
+        600
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": "Google Sheets OAuth2"
+      }
+    },
+    {
+      "parameters": {
+        "text": "Keep up the great work! Reduce your carbon footprint by {{ $json.carbon_kg.toFixed(2) }} kg today. Here's a tip: {{ $json.suggestions[0] }}",
+        "toNumber": "={{$json.phoneNumber || $json.userPhone || 'ENTER_USER_PHONE_NUMBER'}}",
+        "fromNumber": "YOUR_TWILIO_PHONE_NUMBER"
+      },
+      "name": "Send Motivational SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        600
+      ],
+      "credentials": {
+        "twilioApi": "Twilio API Credentials"
+      }
+    },
+    {
+      "parameters": {},
+      "name": "Merge User Input and Calculated Data",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        450
+      ],
+      "mode": "passThrough",
+      "joinOperation": "and",
+      "inputDataFieldName": ""
+    }
+  ],
+  "connections": {
+    "Request User Input": {
+      "main": [
+        [
+          {
+            "node": "Format Input Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Existing User Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Input Data": {
+      "main": [
+        [
+          {
+            "node": "Calculate Carbon Footprint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Carbon Footprint": {
+      "main": [
+        [
+          {
+            "node": "Extract Footprint Value",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Footprint Value": {
+      "main": [
+        [
+          {
+            "node": "Generate Suggestions",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge User Input and Calculated Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Suggestions": {
+      "main": [
+        [
+          {
+            "node": "Merge User Input and Calculated Data",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "Send Motivational SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Existing User Data": {
+      "main": [
+        [
+          {
+            "node": "Prepare Data for Saving",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Data for Saving": {
+      "main": [
+        [
+          {
+            "node": "Save Data to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge User Input and Calculated Data": {
+      "main": []
+    },
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Send Motivational SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Data to Google Sheets": {
+      "main": []
+    },
+    "Send Motivational SMS": {
+      "main": []
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "AI_Driven_Personal_Carbon_Tracker"
+}
