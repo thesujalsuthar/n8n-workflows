@@ -1,0 +1,141 @@
+{
+  "name": "Real-Time AI Transit Delay Notification and Multi-Modal Rerouting Assistant",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "none",
+        "url": "https://api.publictransitdata.com/v1/delays",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Fetch Real-Time Transit Delay Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const userPreferences = {\n  preferredModes: ['bus', 'train', 'bike', 'walk'],\n  maxWalkDistanceKm: 1,\n  maxBikeDistanceKm: 5\n};\n\nreturn [{ json: { userPreferences } }];"
+      },
+      "name": "Set User Preferences",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        250,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const delays = $json;\nconst userPrefs = $items(\"Set User Preferences\")[0].json.userPreferences;\n\n// Filter delays relevant to user routes (assumed passed or all included)\n// Simulate transit conditions\n\nconst affectedRoutes = delays.filter(delay => delay.isDelayed === true);\n\nreturn [{ json: { affectedRoutes, userPrefs } }];"
+      },
+      "name": "Process Delay Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  This function would request multi-modal routing options from an AI or routing API\n  For demo, mock multi-modal route suggestions based on userPreferences and affectedRoutes\n*/\n\nconst affectedRoutes = $json.affectedRoutes;\nconst userPrefs = $json.userPrefs;\n\n// Mock logic to create route suggestions\nconst suggestions = [];\nif (affectedRoutes.length > 0) {\n  suggestions.push({\n    mode: 'walk',\n    estimatedTimeMin: 25,\n    description: 'Walk 1km to next bus station'\n  });\n  if (userPrefs.preferredModes.includes('bike') && userPrefs.maxBikeDistanceKm >= 3) {\n    suggestions.push({\n      mode: 'bike',\n      estimatedTimeMin: 10,\n      description: 'Bike 3km to train station'\n    });\n  }\n  suggestions.push({\n    mode: 'bus',\n    estimatedTimeMin: 20,\n    description: 'Take bus route 12 avoiding delays'\n  });\n} else {\n  suggestions.push({\n    mode: 'train',\n    estimatedTimeMin: 15,\n    description: 'Train route is on time'\n  });\n}\n\nreturn [{ json: { reroutingSuggestions: suggestions } }];"
+      },
+      "name": "Generate Multi-Modal Rerouting Suggestions",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const affectedRoutes = $items(\"Process Delay Data\")[0].json.affectedRoutes;\nconst suggestions = $json.reroutingSuggestions;\n\nconst notification = affectedRoutes.length > 0\n  ? `Alert: There are delays on your transit routes. Suggested reroutes:`\n  : `Good news: No delays detected on your transit routes.`;\n\nreturn [{ json: {\n  notificationText: notification,\n  reroutingSuggestions: suggestions\n} }];"
+      },
+      "name": "Compose Notification Message",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "notify",
+        "operation": "send",
+        "to": "={{$json[\"userEmail\"] || \"user@example.com\"}}",
+        "subject": "Real-Time Transit Delay Alert & Rerouting Suggestions",
+        "message": "={{$json[\"notificationText\"] + '\\n' + $json[\"reroutingSuggestions\"].map(s => `Mode: ${s.mode}, ETA: ${s.estimatedTimeMin} min, Details: ${s.description}`).join('\\n')}}"
+      },
+      "name": "Send Notification Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Set User Preferences": {
+      "main": [
+        [
+          {
+            "node": "Fetch Real-Time Transit Delay Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Real-Time Transit Delay Data": {
+      "main": [
+        [
+          {
+            "node": "Process Delay Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Delay Data": {
+      "main": [
+        [
+          {
+            "node": "Generate Multi-Modal Rerouting Suggestions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Multi-Modal Rerouting Suggestions": {
+      "main": [
+        [
+          {
+            "node": "Compose Notification Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose Notification Message": {
+      "main": [
+        [
+          {
+            "node": "Send Notification Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
