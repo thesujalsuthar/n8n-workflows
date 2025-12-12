@@ -1,0 +1,262 @@
+{
+  "name": "Quantum Computing Research Trend Analyzer and Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "interval": 86400,
+        "options": {},
+        "timezone": "UTC"
+      },
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        250
+      ],
+      "notesInFlow": "Triggers workflow once daily at UTC to aggregate latest data"
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.crossref.org/works?filter=type:journal-article,subject:quantum+computing&rows=50&sort=published&order=desc",
+        "responseFormat": "json",
+        "jsonQuery": "message.items"
+      },
+      "name": "Fetch CrossRef Articles",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        600,
+        100
+      ],
+      "notesInFlow": "Fetch recent quantum computing journal articles from CrossRef"
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.arxiv.org/query?search_query=all:quantum+computing&start=0&max_results=50&sortBy=submittedDate&sortOrder=descending",
+        "responseFormat": "text"
+      },
+      "name": "Fetch arXiv Preprints",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        600,
+        300
+      ],
+      "notesInFlow": "Pull recent preprints on quantum computing from arXiv"
+    },
+    {
+      "parameters": {
+        "functionCode": "const parse = require('fast-xml-parser');\n\nconst xml = items[0].json.body;\n\nconst options = {\n  ignoreAttributes: false,\n  attributeNamePrefix: \"@_\",\n  parseNodeValue: true,\n  parseAttributeValue: true\n};\n\nconst jObj = parse.parse(xml, options);\n\nlet entries = [];\n\nif (jObj.feed && jObj.feed.entry) {\n  const arxivEntries = Array.isArray(jObj.feed.entry) ? jObj.feed.entry : [jObj.feed.entry];\n\n  for (const entry of arxivEntries) {\n    entries.push({\n      title: entry.title.trim().replace(/\\n/g, ' '),\n      authors: entry.author ? (Array.isArray(entry.author) ? entry.author.map(a => a.name) : [entry.author.name]) : [],\n      summary: entry.summary.trim().replace(/\\n/g, ' '),\n      published: entry.published\n    });\n  }\n}\n\nreturn entries.map(entry => ({ json: entry }));"
+      },
+      "name": "Parse arXiv XML",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ],
+      "notesInFlow": "Transform arXiv XML to JSON objects"
+    },
+    {
+      "parameters": {
+        "functionCode": "const crossrefItems = items[0].json;\n\nreturn crossrefItems.map(item => ({\n  json: {\n    title: item.title ? item.title[0] : '',\n    authors: item.author ? item.author.map(a => a.given + ' ' + a.family) : [],\n    abstract: item.abstract || '',\n    published: item.published ? item.published['date-parts'][0].join('-') : '',\n    url: item.URL\n  }\n}));"
+      },
+      "name": "Transform CrossRef Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        100
+      ],
+      "notesInFlow": "Normalize CrossRef fetched data for analysis"
+    },
+    {
+      "parameters": {
+        "mode": "mergeByIndex",
+        "keepSourceItems": false,
+        "propertyName": "combinedPapers"
+      },
+      "name": "Merge Papers",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        200
+      ],
+      "notesInFlow": "Combine CrossRef and arXiv papers into one dataset"
+    },
+    {
+      "parameters": {
+        "mode": "passThrough",
+        "keepOnlySet": false,
+        "options": {}
+      },
+      "name": "Set Combined Text",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        200
+      ],
+      "notesInFlow": "Concatenate titles, abstracts and summaries for analysis",
+      "functionCode": "const combined = [];\nfor (const item of items[0].json.combinedPapers) {\n  combined.push(`Title: ${item.title}\\nAuthors: ${item.authors.join(', ')}\\nDate: ${item.published}\\n` +\n    (item.abstract || item.summary || '') + '\\n');\n}\nreturn [{ json: { textToAnalyze: combined.join('\\n---\\n') } }];"
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "temperature": 0.3,
+        "max_tokens": 600,
+        "prompt": "You are an AI assistant helping to analyze recent research papers in quantum computing. Given the combined text of recent papers, identify and summarize the key research trends, breakthroughs, and emerging topics. Provide a concise, informative summary suitable for researchers and professionals.\n\n\nText:\n\n{{ $json[\"textToAnalyze\"] }}\n\nSummary:"
+      },
+      "name": "Analyze Trends with AI",
+      "type": "n8n-nodes-base.openai",
+      "typeVersion": 1,
+      "position": [
+        1550,
+        200
+      ],
+      "credentials": {
+        "openAIApi": "OpenAI API"
+      }
+    },
+    {
+      "parameters": {
+        "text": "Quantum Computing Research Updates\n\n{{ $json[\"choices\"][0][\"message\"][\"content\"] }}",
+        "subject": "Latest Quantum Computing Research Trends",
+        "toEmail": "={{$json[\"email\"] || $globals[\"userEmail\"]}}"
+      },
+      "name": "Send Email Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1800,
+        200
+      ],
+      "credentials": {
+        "smtp": "SMTP Credentials"
+      },
+      "notesInFlow": "Send summarized research trends as email alerts"
+    },
+    {
+      "parameters": {
+        "resource": "chat.postMessage",
+        "channel": "quantum-updates",
+        "text": "Quantum Computing Research Update:\n\n{{ $json[\"choices\"][0][\"message\"][\"content\"] }}"
+      },
+      "name": "Send Slack Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1800,
+        400
+      ],
+      "credentials": {
+        "slackApi": "Slack API"
+      },
+      "notesInFlow": "Send summarized research trends to Slack channel"
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch CrossRef Articles",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch arXiv Preprints",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch CrossRef Articles": {
+      "main": [
+        [
+          {
+            "node": "Transform CrossRef Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch arXiv Preprints": {
+      "main": [
+        [
+          {
+            "node": "Parse arXiv XML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transform CrossRef Data": {
+      "main": [
+        [
+          {
+            "node": "Merge Papers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse arXiv XML": {
+      "main": [
+        [
+          {
+            "node": "Merge Papers",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Papers": {
+      "main": [
+        [
+          {
+            "node": "Set Combined Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Combined Text": {
+      "main": [
+        [
+          {
+            "node": "Analyze Trends with AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Trends with AI": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Slack Alert",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  }
+}
