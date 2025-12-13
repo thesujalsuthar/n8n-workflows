@@ -1,0 +1,173 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 7,
+              "minute": 0,
+              "mode": "everyDay"
+            }
+          ]
+        }
+      },
+      "name": "Daily Scheduler Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nInput: userStudyData - array of objects with fields: topic, durationMinutes, lastStudied, performanceScore (0-100)\nOutput: schedule for optimal study sessions\n*/\n\nconst now = new Date();\nconst schedule = [];\n\nconst studyData = items[0].json.studyData || [];\n\n// Simple spaced repetition scheduling & prioritizing low performance\nconst priorityTopics = studyData\n    .map(study => {\n        const lastDate = new Date(study.lastStudied || 0);\n        const daysSince = (now - lastDate) / (1000 * 60 * 60 * 24);\n        const priorityScore = ((100 - study.performanceScore) * 2) + daysSince;\n        return {...study, priorityScore};\n    })\n    .sort((a,b) => b.priorityScore - a.priorityScore);\n\n// Generate schedule slots (max 4 sessions, each 45 mins)\nconst maxSessions = 4;\nconst sessionDuration = 45;\n\nlet totalScheduled = 0;\n\nfor (const topic of priorityTopics) {\n  if (totalScheduled >= maxSessions) break;\n  const duration = Math.min(sessionDuration, topic.durationMinutes || sessionDuration);\n  schedule.push({\n    topic: topic.topic,\n    durationMinutes: duration,\n    suggestedStart: null,\n    priorityScore: topic.priorityScore\n  });\n  totalScheduled++;\n}\n\nreturn schedule.map(s => ({json: s}));"
+      },
+      "name": "Intelligent Scheduler",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        550,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nInput: studyData array of sessions done today\nOutput: performance summary & progress analytics\n*/\n\nconst studySessions = items[0].json.sessions || [];\n\nconst totalTime = studySessions.reduce((acc, cur) => acc + (cur.durationMinutes || 0), 0);\nconst topicsCovered = [...new Set(studySessions.map(s => s.topic))];\nconst averagePerformance = studySessions.length > 0 ? (studySessions.reduce((acc, cur) => acc + (cur.performanceScore || 0), 0) / studySessions.length) : 0;\n\nreturn [{\n  json: {\n    totalTime,\n    topicsCovered,\n    averagePerformance,\n    sessionCount: studySessions.length,\n    date: new Date().toISOString()\n  }\n}];"
+      },
+      "name": "Progress Analytics",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nGenerate AI-driven motivational message based on analytics\nExample template:\n\"Great job! You've studied TOPIC_COUNT topics for TOTAL_TIME minutes with an average performance of PERF% today. Keep up the great work! Remember, consistency is key!\"\n*/\n\nconst analytics = items[0].json;\n\nconst topicCount = analytics.topicsCovered.length;\nconst totalTime = analytics.totalTime;\nconst perf = analytics.averagePerformance.toFixed(1);\n\nconst messages = [\n  `Awesome! You've made progress by covering ${topicCount} topic${topicCount !== 1 ? 's' : ''} totaling ${totalTime} minutes with an average score of ${perf}%. Keep pushing forward!`,\n  `Great job! Consistency is your best ally. You've studied ${topicCount} topic${topicCount !== 1 ? 's' : ''} today for ${totalTime} minutes. Your average performance is ${perf}%. Stay motivated!`,\n  `You're doing fantastic! ${topicCount} topic${topicCount !== 1 ? 's' : ''} and ${totalTime} minutes studied with ${perf}% average performance. Remember, every step counts!`\n];\n\nconst message = messages[Math.floor(Math.random() * messages.length)];\n\nreturn [{ json: { motivationalMessage: message } }];"
+      },
+      "name": "Motivational Message Generator",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "chatId": "={{$json[\"chatId\"] || 'YOUR_CHAT_ID'}}",
+        "text": "={{$json[\"motivationalMessage\"]}}"
+      },
+      "name": "Send Motivational Reminder",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        300
+      ],
+      "credentials": {
+        "telegramApi": "Telegram API"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "/* Sample input JSON for user study data for scheduler node */\nreturn [{\n  json: {\n    studyData: [\n      {\n        topic: 'Math - Algebra',\n        durationMinutes: 60,\n        lastStudied: '2024-06-20T12:00:00Z',\n        performanceScore: 70\n      },\n      {\n        topic: 'Physics - Thermodynamics',\n        durationMinutes: 45,\n        lastStudied: '2024-06-18T15:00:00Z',\n        performanceScore: 85\n      },\n      {\n        topic: 'History - WW2',\n        durationMinutes: 30,\n        lastStudied: '2024-06-22T10:00:00Z',\n        performanceScore: 60\n      },\n      {\n        topic: 'Chemistry - Organic',\n        durationMinutes: 50,\n        lastStudied: '2024-06-15T16:00:00Z',\n        performanceScore: 75\n      }\n    ]\n  }\n}];"
+      },
+      "name": "User Study Data Input",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nSample input study sessions of today used for analytics node.\n*/\nreturn [{\n  json: {\n    sessions: [\n      { topic: 'Math - Algebra', durationMinutes: 45, performanceScore: 72 },\n      { topic: 'Physics - Thermodynamics', durationMinutes: 30, performanceScore: 80 },\n      { topic: 'History - WW2', durationMinutes: 20, performanceScore: 65 }\n    ]\n  }\n}];"
+      },
+      "name": "Today Study Sessions Input",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        450
+      ]
+    }
+  ],
+  "connections": {
+    "Daily Scheduler Trigger": {
+      "main": [
+        [
+          {
+            "node": "User Study Data Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "User Study Data Input": {
+      "main": [
+        [
+          {
+            "node": "Intelligent Scheduler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Intelligent Scheduler": {
+      "main": [
+        [
+          {
+            "node": "Today Study Sessions Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Today Study Sessions Input": {
+      "main": [
+        [
+          {
+            "node": "Progress Analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Progress Analytics": {
+      "main": [
+        [
+          {
+            "node": "Motivational Message Generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Motivational Message Generator": {
+      "main": [
+        [
+          {
+            "node": "Send Motivational Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
