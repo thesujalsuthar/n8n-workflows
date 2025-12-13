@@ -1,0 +1,293 @@
+{
+  "name": "Emerging AI-Driven Quantum Computing Research Insights Aggregator",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.crossref.org/works?filter=subject:quantum-computing&sort=published&order=desc&rows=20",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Fetch CrossRef Quantum Papers",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.arxiv.org/query?search_query=all:quantum+computing&start=0&max_results=20&sortBy=submittedDate&sortOrder=descending",
+        "responseFormat": "text",
+        "options": {}
+      },
+      "name": "Fetch arXiv Quantum Papers",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const xml2js = require('xml2js');\n\nreturn await new Promise((resolve, reject) => {\n  const parser = new xml2js.Parser();\n  parser.parseString(items[0].json.body, (err, result) => {\n    if (err) {\n      reject(err);\n    } else {\n      if (result.feed && result.feed.entry) {\n        const entries = result.feed.entry.map(entry => ({\n          title: entry.title[0],\n          summary: entry.summary[0],\n          published: entry.published[0],\n          link: entry.id[0]\n        }));\n        resolve(entries.map(e => ({json: e})));\n      } else {\n        resolve([]);\n      }\n    }\n  });\n});"
+      },
+      "name": "Parse arXiv XML",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        100
+      ],
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "functionCode": "const crossRefItems = items[0].json.message.items;\n\nconst papers = crossRefItems.map(paper => ({\n  title: paper.title[0],\n  summary: paper.abstract || '',\n  published: paper.published['date-parts'][0].join('-'),\n  link: paper.URL\n}));\n\nreturn papers.map(paper => ({ json: paper }));"
+      },
+      "name": "Parse CrossRef Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const combinedPapers = [];\n\nitems.forEach((itemArray) => {\n  itemArray.forEach(item => {\n    if (item.json.title) {\n      combinedPapers.push(item.json);\n    }\n  });\n});\n\n// Remove duplicates by title\nconst seenTitles = new Set();\nconst uniquePapers = combinedPapers.filter(p => {\n  if (seenTitles.has(p.title)) return false;\n  seenTitles.add(p.title);\n  return true;\n});\n\nreturn uniquePapers.map(paper => ({ json: paper }));"
+      },
+      "name": "Combine & Deduplicate Papers",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "passThrough",
+        "options": {}
+      },
+      "name": "Detect Language",
+      "type": "n8n-nodes-base.googleTranslate",
+      "typeVersion": 1,
+      "position": [
+        850,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const texts = items.map(item => item.json.title + '. ' + (item.json.summary || ''));\nreturn [{ json: { texts }}];"
+      },
+      "name": "Prepare Texts for AI Analysis",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "text",
+        "operation": "generate",
+        "model": "gpt-4",
+        "prompt": "Analyze the following list of quantum computing research paper titles and summaries for trending topics and emerging insights. Return a bullet-point summary highlighting key trends and new research directions:\n\n{{ $json.texts.join('\\n\\n') }}\n\nSummary:",
+        "maxTokens": 500,
+        "temperature": 0.5
+      },
+      "name": "AI Analyze Trending Topics",
+      "type": "n8n-nodes-base.openai",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const summary = items[0].json.choices[0].message.content;\nreturn [{ json: { summary } }];"
+      },
+      "name": "Extract AI Summary",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "no-reply@quantuminsights.ai",
+        "toEmail": "={{$node[\"Email List\"].json[\"email\"]}}",
+        "subject": "Daily Quantum Computing Research Digest",
+        "text": "={{$node[\"Extract AI Summary\"].json[\"summary\"]}}",
+        "options": {}
+      },
+      "name": "Send Email Digest",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1650,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "text": "={{$node[\"Extract AI Summary\"].json[\"summary\"]}}",
+        "channel": "={{$node[\"Slack Channel\"].json[\"channel_id\"]}}",
+        "additionalFields": {}
+      },
+      "name": "Send Slack Digest",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1650,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [\n  { json: { email: \"user1@example.com\" } },\n  { json: { email: \"user2@example.com\" } }\n];"
+      },
+      "name": "Email List",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        50
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [\n  { json: { channel_id: \"C12345678\" } }\n];"
+      },
+      "name": "Slack Channel",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        350
+      ]
+    }
+  ],
+  "connections": {
+    "Fetch arXiv Quantum Papers": {
+      "main": [
+        [
+          {
+            "node": "Parse arXiv XML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch CrossRef Quantum Papers": {
+      "main": [
+        [
+          {
+            "node": "Parse CrossRef Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse arXiv XML": {
+      "main": [
+        [
+          {
+            "node": "Combine & Deduplicate Papers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse CrossRef Response": {
+      "main": [
+        [
+          {
+            "node": "Combine & Deduplicate Papers",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Combine & Deduplicate Papers": {
+      "main": [
+        [
+          {
+            "node": "Detect Language",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Texts for AI Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Texts for AI Analysis": {
+      "main": [
+        [
+          {
+            "node": "AI Analyze Trending Topics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Analyze Trending Topics": {
+      "main": [
+        [
+          {
+            "node": "Extract AI Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract AI Summary": {
+      "main": [
+        [
+          {
+            "node": "Send Email Digest",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Slack Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email List": {
+      "main": [
+        []
+      ]
+    },
+    "Slack Channel": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
