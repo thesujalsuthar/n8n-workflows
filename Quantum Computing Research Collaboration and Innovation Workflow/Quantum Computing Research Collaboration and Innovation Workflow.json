@@ -1,0 +1,173 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "resource": "paper",
+        "operation": "getAll",
+        "query": "quantum computing",
+        "limit": 20
+      },
+      "name": "Fetch Research Papers",
+      "type": "n8n-nodes-base.externalApi",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "paper",
+        "operation": "filter",
+        "filters": [
+          {
+            "field": "publicationDate",
+            "operation": "moreThan",
+            "value": "={{$now.minusDays(1).toISOString()}}"
+          }
+        ]
+      },
+      "name": "Filter Latest Papers",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "notification",
+        "operation": "send",
+        "message": "New quantum computing research paper published: {{$json[\"title\"]}} - {{$json[\"url\"]}}"
+      },
+      "name": "Notify Researchers",
+      "type": "n8n-nodes-base.notification",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "database",
+        "operation": "find",
+        "query": {
+          "topic": "Quantum Computing Research Collaboration and Innovation Network"
+        }
+      },
+      "name": "Check GitHub Repository",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        50,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "content": "There is no existing workflow on the topic 'Quantum Computing Research Collaboration and Innovation Network'. Proceeding to setup automation."
+      },
+      "name": "Init Message",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        250,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "collaboration",
+        "operation": "connectResearchers",
+        "criteria": "interests",
+        "topic": "quantum computing"
+      },
+      "name": "Facilitate Collaboration",
+      "type": "n8n-nodes-base.collaboration",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "resource",
+        "operation": "share",
+        "topic": "Quantum Computing Research Collaboration and Innovation Network",
+        "content": "Latest research papers, tools, and collaboration opportunities in quantum computing."
+      },
+      "name": "Share Resources",
+      "type": "n8n-nodes-base.resourceSharing",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Check GitHub Repository": {
+      "main": [
+        [
+          {
+            "node": "Init Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Init Message": {
+      "main": [
+        [
+          {
+            "node": "Fetch Research Papers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Research Papers": {
+      "main": [
+        [
+          {
+            "node": "Filter Latest Papers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Latest Papers": {
+      "main": [
+        [
+          {
+            "node": "Notify Researchers",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Facilitate Collaboration",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Share Resources",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  ],
+  "active": true,
+  "settings": {},
+  "id": "1"
+}
