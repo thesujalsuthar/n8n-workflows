@@ -1,0 +1,132 @@
+{
+  "workflow": {
+    "name": "Quantum Computing Research Collaboration and Innovation Tracker",
+    "description": "Gathers latest research papers, collaboration opportunities, and innovations in quantum computing from scientific journals, conferences, and research institutions; organizes and publishes a summarized digest weekly via email and Slack.",
+    "triggers": [
+      {
+        "type": "schedule",
+        "schedule": "weekly",
+        "day_of_week": "Monday",
+        "time": "08:00"
+      }
+    ],
+    "steps": [
+      {
+        "id": "fetch_sources",
+        "name": "Fetch Latest Data from Multiple Sources",
+        "type": "parallel",
+        "tasks": [
+          {
+            "id": "fetch_journals",
+            "name": "Fetch Latest Research Papers from Scientific Journals",
+            "type": "http_request",
+            "config": {
+              "endpoints": [
+                "https://api.arxiv.org/query?search_query=quantum+computing&sortBy=submittedDate&max_results=50",
+                "https://api.springernature.com/metadata/json?query=quantum+computing&sort=mostrecent"
+              ],
+              "method": "GET",
+              "headers": {
+                "Accept": "application/json"
+              }
+            }
+          },
+          {
+            "id": "fetch_conferences",
+            "name": "Fetch Collaboration Opportunities and Innovations from Conferences",
+            "type": "http_request",
+            "config": {
+              "endpoints": [
+                "https://api.conferencealerts.com/quantum-computing/recent",
+                "https://www.quantumconferences.org/api/latest"
+              ],
+              "method": "GET",
+              "headers": {
+                "Accept": "application/json"
+              }
+            }
+          },
+          {
+            "id": "fetch_institutions",
+            "name": "Fetch Research Updates from Quantum Computing Institutions",
+            "type": "http_request",
+            "config": {
+              "endpoints": [
+                "https://api.quantuminst.org/latest-papers",
+                "https://research.microsoft.com/api/quantum/recent",
+                "https://ibm.com/quantum/research/updates/api"
+              ],
+              "method": "GET",
+              "headers": {
+                "Accept": "application/json"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": "aggregate_data",
+        "name": "Aggregate and Normalize Data",
+        "type": "data_transformation",
+        "input": [
+          "fetch_journals",
+          "fetch_conferences",
+          "fetch_institutions"
+        ],
+        "transformation": {
+          "tasks": [
+            "Parse JSON responses",
+            "Extract relevant fields (title, authors, date, summary, source, link, category)",
+            "Normalize date formats",
+            "Remove duplicates",
+            "Tag entries as Research Paper, Collaboration Opportunity, or Innovation"
+          ]
+        }
+      },
+      {
+        "id": "summarize_digest",
+        "name": "Generate Weekly Digest Summary",
+        "type": "natural_language_processing",
+        "input": "aggregate_data",
+        "config": {
+          "summary_length": "medium",
+          "format": "bullet_points",
+          "sections": [
+            "Top Research Papers",
+            "Collaboration Opportunities",
+            "Recent Innovations"
+          ]
+        }
+      },
+      {
+        "id": "publish_digest_email",
+        "name": "Publish Digest via Email",
+        "type": "email_send",
+        "input": "summarize_digest",
+        "config": {
+          "recipients": [
+            "research-team@quantumorg.com",
+            "collaborators@quantumorg.com"
+          ],
+          "subject": "Weekly Quantum Computing Research and Innovation Digest",
+          "from": "noreply@quantumtracker.com",
+          "email_format": "html"
+        }
+      },
+      {
+        "id": "publish_digest_slack",
+        "name": "Publish Digest via Slack",
+        "type": "slack_post",
+        "input": "summarize_digest",
+        "config": {
+          "channel": "#quantum-research",
+          "bot_token_secret_name": "slack_bot_token",
+          "message_format": "markdown"
+        }
+      }
+    ],
+    "repository_check": {
+      "title_not_present": "Quantum Computing Research Collaboration and Innovation Tracker"
+    }
+  }
+}
