@@ -1,0 +1,286 @@
+{
+  "name": "Personalized AI-Enhanced Sustainable Lifestyle Planner and Habit Tracker",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": {
+          "authType": "headerAuth",
+          "headerAuth": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $credentials.environmentApi.apiKey }}"
+            }
+          ]
+        },
+        "url": "https://api.openaq.org/v2/nearest?limit=1",
+        "options": {}
+      },
+      "name": "Fetch Local Environmental Data",
+      "type": "httpRequest",
+      "typeVersion": 2,
+      "position": [
+        250,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "environmentApi"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const habits = items[0].json.habits || [];\nconst environmentalData = items[1].json.results[0] || {};\nconst communityImpact = items[2].json.communityMetrics || {};\n\n// Simple example: Calculate a sustainability score\nlet score = 0;\nhabits.forEach(habit => {\n  if (habit.type === 'recycling' && habit.frequency >= 5) score += 20;\n  if (habit.type === 'public_transport' && habit.frequency >= 4) score += 25;\n  if (habit.type === 'energy_saving' && habit.frequency >= 5) score += 30;\n});\n\n// Environmental factor influence\nconst aqi = environmentalData.measurements ? environmentalData.measurements[0].value : 50;\nif (aqi < 50) score += 15;\nelse if (aqi < 100) score += 5;\n\n// Community impact factor\nif (communityImpact.participationRate > 0.6) score += 10;\n\nreturn [{\n  json: {\n    habitSummary: habits,\n    environmentalSummary: environmentalData,\n    communitySummary: communityImpact,\n    sustainabilityScore: score\n  }\n}];"
+      },
+      "name": "Calculate Sustainability Score",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        700,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const score = items[0].json.sustainabilityScore || 0;\n\nlet goals = [];\nif (score < 30) {\n  goals.push({ goal: 'Increase recycling habits to at least 5 times a week' });\n  goals.push({ goal: 'Use public transport or bike 4 times a week' });\n  goals.push({ goal: 'Reduce household energy consumption by 15%' });\n} else if (score < 60) {\n  goals.push({ goal: 'Maintain current recycling habits' });\n  goals.push({ goal: 'Increase community involvement in sustainability events' });\n} else {\n  goals.push({ goal: 'Mentor others in sustainable practices' });\n  goals.push({ goal: 'Lead community challenges on environmental impact' });\n}\n\nreturn [{ json: { sustainabilityGoals: goals, currentScore: score }}];"
+      },
+      "name": "Generate Personalized Sustainability Goals",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const goals = items[0].json.sustainabilityGoals || [];\n\n// Create reminders and motivational tips\nconst reminders = [];\ngoals.forEach(goal => {\n  reminders.push({\n    title: 'Reminder',\n    message: `Don't forget to: ${goal.goal}`,\n    time: new Date(Date.now() + 3600 * 1000).toISOString()\n  });\n});\n\nconst motivationalTips = [\n  'Every small action counts. Keep going!',\n  'Your sustainable choices help protect the planet.',\n  'Join a local green community to amplify your impact.'\n];\n\nreturn [{ json: { reminders, motivationalTips } }];"
+      },
+      "name": "Create Reminders and Motivational Tips",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const challenges = [\n  {\n    id: 'community-cleanup',\n    name: 'Community Cleanup Challenge',\n    description: 'Participate in or organize a community cleanup event.',\n    startDate: new Date().toISOString(),\n    endDate: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString()\n  },\n  {\n    id: 'bike-to-work',\n    name: 'Bike to Work Week',\n    description: 'Commit to biking to work or school 5 days this week.',\n    startDate: new Date().toISOString(),\n    endDate: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString()\n  }\n];\n\nreturn [{ json: { communityChallenges: challenges } }];"
+      },
+      "name": "Provide Community Challenges",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "collection": "habitTracking",
+        "data": "={{$json.habitSummary}}",
+        "options": {}
+      },
+      "name": "Store Habit Data",
+      "type": "mongoDb",
+      "typeVersion": 1,
+      "position": [
+        450,
+        100
+      ],
+      "credentials": {
+        "mongoDb": {
+          "id": "",
+          "name": "MongoDB Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "credentials": {
+          "openAiApi": {
+            "id": "",
+            "name": "OpenAI API"
+          }
+        },
+        "model": "gpt-4",
+        "input": "Generate an engaging, customized weekly message for a user focused on sustainability. Include motivational language based on sustainability score {{ $json.sustainabilityScore }}, and mention community challenges and tips provided.",
+        "options": {}
+      },
+      "name": "Generate Weekly Engagement Message",
+      "type": "openAi",
+      "typeVersion": 1,
+      "position": [
+        1550,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "channel": "userChannel",
+        "message": "={{$json.choices[0].message.content}}"
+      },
+      "name": "Send Message to User",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1800,
+        300
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "",
+          "name": "Slack Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "find",
+        "collection": "habits",
+        "options": {}
+      },
+      "name": "Retrieve User Habits",
+      "type": "mongoDb",
+      "typeVersion": 1,
+      "position": [
+        50,
+        200
+      ],
+      "credentials": {
+        "mongoDb": {
+          "id": "",
+          "name": "MongoDB Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "find",
+        "collection": "communityMetrics",
+        "options": {}
+      },
+      "name": "Retrieve Community Impact Metrics",
+      "type": "mongoDb",
+      "typeVersion": 1,
+      "position": [
+        50,
+        400
+      ],
+      "credentials": {
+        "mongoDb": {
+          "id": "",
+          "name": "MongoDB Account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Retrieve User Habits": {
+      "main": [
+        [
+          {
+            "node": "Fetch Local Environmental Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Retrieve Community Impact Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retrieve Community Impact Metrics": {
+      "main": [
+        [
+          {
+            "node": "Calculate Sustainability Score",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch Local Environmental Data": {
+      "main": [
+        [
+          {
+            "node": "Calculate Sustainability Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Sustainability Score": {
+      "main": [
+        [
+          {
+            "node": "Generate Personalized Sustainability Goals",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Store Habit Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Personalized Sustainability Goals": {
+      "main": [
+        [
+          {
+            "node": "Create Reminders and Motivational Tips",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Reminders and Motivational Tips": {
+      "main": [
+        [
+          {
+            "node": "Provide Community Challenges",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Provide Community Challenges": {
+      "main": [
+        [
+          {
+            "node": "Generate Weekly Engagement Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Weekly Engagement Message": {
+      "main": [
+        [
+          {
+            "node": "Send Message to User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "id": "personalized_ai_sustainable_planner_habit_tracker"
+}
