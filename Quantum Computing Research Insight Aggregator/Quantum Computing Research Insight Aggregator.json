@@ -1,0 +1,304 @@
+{
+  "name": "Quantum Computing Research Collaboration and Innovation Tracker",
+  "nodes": [
+    {
+      "parameters": {
+        "urls": [
+          "https://arxiv.org/rss/quant-ph"
+        ],
+        "options": {
+          "responseFormat": "string"
+        }
+      },
+      "name": "Arxiv Quantum Physics RSS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.crossref.org/works",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "filter",
+              "value": "subject:quantum computing"
+            },
+            {
+              "name": "rows",
+              "value": "20"
+            }
+          ]
+        },
+        "options": {
+          "responseFormat": "json"
+        }
+      },
+      "name": "Crossref Quantum Computing Publications",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "requestMethod": "GET",
+        "url": "https://conferenceapi.net/api/v1/conferences",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "q",
+              "value": "quantum computing"
+            }
+          ]
+        },
+        "options": {
+          "responseFormat": "json"
+        }
+      },
+      "name": "Quantum Computing Conferences API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "expression": "{{$json[\"items\"] || $json[\"entries\"] || $json[\"data\"]}}"
+      },
+      "name": "Extract Publications",
+      "type": "n8n-nodes-base.itemList",
+      "typeVersion": 1,
+      "position": [
+        500,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const parseArxivRSS = (rssString) => {\n  const parser = new DOMParser();\n  const xmlDoc = parser.parseFromString(rssString, \"text/xml\");\n  const items = [...xmlDoc.querySelectorAll(\"item\")];\n  return items.map(item => ({\n    title: item.querySelector(\"title\")?.textContent || \"\",\n    link: item.querySelector(\"link\")?.textContent || \"\",\n    pubDate: item.querySelector(\"pubDate\")?.textContent || \"\",\n    description: item.querySelector(\"description\")?.textContent || \"\"\n  }));\n};\n\nconst parsedItems = parseArxivRSS(items[0].json[\"body\"] || \"\");\nreturn parsedItems.map(item => ({ json: item }));"
+      },
+      "name": "Parse Arxiv RSS Feed",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        700,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const publications = $json[\"message\"]?.items || [];\nreturn publications.map(item => ({ json: {\n  title: item.title[0],\n  authors: item.author?.map(a => a.given + \" \" + a.family).join(\", \") || \"\",\n  doi: item.DOI,\n  published: item.published || item['published-print']?.['date-parts'][0].join(\"-\") || \"\",\n  url: item.URL\n}}));"
+      },
+      "name": "Extract Crossref Publications",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return $items;\n"
+      },
+      "name": "Extract Conference Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "passThrough",
+        "propertyName": "json",
+        "send": "passThrough"
+      },
+      "name": "Merge All Data",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 1,
+      "position": [
+        850,
+        450
+      ],
+      "notes": "Merges parsed Arxiv RSS, Crossref publications, and Conferences data"
+    },
+    {
+      "parameters": {
+        "functionCode": "const groupedByYear = {};\n\nfor (const item of items) {\n  const pubDate = item.json.pubDate || item.json.published || item.json.date || \"\";\n  const yearMatch = pubDate.match(/\\d{4}/);\n  const year = yearMatch ? yearMatch[0] : \"Unknown\";\n  if (!groupedByYear[year]) {\n    groupedByYear[year] = [];\n  }\n  groupedByYear[year].push(item.json);\n}\n\nreturn Object.entries(groupedByYear).map(([year, items]) => ({\n  json: {\n    year,\n    count: items.length,\n    items\n  }\n}));"
+      },
+      "name": "Group Data by Year",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "workflow": "Quantum Computing Dashboard",
+        "inputData": "={{$json}}"
+      },
+      "name": "Send to Dashboard",
+      "type": "n8n-nodes-base.misc",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "toEmail": "research-team@quantum.example.com",
+        "subject": "Daily Quantum Computing Research Update",
+        "text": "={{\n  `Hello Research Team,\n\nHere is the latest aggregated update on quantum computing research and collaborations:\n\n${items.map(i => `- ${i.json.title || i.json.year || \"Entry\"}`).join('\\n')}\n\nBest Regards,\nQC Tracker Bot`\n}}"
+      },
+      "name": "Send Email Notification",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "interval": 86400,
+        "units": "seconds"
+      },
+      "name": "Scheduler Daily",
+      "type": "n8n-nodes-base.scheduler",
+      "typeVersion": 1,
+      "position": [
+        50,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Scheduler Daily": {
+      "main": [
+        [
+          {
+            "node": "Arxiv Quantum Physics RSS",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Crossref Quantum Computing Publications",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Quantum Computing Conferences API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Arxiv Quantum Physics RSS": {
+      "main": [
+        [
+          {
+            "node": "Parse Arxiv RSS Feed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crossref Quantum Computing Publications": {
+      "main": [
+        [
+          {
+            "node": "Extract Crossref Publications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Quantum Computing Conferences API": {
+      "main": [
+        [
+          {
+            "node": "Extract Conference Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Arxiv RSS Feed": {
+      "main": [
+        [
+          {
+            "node": "Merge All Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Crossref Publications": {
+      "main": [
+        [
+          {
+            "node": "Merge All Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Extract Conference Data": {
+      "main": [
+        [
+          {
+            "node": "Merge All Data",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Merge All Data": {
+      "main": [
+        [
+          {
+            "node": "Group Data by Year",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Group Data by Year": {
+      "main": [
+        [
+          {
+            "node": "Send to Dashboard",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Email Notification",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  }
+}
