@@ -1,0 +1,380 @@
+{
+  "name": "AI-Driven Personalized Sustainability Tip Scheduler",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "submitPreferences",
+        "responseMode": "onReceived",
+        "options": {},
+        "parameters": {}
+      },
+      "name": "Receive User Preferences",
+      "type": "n8n-nodes-base.httpTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ],
+      "webhookId": "submit-preferences-webhook"
+    },
+    {
+      "parameters": {
+        "functionCode": "const preferences = $json;\n\n// Validate and preprocess preferences\nif (!preferences.lifestyle || !preferences.location) {\n  throw new Error('Missing lifestyle or location data');\n}\n\nreturn [{ json: preferences }];"
+      },
+      "name": "Validate User Preferences",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.openweathermap.org/data/2.5/air_pollution?lat={{$json.location.latitude}}&lon={{$json.location.longitude}}&appid={{$credentials.openWeatherMapApi.key}}",
+        "options": {},
+        "queryParametersUi": {
+          "parameter": []
+        },
+        "headerParametersUi": {
+          "parameter": []
+        },
+        "authentication": "none",
+        "responseFormat": "json",
+        "jsonParameters": true
+      },
+      "name": "Fetch Local Environmental Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        750,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "options": {},
+        "authentication": "headerAuth",
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$credentials.openAI.apiKey}}"
+            }
+          ]
+        },
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "model",
+              "value": "gpt-4"
+            },
+            {
+              "name": "messages",
+              "value": "[{\"role\":\"system\",\"content\":\"You generate a personalized daily sustainability tip based on user lifestyle preferences, local environmental data, and current sustainability trends.\"},{\"role\":\"user\",\"content\":\"Lifestyle: {{$json.lifestyle}}, Location Air Quality: {{$json.air_quality}}, Trends: Latest sustainable living trends.\"}]"
+            },
+            {
+              "name": "max_tokens",
+              "value": 150
+            }
+          ]
+        },
+        "jsonParameters": true,
+        "responseFormat": "json"
+      },
+      "name": "Generate Personalized Tip",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ],
+      "credentials": {
+        "openAI": {
+          "id": "openAI_credential_id",
+          "name": "OpenAI API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: { tip: $json.choices[0].message.content.trim() } }];"
+      },
+      "name": "Extract Tip Text",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const today = new Date();\nconst sendHour = 9; // 9 AM local time\nconst userTimezone = $json.timezone || 'UTC';\n\n// Calculate the next trigger time in ISO format\nconst sendDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), sendHour, 0, 0);\n\nif (sendDate < today) {\n  sendDate.setDate(sendDate.getDate() + 1);\n}\n\n// Store the ISO string for scheduling\nreturn [{ json: { sendTime: sendDate.toISOString(), tip: $json.tip, email: $json.email } }];"
+      },
+      "name": "Schedule Next Tip Time",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "mode": "everyDay",
+              "time": "09:00"
+            }
+          ]
+        }
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.map(item => {\n  return {\n    json: {\n      email: item.json.email,\n      tip: item.json.tip\n    }\n  };\n});"
+      },
+      "name": "Prepare Email Content",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "no-reply@sustainabilitytip.com",
+        "toEmail": "={{$json.email}}",
+        "subject": "Your Daily Personalized Sustainability Tip",
+        "text": "={{$json.tip}}",
+        "options": {}
+      },
+      "name": "Send Email Notification",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1800,
+        300
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "smtp_credential_id",
+          "name": "SMTP Credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const engagementLog = {\n  userEmail: $json.email,\n  tipSent: $json.tip,\n  timestamp: new Date().toISOString(),\n  action: $json.action || 'sent'\n};\n\nreturn [{ json: engagementLog }];"
+      },
+      "name": "Log User Engagement",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        2000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "user_engagement_logs",
+        "jsonData": "={{$json}}"
+      },
+      "name": "Save Engagement to DB",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        2200,
+        300
+      ],
+      "credentials": {
+        "mongoDb": {
+          "id": "mongodb_credential_id",
+          "name": "MongoDB Credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "find",
+        "collection": "user_engagement_logs",
+        "filters": "={\"userEmail\": \"={{$json.email}}\"}"
+      },
+      "name": "Fetch Engagement History",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        500
+      ],
+      "credentials": {
+        "mongoDb": {
+          "id": "mongodb_credential_id",
+          "name": "MongoDB Credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const engagementData = items[0].json;\nconst engagementCount = items.length;\n\n// Example logic: if user engagement low, adjust tip generation prompt\nconst adjustedPrompt = engagementCount < 5 ?\n  `Generate an engaging sustainability tip for a user with lifestyle: ${items[0].json.lifestyle}` :\n  `Generate a standard sustainability tip.`;\n\nreturn [{ json: { adjustedPrompt } }];"
+      },
+      "name": "Optimize Tip Prompt Based on Engagement",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "Receive User Preferences": {
+      "main": [
+        [
+          {
+            "node": "Validate User Preferences",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate User Preferences": {
+      "main": [
+        [
+          {
+            "node": "Fetch Local Environmental Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Local Environmental Data": {
+      "main": [
+        [
+          {
+            "node": "Generate Personalized Tip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Personalized Tip": {
+      "main": [
+        [
+          {
+            "node": "Extract Tip Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Tip Text": {
+      "main": [
+        [
+          {
+            "node": "Schedule Next Tip Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Next Tip Time": {
+      "main": [
+        [
+          {
+            "node": "Prepare Email Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Email Content": {
+      "main": [
+        [
+          {
+            "node": "Send Email Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email Notification": {
+      "main": [
+        [
+          {
+            "node": "Log User Engagement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log User Engagement": {
+      "main": [
+        [
+          {
+            "node": "Save Engagement to DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Prepare Email Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Engagement to DB": {
+      "main": [
+        [
+          {
+            "node": "Fetch Engagement History",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Engagement History": {
+      "main": [
+        [
+          {
+            "node": "Optimize Tip Prompt Based on Engagement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
