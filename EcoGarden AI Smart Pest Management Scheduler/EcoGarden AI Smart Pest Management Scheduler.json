@@ -1,0 +1,263 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "deviceId": "your_iot_sensor_device_id",
+        "resource": "data",
+        "operation": "get",
+        "additionalFields": {},
+        "options": {
+          "filter": {}
+        }
+      },
+      "name": "Fetch Sensor Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        250
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "user": "sensor_api_user",
+          "password": "sensor_api_password"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "text-davinci-003",
+        "prompt": "You are an AI that analyzes IoT garden sensor data to detect pest severity levels. Input JSON data: {{ $json }}.\nOutput JSON with fields: { pestDetected: boolean, severity: 'low' | 'medium' | 'high', pestType: string, recommendedTreatment: string }.\nAnalyze and provide the output accordingly.",
+        "temperature": 0.3,
+        "maxTokens": 150
+      },
+      "name": "AI Pest Detection",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        500,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json[\"pestDetected\"]}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "If Pest Detected",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        700,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "current",
+        "location": "your_garden_location",
+        "options": {}
+      },
+      "name": "Get Current Weather",
+      "type": "n8n-nodes-base.weather",
+      "typeVersion": 1,
+      "position": [
+        900,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json[\"weatherConditions\"]}}",
+              "value2": "rain",
+              "operation": "notContains"
+            }
+          ]
+        }
+      },
+      "name": "If Weather Suitable",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "calendar",
+        "operation": "create",
+        "text": "Eco-friendly pest management: {{$json[\"recommendedTreatment\"]}}",
+        "startDateTime": "={{$now}}",
+        "endDateTime": "={{new Date($now.getTime() + 60*60*1000).toISOString()}}",
+        "details": "Pest Type: {{$json[\"pestType\"]}}\nSeverity: {{$json[\"severity\"]}}\nScheduled based on current weather conditions."
+      },
+      "name": "Schedule Treatment Task",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        150
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": "google_calendar_account"
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "eco.garden@example.com",
+        "toEmail": "={{$json[\"gardenerEmail\"]}}",
+        "subject": "EcoGarden AI Pest Management Reminder",
+        "text": "Dear Gardener,\n\nOur AI has detected a pest issue in your garden. Recommended treatment: {{$json[\"recommendedTreatment\"]}}.\nSeverity: {{$json[\"severity\"]}}.\nThe task has been scheduled on your calendar.\n\nWeather conditions are suitable for treatment.\n\nBest,\nEcoGarden AI"
+      },
+      "name": "Send Email Reminder",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        50
+      ],
+      "credentials": {
+        "smtp": "your_smtp_credential"
+      }
+    },
+    {
+      "parameters": {
+        "resource": "messages",
+        "operation": "send",
+        "to": "={{$json[\"gardenerPhone\"]}}",
+        "text": "EcoGarden Alert: Pest issue detected. Treatment scheduled. Check your email for details."
+      },
+      "name": "Send SMS Reminder",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        150
+      ],
+      "credentials": {
+        "twilioApi": "twilio_account"
+      }
+    },
+    {
+      "parameters": {
+        "resource": "logs",
+        "operation": "append",
+        "data": "={{{\n  action: \"Pest detected\",\n  pestType: $json[\"pestType\"],\n  severity: $json[\"severity\"],\n  treatment: $json[\"recommendedTreatment\"],\n  scheduledAt: new Date().toISOString(),\n  weatherAtSchedule: $json[\"weatherConditions\"]\n}}}"
+      },
+      "name": "Log Action",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [
+        1700,
+        150
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": "google_sheets_account"
+      }
+    }
+  ],
+  "connections": {
+    "Fetch Sensor Data": {
+      "main": [
+        [
+          {
+            "node": "AI Pest Detection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Pest Detection": {
+      "main": [
+        [
+          {
+            "node": "If Pest Detected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Pest Detected": {
+      "main": [
+        [
+          {
+            "node": "Get Current Weather",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Get Current Weather": {
+      "main": [
+        [
+          {
+            "node": "If Weather Suitable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Weather Suitable": {
+      "main": [
+        [
+          {
+            "node": "Schedule Treatment Task",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Schedule Treatment Task": {
+      "main": [
+        [
+          {
+            "node": "Send Email Reminder",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send SMS Reminder",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Send Email Reminder": {
+      "main": [
+        [
+          {
+            "node": "Log Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send SMS Reminder": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "eco_garden_ai_pest_management_scheduler"
+}
