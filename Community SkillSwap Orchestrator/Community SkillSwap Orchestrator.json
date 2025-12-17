@@ -1,0 +1,284 @@
+{
+  "name": "Community SkillSwap Automation Manager",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 9,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Daily Scheduler",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        200,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "formResponse",
+        "operation": "getAll",
+        "formId": "community_skillswap_offers_requests",
+        "options": {
+          "returnAll": true,
+          "filters": {}
+        }
+      },
+      "name": "Get Skill Offers and Requests",
+      "type": "n8n-nodes-base.googleForms",
+      "typeVersion": 1,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const skillOffers = [];\nconst skillRequests = [];\n\nitems.forEach(item => {\n  const responses = item.json.responses;\n  responses.forEach(response => {\n    const question = response.question;\n    const answer = response.answer;\n\n    if (question === 'Are you offering or requesting a skill?') {\n      item.json.intent = answer.toLowerCase();\n    }\n\n    if (question === 'What skill are you offering/requesting?') {\n      item.json.skill = answer.toLowerCase();\n    }\n\n    if (question === 'Your Email Address') {\n      item.json.email = answer;\n    }\n  });\n\n  if (item.json.intent === 'offering') {\n    skillOffers.push(item.json);\n  } else if (item.json.intent === 'requesting') {\n    skillRequests.push(item.json);\n  }\n});\n\nreturn [\n  { json: { skillOffers, skillRequests } }\n];"
+      },
+      "name": "Categorize Offers And Requests",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        460,
+        300
+      ],
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "functionCode": "const matches = [];\nconst offers = items[0].json.skillOffers;\nconst requests = items[0].json.skillRequests;\n\nrequests.forEach(request => {\n  const matchedOffers = offers.filter(offer => offer.skill === request.skill);\n  matchedOffers.forEach(offer => {\n    matches.push({\n      skill: request.skill,\n      requesterEmail: request.email,\n      offererEmail: offer.email\n    });\n  });\n});\n\nreturn matches.map(match => ({ json: match }));"
+      },
+      "name": "Match Skills in Real-Time",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        700,
+        300
+      ],
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "calendarId": "primary",
+        "summary": "SkillSwap Event: {{$json[\"skill\"]}}",
+        "description": "SkillSwap event connecting requester and offerer for skill: {{$json[\"skill\"]}}.",
+        "start": "={{ new Date(new Date().getTime() + 3*24*60*60*1000).toISOString() }}",
+        "end": "={{ new Date(new Date().getTime() + 3*24*60*60*1000 + 60*60*1000).toISOString() }}",
+        "attendeesUi": {
+          "parameter": [
+            {
+              "email": "={{$json[\"requesterEmail\"]}}"
+            },
+            {
+              "email": "={{$json[\"offererEmail\"]}}"
+            }
+          ]
+        }
+      },
+      "name": "Create SkillSwap Event in Calendar",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1,
+      "position": [
+        960,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "events",
+        "operation": "getAll",
+        "calendarId": "primary",
+        "options": {
+          "timeMin": "={{ new Date().toISOString() }}",
+          "timeMax": "={{ new Date(new Date().getTime() + 4*24*60*60*1000).toISOString() }}",
+          "q": "SkillSwap"
+        }
+      },
+      "name": "Get Upcoming SkillSwap Events",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1,
+      "position": [
+        200,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const reminders = [];\nitems.forEach(eventItem => {\n  eventItem.json.attendees.forEach(attendee => {\n    reminders.push({\n      json: {\n        email: attendee.email,\n        eventSummary: eventItem.json.summary,\n        eventStart: eventItem.json.start.dateTime || eventItem.json.start.date,\n        eventId: eventItem.json.id\n      }\n    });\n  });\n});\nreturn reminders;"
+      },
+      "name": "Prepare Reminder Emails",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        460,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "community@skillswap.org",
+        "toEmail": "={{$json[\"email\"]}}",
+        "subject": "Reminder: Upcoming SkillSwap Event {{$json[\"eventSummary\"]}}",
+        "text": "Hello,\n\nThis is a friendly reminder about your upcoming SkillSwap event \"{{$json[\"eventSummary\"]}}\" scheduled for {{$json[\"eventStart\"]}}.\n\nLooking forward to your participation!\n\nBest,\nCommunity SkillSwap Team"
+      },
+      "name": "Send Reminder Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        700,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "formResponse",
+        "operation": "getAll",
+        "formId": "community_skillswap_feedback",
+        "options": {
+          "returnAll": true
+        }
+      },
+      "name": "Get Feedback Responses",
+      "type": "n8n-nodes-base.googleForms",
+      "typeVersion": 1,
+      "position": [
+        220,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const feedbacks = items.map(item => {\n  const feedbackData = {};\n  item.json.responses.forEach(r => {\n    if (r.question === 'Event attended') feedbackData.event = r.answer;\n    if (r.question === 'Your Email Address') feedbackData.email = r.answer;\n    if (r.question === 'Feedback') feedbackData.feedback = r.answer;\n  });\n  return { json: feedbackData };\n});\nreturn feedbacks;"
+      },
+      "name": "Parse Feedback",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        460,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.communityskillswap.org/feedback",
+        "options": {
+          "bodyContentType": "json",
+          "bodyParametersJson": "={{$json}}"
+        },
+        "requestMethod": "POST"
+      },
+      "name": "Send Feedback to API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        700,
+        700
+      ]
+    }
+  ],
+  "connections": {
+    "Daily Scheduler": {
+      "main": [
+        [
+          {
+            "node": "Get Skill Offers and Requests",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Upcoming SkillSwap Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Skill Offers and Requests": {
+      "main": [
+        [
+          {
+            "node": "Categorize Offers And Requests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Categorize Offers And Requests": {
+      "main": [
+        [
+          {
+            "node": "Match Skills in Real-Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Match Skills in Real-Time": {
+      "main": [
+        [
+          {
+            "node": "Create SkillSwap Event in Calendar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Upcoming SkillSwap Events": {
+      "main": [
+        [
+          {
+            "node": "Prepare Reminder Emails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Reminder Emails": {
+      "main": [
+        [
+          {
+            "node": "Send Reminder Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Feedback Responses": {
+      "main": [
+        [
+          {
+            "node": "Parse Feedback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Feedback": {
+      "main": [
+        [
+          {
+            "node": "Send Feedback to API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
