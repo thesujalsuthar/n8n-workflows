@@ -1,0 +1,269 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 8,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "resource": "user",
+        "filters": {}
+      },
+      "name": "Get Users",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "CREDENTIALS_ID",
+          "name": "UserAPI Credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const users = items;\n\nreturn users.map(user => {\n  return {\n    json: {\n      userId: user.json.id,\n      name: user.json.name,\n      email: user.json.email,\n      pastHabits: user.json.habits || [],\n      location: user.json.location || null\n    }\n  };\n});"
+      },
+      "name": "Prepare User Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are EcoAware AI assistant who provides personalized sustainability tips."
+          },
+          {
+            "role": "user",
+            "content": "Based on this user data and recent environmental data, suggest 3 daily personalized sustainability tips adapted to their habits and location. User data: {{$json}}. Environmental data: {{$json.environment}}"
+          }
+        ],
+        "options": {},
+        "temperature": 0.7,
+        "topP": 1,
+        "frequencyPenalty": 0,
+        "presencePenalty": 0
+      },
+      "name": "Generate Sustainability Tips AI",
+      "type": "n8n-nodes-base.openai",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ],
+      "credentials": {
+        "openAIApi": {
+          "id": "OPENAI_CREDENTIALS_ID",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "resource": "environment",
+        "filters": {
+          "location": "={{$json.location}}"
+        }
+      },
+      "name": "Get Environmental Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        650,
+        450
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "ENV_API_CREDENTIALS_ID",
+          "name": "EnvironmentAPI Credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "items.forEach(item => {\n  item.json.environment = $items(\"Get Environmental Data\").find(env => env.json.location === item.json.location)?.json || {};\n});\nreturn items;"
+      },
+      "name": "Merge Environmental Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        800,
+        375
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.map(item => {\n  return {\n    json: {\n      userId: item.json.userId,\n      tips: item.json.choices[0].message.content\n    }\n  };\n});"
+      },
+      "name": "Format Tips Output",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "resource": "habitTrack",
+        "data": {
+          "userId": "={{$json.userId}}",
+          "date": "={{new Date().toISOString().slice(0,10)}}",
+          "tips": "={{$json.tips}}"
+        }
+      },
+      "name": "Update Habit Tracking",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        300
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "HABIT_TRACK_API_CREDENTIALS_ID",
+          "name": "HabitTrack API Credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "toEmail": "={{$json.email}}",
+        "subject": "Your Daily EcoAware Sustainability Tips",
+        "text": "Hello {{$json.name}},\n\nHere are your personalized sustainability tips for today:\n\n{{$json.tips}}\n\nKeep up the great work towards a sustainable lifestyle!\n\nBest,\nEcoAware Team"
+      },
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        300
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "SMTP_CREDENTIALS_ID",
+          "name": "SMTP Credentials"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Users",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Users": {
+      "main": [
+        [
+          {
+            "node": "Prepare User Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare User Data": {
+      "main": [
+        [
+          {
+            "node": "Get Environmental Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Environmental Data": {
+      "main": [
+        [
+          {
+            "node": "Merge Environmental Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Environmental Data": {
+      "main": [
+        [
+          {
+            "node": "Generate Sustainability Tips AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Sustainability Tips AI": {
+      "main": [
+        [
+          {
+            "node": "Format Tips Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Tips Output": {
+      "main": [
+        [
+          {
+            "node": "Update Habit Tracking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Habit Tracking": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
