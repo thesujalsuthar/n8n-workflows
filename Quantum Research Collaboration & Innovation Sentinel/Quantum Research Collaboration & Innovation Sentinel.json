@@ -1,0 +1,233 @@
+{
+  "name": "Quantum Computing Research Collaboration and Innovation Tracker",
+  "nodes": [
+    {
+      "parameters": {
+        "resource": "rssFeed",
+        "operation": "getAll",
+        "url": "https://arxiv.org/rss/quant-ph",
+        "returnAll": true
+      },
+      "name": "Fetch Quantum Computing Papers",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "collection": "researchPapers",
+        "data": "={{JSON.stringify($json[\"items\"] || $json[\"entries\"] || [])}}",
+        "options": {
+          "upsert": true
+        },
+        "key": "id"
+      },
+      "name": "Store Research Papers",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ],
+      "credentials": {
+        "mongoDb": "Your MongoDB Credential"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const papers = items[0].json.items || items[0].json.entries || [];\n\nconst collaborations = [];\n\npapers.forEach(paper => {\n  if (paper.title && paper.title.toLowerCase().includes('collaboration')) {\n    collaborations.push(paper);\n  }\n});\n\nreturn collaborations.map(c => ({ json: c }));"
+      },
+      "name": "Filter Collaboration Opportunities",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "collection": "collaborations",
+        "data": "={{JSON.stringify($json)}}",
+        "options": {
+          "upsert": true
+        },
+        "key": "link"
+      },
+      "name": "Store Collaboration Opportunities",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ],
+      "credentials": {
+        "mongoDb": "Your MongoDB Credential"
+      }
+    },
+    {
+      "parameters": {
+        "operation": "find",
+        "collection": "researchPapers",
+        "query": "{}",
+        "options": {},
+        "returnAll": true
+      },
+      "name": "Get Stored Papers",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        450,
+        500
+      ],
+      "credentials": {
+        "mongoDb": "Your MongoDB Credential"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const trendsKeywords = ['quantum machine learning', 'error correction', 'quantum algorithms', 'quantum supremacy', 'entanglement', 'quantum cryptography'];\n\nconst papers = items[0].json;\n\nconst emergingTrends = trendsKeywords.filter(keyword =>\n  papers.some(paper => paper.title && paper.title.toLowerCase().includes(keyword))\n);\n\nreturn [{ json: { emergingTrends } }];"
+      },
+      "name": "Detect Emerging Trends",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "text": "Emerging Quantum Computing Trends Detected:\n{{$json[\"emergingTrends\"].join(', ') || 'No significant trends at the moment.'}}"
+      },
+      "name": "Prepare Notification Message",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        850,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "toEmail": "={{$json[\"email\"] || \"researchers@quantumlab.org\"}}",
+        "subject": "Quantum Computing Research Update: Emerging Trends & Collaborations",
+        "text": "={{$json[\"text\"]}}"
+      },
+      "name": "Send Email Notification",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        480
+      ],
+      "credentials": {
+        "smtp": "Your SMTP Credential"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.map(item => ({ json: { email: 'researchers@quantumlab.org' } }));"
+      },
+      "name": "Set Notification Recipients",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Fetch Quantum Computing Papers": {
+      "main": [
+        [
+          {
+            "node": "Store Research Papers",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Filter Collaboration Opportunities",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Research Papers": {
+      "main": [
+        [
+          {
+            "node": "Get Stored Papers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Collaboration Opportunities": {
+      "main": [
+        [
+          {
+            "node": "Store Collaboration Opportunities",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Stored Papers": {
+      "main": [
+        [
+          {
+            "node": "Detect Emerging Trends",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect Emerging Trends": {
+      "main": [
+        [
+          {
+            "node": "Prepare Notification Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Notification Message": {
+      "main": [
+        [
+          {
+            "node": "Set Notification Recipients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Notification Recipients": {
+      "main": [
+        [
+          {
+            "node": "Send Email Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
