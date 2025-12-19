@@ -1,0 +1,191 @@
+{
+  "name": "AI-Driven Personal Sleep Quality Analysis and Optimization System",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "sleepData",
+        "operation": "get",
+        "deviceId": "={{$json.deviceId || 'all'}}",
+        "options": {
+          "startDate": "={{new Date().toISOString().slice(0,10)}}",
+          "endDate": "={{new Date().toISOString().slice(0,10)}}"
+        }
+      },
+      "name": "Get Sleep Data",
+      "type": "n8n-nodes-base.wearableApi",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const sleepData = $items()[0].json.data;\n\n// Basic preprocessing\nconst totalSleep = sleepData.reduce((acc, day) => acc + day.totalSleepMinutes, 0) / sleepData.length;\nconst awakenings = sleepData.reduce((acc, day) => acc + day.awakenings, 0) / sleepData.length;\nconst averageSleepLatency = sleepData.reduce((acc, day) => acc + day.sleepLatencyMinutes, 0) / sleepData.length;\n\nreturn [{\n  json: {\n    totalSleepAvg: totalSleep,\n    avgAwakenings: awakenings,\n    avgSleepLatency: averageSleepLatency\n  }\n}];"
+      },
+      "name": "Preprocess Sleep Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "prompt": "You are an AI sleep specialist. Analyze the following sleep metrics: average total sleep (minutes), average awakenings, and average sleep latency (minutes). Identify if there are indications of sleep apnea, insomnia, or other sleep issues. Provide a detailed report and actionable recommendations to improve sleep quality.\n\nSleep Data:\n- Average total sleep: {{$json.totalSleepAvg}}\n- Average awakenings: {{$json.avgAwakenings}}\n- Average sleep latency: {{$json.avgSleepLatency}}\n\nRespond in JSON format with fields: diagnosis, recommendations, and alerts.",
+        "options": {
+          "temperature": 0.7,
+          "maxTokens": 512
+        }
+      },
+      "name": "AI Sleep Analysis",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const analysis = JSON.parse(items[0].json.choices[0].message.content);\nreturn [{ json: analysis }];"
+      },
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Construct smart home commands based on alerts and recommendations\nconst recommendations = $json.recommendations || [];\nconst alerts = $json.alerts || [];\n\nconst commands = [];\n\n// Example logic: dim lights if sleep latency is high\nif (recommendations.includes('reduce light exposure before bedtime')) {\n  commands.push({ device: 'lighting', action: 'dim', value: '30%' });\n}\n\n// Adjust temperature recommendation\nif (recommendations.includes('keep bedroom around 18-20°C')) {\n  commands.push({ device: 'thermostat', action: 'setTemperature', value: 19 });\n}\n\n// White noise if awakenings are frequent\nif (recommendations.includes('use white noise to minimize awakenings')) {\n  commands.push({ device: 'soundSystem', action: 'playWhiteNoise', value: 'medium' });\n}\n\nreturn [{ json: { commands, alerts } }];"
+      },
+      "name": "Generate Smart Home Commands",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://smarthome.local/api/commands",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={{JSON.stringify($json.commands)}}"
+      },
+      "name": "Send Commands to Smart Home",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "mail",
+        "operation": "send",
+        "fromEmail": "sleep.analytics@yourdomain.com",
+        "toEmail": "={{$json.email || 'user@example.com'}}",
+        "subject": "Your Personalized Sleep Analysis Report",
+        "text": "Hello,\n\nHere is your personalized sleep analysis and recommendations:\n\nDiagnosis:\n{{$json.diagnosis}}\n\nRecommendations:\n{{$json.recommendations.join('\\n')}}\n\nAlerts:\n{{$json.alerts.join('\\n')}}\n\nHave a restful night!\n\nBest,\nSleep Analytics Team"
+      },
+      "name": "Send Email Report",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "chatPostMessage",
+        "channel": "sleep-analysis",
+        "text": "={{\n  `Sleep Analysis Report:\nDiagnosis: ${$json.diagnosis}\nRecommendations:\n${$json.recommendations.join('\\n')}\nAlerts:\n${$json.alerts.join('\\n')}`\n}}"
+      },
+      "name": "Send Slack Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        700
+      ]
+    }
+  ],
+  "connections": {
+    "Get Sleep Data": {
+      "main": [
+        [
+          {
+            "node": "Preprocess Sleep Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preprocess Sleep Data": {
+      "main": [
+        [
+          {
+            "node": "AI Sleep Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Sleep Analysis": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Generate Smart Home Commands",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Email Report",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Slack Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Smart Home Commands": {
+      "main": [
+        [
+          {
+            "node": "Send Commands to Smart Home",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
