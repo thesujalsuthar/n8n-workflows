@@ -1,0 +1,164 @@
+{
+  "name": "AI-Driven Personalized Sleep Quality Improvement and Smart Alarm System",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "devices",
+        "operation": "getData",
+        "deviceId": "={{$json[\"deviceId\"]}}",
+        "dataTypes": [
+          "sleep",
+          "heartRate",
+          "movement"
+        ],
+        "timeRangeStart": "={{new Date(new Date().setHours(0,0,0,0)).toISOString()}}",
+        "timeRangeEnd": "={{new Date().toISOString()}}"
+      },
+      "name": "Fetch Wearable Sleep Data",
+      "type": "n8n-nodes-base.api",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ],
+      "credentials": {
+        "WearableOAuth2Api": {
+          "id": "1",
+          "name": "Wearable Health Device OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const sleepData = items[0].json.data.sleep;\nconst heartRateData = items[0].json.data.heartRate;\nconst movementData = items[0].json.data.movement;\n\n// Preprocess data and combine relevant features\nconst combinedData = sleepData.map((sleepSegment, idx) => {\n  return {\n    startTime: sleepSegment.startTime,\n    endTime: sleepSegment.endTime,\n    sleepStage: sleepSegment.stage,\n    avgHeartRate: heartRateData[idx] ? heartRateData[idx].value : null,\n    movement: movementData[idx] ? movementData[idx].value : null\n  };\n});\n\nreturn [{ json: { combinedSleepData: combinedData } }];"
+      },
+      "name": "Preprocess Sleep Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "temperature": 0.4,
+        "top_p": 1,
+        "frequency_penalty": 0,
+        "presence_penalty": 0,
+        "stopSequences": [],
+        "prompt": "Analyze the following sleep data with heart rate and movement information to identify sleep patterns and potential issues. Provide a detailed explanation and personalized recommendations to improve sleep quality.\n\nSleep Data:\n{{ $json[\"combinedSleepData\"] }}\n\nRecommendations should include suggestions about sleep hygiene, environment, timing, and behavior."
+      },
+      "name": "Analyze Sleep Patterns and Recommend Improvements",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const recommendations = items[0].json.choices[0].message.content;\n\n// Basic interpretation to identify optimal wake up time based on sleep cycle (mock example)\n// In a real-world case, this would use extracted data and neural network output\n\n// Find last sleep segment end time\nconst sleepSegments = $json[\"combinedSleepData\"];\n\nlet wakeUpTime = new Date().getTime() + 8 * 60 * 60 * 1000; // default 8 hours from now\n\nif (sleepSegments && sleepSegments.length > 0) {\n  // Attempt to find light sleep phases near desired wake time\n  const lightSleepPhases = sleepSegments.filter(s => s.sleepStage === 'light');\n  if (lightSleepPhases.length > 0) {\n    // Pick earliest light sleep phase end time after now\n    const now = Date.now();\n    const candidate = lightSleepPhases.find(phase => new Date(phase.endTime).getTime() > now);\n    if (candidate) {\n      wakeUpTime = new Date(candidate.endTime).getTime();\n    }\n  }\n}\n\nreturn [{ json: { recommendations, wakeUpTime: new Date(wakeUpTime).toISOString() } }];"
+      },
+      "name": "Determine Optimal Wake Up Time",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "notifications",
+        "operation": "send",
+        "title": "Smart Alarm Notification",
+        "text": "={{\"Your optimal wake-up time is set to \" + $json[\"wakeUpTime\"] + \".\\nRecommendations to improve your sleep:\\n\" + $json[\"recommendations\"] }}",
+        "priority": "high",
+        "recipient": "={{$json[\"userEmail\"]}}"
+      },
+      "name": "Send Smart Alarm Notification",
+      "type": "n8n-nodes-base.push",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: { deviceId: 'user-wearable-001', userEmail: 'user@example.com' } }];"
+      },
+      "name": "Start Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Start Data": {
+      "main": [
+        [
+          {
+            "node": "Fetch Wearable Sleep Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Wearable Sleep Data": {
+      "main": [
+        [
+          {
+            "node": "Preprocess Sleep Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preprocess Sleep Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze Sleep Patterns and Recommend Improvements",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Sleep Patterns and Recommend Improvements": {
+      "main": [
+        [
+          {
+            "node": "Determine Optimal Wake Up Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Determine Optimal Wake Up Time": {
+      "main": [
+        [
+          {
+            "node": "Send Smart Alarm Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "id": "AI_Driven_Personalized_Sleep_Quality_Improvement_and_Smart_Alarm_System"
+}
