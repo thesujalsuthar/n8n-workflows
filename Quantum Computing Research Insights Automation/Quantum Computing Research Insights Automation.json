@@ -1,0 +1,249 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.crossref.org/works?filter=subject:quantum+computing,from-pub-date:{{ $moment().subtract(7, 'days').format('YYYY-MM-DD') }},sort=published,order=desc",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Fetch CrossRef Publications",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.arxiv.org/query?search_query=all:quantum+computing&start=0&max_results=10&sortBy=submittedDate&sortOrder=descending",
+        "responseFormat": "xml",
+        "options": {}
+      },
+      "name": "Fetch arXiv Preprints",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://newsapi.org/v2/everything?q=quantum+computing&sortBy=publishedAt&apiKey=YOUR_NEWSAPI_KEY",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Fetch Tech News",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const crossref = items[0].json.message.items.map(item => ({\n  title: item.title[0],\n  authors: item.author ? item.author.map(a => a.given + ' ' + a.family).join(', ') : '',\n  date: item.published ? item.published['date-parts'][0].join('-') : '',\n  url: item.URL,\n  source: 'CrossRef'\n}));\n\nconst parseArxivXml = (xml) => {\n  const parser = new xml2js.Parser({explicitArray: false});\n  return parser.parseStringPromise(xml).then(result => {\n    const entries = result.feed.entry;\n    if (!entries) return [];\n    return Array.isArray(entries) ? entries.map(e => ({\n      title: e.title,\n      authors: Array.isArray(e.author) ? e.author.map(a => a.name).join(', ') : e.author.name,\n      date: e.published,\n      url: e.id,\n      source: 'arXiv'\n    })) : [{\n      title: entries.title,\n      authors: Array.isArray(entries.author) ? entries.author.map(a => a.name).join(', ') : entries.author.name,\n      date: entries.published,\n      url: entries.id,\n      source: 'arXiv'\n    }];\n  });\n};\n\nconst arxivXml = items[1].json;\n\nreturn parseArxivXml(arxivXml).then(arxivData => {\n  const news = items[2].json.articles.map(article => ({\n    title: article.title,\n    authors: article.source.name || '',\n    date: article.publishedAt,\n    url: article.url,\n    source: 'Tech News'\n  }));\n\n  const combined = [...crossref, ...arxivData, ...news];\n\n  return combined.map(entry => ({ json: entry }));\n});"
+      },
+      "name": "Parse and Combine Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        550,
+        475
+      ],
+      "notesInFlow": true,
+      "notes": "Parse JSON and XML data from APIs and combine into one list"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "sheetId": "YOUR_GOOGLE_SHEET_ID",
+        "range": "Sheet1!A:E",
+        "valueInputMode": "USER_ENTERED",
+        "options": {},
+        "fields": "values",
+        "values": "={{$json[\"date\"]}, {$json[\"title\"]}, {$json[\"authors\"]}, {$json[\"url\"]}, {$json[\"source\"]}}"
+      },
+      "name": "Append to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [
+        850,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "your@email.com",
+        "toEmail": "recipient@email.com",
+        "subject": "Weekly Quantum Computing Research Summary",
+        "text": "Here is the latest summary of quantum computing research, opportunities, and news:\n\n{{$json[\"title\"]}} - {{$json[\"source\"]}} - {{$json[\"url\"]}}\n\nPlease find attached the detailed report."
+      },
+      "name": "Send Summary Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        850,
+        600
+      ]
+    },
+    {
+      "parameters": {},
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [
+        100,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "expression": "return items.some(item => {\n  const title = item.json.title.toLowerCase();\n  const breakthroughKeywords = [\"breakthrough\", \"significant\", \"milestone\", \"important\", \"collaboration call\", \"funding opportunity\"];\n  return breakthroughKeywords.some(keyword => title.includes(keyword));\n});"
+      },
+      "name": "Check for Significant Breakthroughs",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        700,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "your@email.com",
+        "toEmail": "recipient@email.com",
+        "subject": "Quantum Computing Significant Breakthroughs or Collaboration Calls Alert",
+        "text": "Attention: Significant breakthroughs or new collaboration opportunities have been detected in the latest quantum computing updates:\n\n{{$json[\"title\"]}} - {{$json[\"source\"]}} - {{$json[\"url\"]}}"
+      },
+      "name": "Send Alert Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        950,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 9,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        100,
+        250
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Daily Trigger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch CrossRef Publications",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch arXiv Preprints",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Tech News",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch CrossRef Publications": {
+      "main": [
+        [
+          {
+            "node": "Parse and Combine Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch arXiv Preprints": {
+      "main": [
+        [
+          {
+            "node": "Parse and Combine Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch Tech News": {
+      "main": [
+        [
+          {
+            "node": "Parse and Combine Data",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Parse and Combine Data": {
+      "main": [
+        [
+          {
+            "node": "Append to Google Sheets",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Summary Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Check for Significant Breakthroughs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check for Significant Breakthroughs": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Send Alert Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
