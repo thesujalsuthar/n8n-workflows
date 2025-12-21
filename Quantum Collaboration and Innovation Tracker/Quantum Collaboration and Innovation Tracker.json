@@ -1,0 +1,204 @@
+{
+  "name": "Quantum Computing Research Collaboration and Innovation Tracker",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://arxiv.org/rss/quant-ph",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Fetch Quantum Research RSS Feed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const parser = require('xml2js').parseString;\n\nreturn new Promise((resolve, reject) => {\n  parser(items[0].json, { mergeAttrs: true, explicitArray: false }, (err, result) => {\n    if (err) {\n      reject(err);\n    } else {\n      const entries = result.rss.channel.item;\n      const papers = Array.isArray(entries) ? entries : [entries];\n      const formatted = papers.map(paper => ({\n        title: paper.title || \"\",\n        link: paper.link || \"\",\n        pubDate: paper.pubDate || \"\",\n        description: paper.description || \"\",\n        authorsRaw: paper['dc:creator'] || \"\",\n        authors: paper['dc:creator'] ? paper['dc:creator'].split(/,|and/).map(s => s.trim()) : []\n      }));\n      resolve(formatted.map(p => ({ json: p })));\n    }\n  });\n});"
+      },
+      "name": "Parse RSS XML to JSON",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ],
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "functionCode": "const keywords = [\n  \"entanglement\", \"quantum algorithms\", \"quantum error correction\", \"quantum cryptography\", \"quantum annealing\", \"superconducting qubits\", \"topological quantum computing\", \"quantum machine learning\", \"quantum simulation\", \"quantum supremacy\"\n];\n\nreturn items.map(item => {\n  const text = (item.json.title + ' ' + item.json.description).toLowerCase();\n  const foundKeywords = keywords.filter(keyword => text.includes(keyword));\n  item.json.topics = foundKeywords;\n\n  // Extract collaboration triggers if multiple authors or notable keywords exist\n  item.json.collaborationOpportunity = false;\n  if (item.json.authors.length > 1) {\n    item.json.collaborationOpportunity = true;\n  }\n  if (foundKeywords.length > 0) {\n    item.json.collaborationOpportunity = true;\n  }\n\n  return item;\n});"
+      },
+      "name": "Extract Collaboration Opportunities",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ],
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "resource": "email",
+        "operation": "send",
+        "toEmail": "={{$json[\"authorsRaw\"].split(/,|and/).map(s => s.trim() + '@quantumresearch.org').join(\",\")}}",
+        "subject": "New Quantum Computing Collaboration Opportunity: {{$json[\"title\"]}}",
+        "text": "Dear Researcher,\n\nA new research paper titled \"{{$json[\"title\"]}}\" may present collaboration opportunities. The paper covers the following topics:\n\n{{$json[\"topics\"].join(\", \")}}\n\nRead more and consider reaching out to co-authors:\n{{$json[\"link\"]}}\n\nBest regards,\nQuantum Computing Innovation Tracker Team"
+      },
+      "name": "Notify Researchers via Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        850,
+        200
+      ],
+      "credentials": {
+        "smtp": "SMTP Account"
+      }
+    },
+    {
+      "parameters": {
+        "service": "slack",
+        "resource": "message",
+        "operation": "post",
+        "channel": "#quantum-collaborations",
+        "text": "New collaboration opportunity! Title: {{$json[\"title\"]}}\nTopics: {{$json[\"topics\"].join(\", \")}}\nAuthors: {{$json[\"authorsRaw\"]}}\nLink: {{$json[\"link\"]}}"
+      },
+      "name": "Notify Teams on Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        850,
+        400
+      ],
+      "credentials": {
+        "slackApi": "Slack Account"
+      }
+    },
+    {
+      "parameters": {
+        "operation": "groupBy",
+        "fields": [
+          "topics"
+        ],
+        "options": {
+          "groupBySingleField": true
+        }
+      },
+      "name": "Group by Topic",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        650,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const topicsCounts = {};\n\nfor (const item of items) {\n  const topics = item.json.topics || [];\n  for (const topic of topics) {\n    topicsCounts[topic] = (topicsCounts[topic] || 0) + 1;\n  }\n}\n\nreturn [{ json: { topicsCounts } }];"
+      },
+      "name": "Count Topic Frequencies",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "chart",
+        "operation": "bar",
+        "data": "={{ Object.entries($json[\"topicsCounts\"]).map(([topic, count]) => ({ label: topic, value: count })) }}",
+        "options": {
+          "title": "Trending Topics in Quantum Computing Research",
+          "xLabel": "Topics",
+          "yLabel": "Number of Papers",
+          "width": 700,
+          "height": 400
+        }
+      },
+      "name": "Visualize Trending Topics",
+      "type": "n8n-nodes-base.chart",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "Fetch Quantum Research RSS Feed": {
+      "main": [
+        [
+          {
+            "node": "Parse RSS XML to JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse RSS XML to JSON": {
+      "main": [
+        [
+          {
+            "node": "Extract Collaboration Opportunities",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Collaboration Opportunities": {
+      "main": [
+        [
+          {
+            "node": "Notify Researchers via Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Notify Teams on Slack",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Group by Topic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Group by Topic": {
+      "main": [
+        [
+          {
+            "node": "Count Topic Frequencies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Count Topic Frequencies": {
+      "main": [
+        [
+          {
+            "node": "Visualize Trending Topics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "QuantumComputingResearchCollaborationInnovationTracker"
+}
