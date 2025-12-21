@@ -1,0 +1,282 @@
+{
+  "nodes": [
+    {
+      "id": "1",
+      "name": "Fetch Exchange Data",
+      "type": "httpRequest",
+      "position": [
+        250,
+        300
+      ],
+      "parameters": {
+        "url": "https://api.cryptoexchange1.com/v1/market_data",
+        "method": "GET",
+        "responseFormat": "json",
+        "headers": {
+          "Authorization": "Bearer {{$credentials.cryptoExchangeApi.token}}"
+        }
+      },
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "cryptoExchangeApi",
+          "name": "Crypto Exchange API Credentials"
+        }
+      }
+    },
+    {
+      "id": "2",
+      "name": "Fetch Blockchain Events",
+      "type": "httpRequest",
+      "position": [
+        250,
+        450
+      ],
+      "parameters": {
+        "url": "https://api.blockchainnetwork.com/v1/events",
+        "method": "GET",
+        "responseFormat": "json",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "eventType",
+              "value": "suspicious_activity"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "3",
+      "name": "Fetch Regulatory News",
+      "type": "httpRequest",
+      "position": [
+        250,
+        600
+      ],
+      "parameters": {
+        "url": "https://newsapi.org/v2/everything",
+        "method": "GET",
+        "responseFormat": "json",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "q",
+              "value": "cryptocurrency regulation hack"
+            },
+            {
+              "name": "apiKey",
+              "value": "{{$credentials.newsApi.key}}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "apiKeyAuth": {
+          "id": "newsApi",
+          "name": "News API Credentials"
+        }
+      }
+    },
+    {
+      "id": "4",
+      "name": "Combine Data",
+      "type": "merge",
+      "position": [
+        600,
+        450
+      ],
+      "parameters": {
+        "mode": "passThrough",
+        "propertyName": "data",
+        "inputDataFieldName": "data",
+        "mergeField": "json"
+      }
+    },
+    {
+      "id": "5",
+      "name": "AI Threat Analysis",
+      "type": "openAi",
+      "position": [
+        900,
+        450
+      ],
+      "parameters": {
+        "resource": "chatCompletion",
+        "operation": "create",
+        "model": "gpt-4",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are a Crypto Threat Analyst AI. Analyze the combined data from exchanges, blockchain events, and news. Detect suspicious activities, potential hacks, and regulatory changes. Provide a concise actionable alert summary with threat levels."
+          },
+          {
+            "role": "user",
+            "content": "Data to analyze: {{$json[\"data\"]}}"
+          }
+        ],
+        "temperature": 0.2
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "openAiApiKey",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "id": "6",
+      "name": "Format Alert Message",
+      "type": "function",
+      "position": [
+        1150,
+        450
+      ],
+      "parameters": {
+        "functionCode": "const analysis = items[0].json.choices[0].message.content;\nreturn [{ json: { alertMessage: analysis }}];"
+      }
+    },
+    {
+      "id": "7",
+      "name": "Send Email Alert",
+      "type": "emailSend",
+      "position": [
+        1400,
+        300
+      ],
+      "parameters": {
+        "fromEmail": "alerts@cryptosentinel.com",
+        "toEmail": "={{$json[\"userEmail\"] || 'user@example.com'}}",
+        "subject": "CryptoSentinel Alert: Suspicious Activity Detected",
+        "text": "={{$json[\"alertMessage\"]}}"
+      },
+      "credentials": {
+        "smtp": {
+          "id": "smtpCredentials",
+          "name": "SMTP Credentials"
+        }
+      }
+    },
+    {
+      "id": "8",
+      "name": "Send Slack Alert",
+      "type": "slack",
+      "position": [
+        1400,
+        450
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "postMessage",
+        "channel": "#crypto-alerts",
+        "text": "={{$json[\"alertMessage\"]}}"
+      },
+      "credentials": {
+        "slackApi": {
+          "id": "slackApi",
+          "name": "Slack API"
+        }
+      }
+    },
+    {
+      "id": "9",
+      "name": "Send SMS Alert",
+      "type": "twilio",
+      "position": [
+        1400,
+        600
+      ],
+      "parameters": {
+        "operation": "sendMessage",
+        "to": "={{$json[\"userPhone\"] || '+1234567890'}}",
+        "message": "={{$json[\"alertMessage\"]}}"
+      },
+      "credentials": {
+        "twilioApi": {
+          "id": "twilioApi",
+          "name": "Twilio API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "1": {
+      "main": [
+        [
+          {
+            "node": "4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2": {
+      "main": [
+        [
+          {
+            "node": "4",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "3": {
+      "main": [
+        [
+          {
+            "node": "4",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "4": {
+      "main": [
+        [
+          {
+            "node": "5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5": {
+      "main": [
+        [
+          {
+            "node": "6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6": {
+      "main": [
+        [
+          {
+            "node": "7",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "8",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "9",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "id": "CryptoSentinelWorkflow"
+}
