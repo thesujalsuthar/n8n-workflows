@@ -1,0 +1,253 @@
+{
+  "name": "EcoFashion AI: Personalized Sustainable Outfit Generator and Wardrobe Optimizer",
+  "nodes": [
+    {
+      "parameters": {
+        "source": "https://api.openweathermap.org/data/2.5/weather",
+        "options": {},
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "q",
+              "value": "={{$json[\"city\"] || \"New York\"}}"
+            },
+            {
+              "name": "units",
+              "value": "metric"
+            },
+            {
+              "name": "appid",
+              "value": "={{$credentials.openWeatherApi.apiKey}}"
+            }
+          ]
+        },
+        "jsonParameters": true,
+        "responseFormat": "json"
+      },
+      "name": "Get Weather Data",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const wardrobe = items[0].json.wardrobe;\nconst weather = items[1].json.weather;\nconst preferences = items[2].json.preferences;\n\nfunction calculateSustainabilityScore(item) {\n  // Example criteria:\n  // Organic material +2, Fair Trade +1, Low Water Use +1, Recycled Material +2\n  let score = 0;\n  if (item.material && item.material.toLowerCase().includes(\"organic\")) score += 2;\n  if (item.fairTrade) score += 1;\n  if (item.lowWaterUsage) score += 1;\n  if (item.recycledMaterial) score += 2;\n  return score;\n}\n\nfunction suitableForWeather(item, weather) {\n  // Basic example: temp thresholds and clothing type\n  const temp = weather.main.temp;\n  if (temp < 10 && item.type === \"jacket\") return true;\n  if (temp >= 10 && temp < 20 && (item.type === \"long_sleeve\" || item.type === \"jacket\")) return true;\n  if (temp >= 20 && item.type === \"short_sleeve\") return true;\n  // Accessories always ok\n  if (item.type === \"accessory\") return true;\n  return false;\n}\n\nfunction filterWardrobe(wardrobe, weather, preferences) {\n  let filtered = wardrobe\n    .map(item => {\n      item.sustainabilityScore = calculateSustainabilityScore(item);\n      return item;\n    })\n    .filter(item => suitableForWeather(item, weather));\n\n  // Apply user preferences like colors or styles\n  if (preferences.colors && preferences.colors.length > 0) {\n    filtered = filtered.filter(item => preferences.colors.includes(item.color));\n  }\n  if (preferences.styles && preferences.styles.length > 0) {\n    filtered = filtered.filter(item => preferences.styles.includes(item.style));\n  }\n\n  // Sort by sustainability score descending\n  filtered.sort((a, b) => b.sustainabilityScore - a.sustainabilityScore);\n\n  return filtered.slice(0, 5); // Top 5 items\n}\n\nconst outfits = filterWardrobe(wardrobe, weather, preferences);\n\nreturn [{ json: { outfits } }];"
+      },
+      "name": "Generate Sustainable Outfit",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        550,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.map(item => {\n  const outfits = item.json.outfits;\n  let text = \"Here are your personalized sustainable outfit suggestions for today:\\n\\n\";\n  outfits.forEach((item, index) => {\n    text += `${index + 1}. ${item.name} (Type: ${item.type}, Color: ${item.color}, Sustainability Score: ${item.sustainabilityScore})\\n`;\n  });\n  return { json: { text } };\n});"
+      },
+      "name": "Format Outfit Message",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        780,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "no-reply@ecofashionai.com",
+        "toEmail": "={{$json[\"userEmail\"]}}",
+        "subject": "Your Daily Personalized Sustainable Outfit Suggestions",
+        "text": "={{$json[\"text\"]}}"
+      },
+      "name": "Send Email Notification",
+      "type": "emailSend",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        250
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "1",
+          "name": "SMTP Credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{$json[\"userChatId\"]}}",
+        "message": "={{$json[\"text\"]}}"
+      },
+      "name": "Send Telegram Message",
+      "type": "telegram",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        350
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "2",
+          "name": "Telegram API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "values": [
+          {
+            "name": "city",
+            "value": "San Francisco"
+          },
+          {
+            "name": "userEmail",
+            "value": "user@example.com"
+          },
+          {
+            "name": "userChatId",
+            "value": "123456789"
+          },
+          {
+            "name": "preferences",
+            "value": {
+              "colors": [
+                "blue",
+                "green"
+              ],
+              "styles": [
+                "casual",
+                "sporty"
+              ]
+            }
+          },
+          {
+            "name": "wardrobe",
+            "value": [
+              {
+                "name": "Organic Cotton T-Shirt",
+                "type": "short_sleeve",
+                "color": "blue",
+                "style": "casual",
+                "material": "Organic Cotton",
+                "fairTrade": true,
+                "lowWaterUsage": true,
+                "recycledMaterial": false
+              },
+              {
+                "name": "Recycled Polyester Jacket",
+                "type": "jacket",
+                "color": "green",
+                "style": "sporty",
+                "material": "Recycled Polyester",
+                "fairTrade": false,
+                "lowWaterUsage": false,
+                "recycledMaterial": true
+              },
+              {
+                "name": "Linen Long Sleeve Shirt",
+                "type": "long_sleeve",
+                "color": "white",
+                "style": "casual",
+                "material": "Organic Linen",
+                "fairTrade": true,
+                "lowWaterUsage": true,
+                "recycledMaterial": false
+              },
+              {
+                "name": "Fair Trade Denim Jeans",
+                "type": "pants",
+                "color": "blue",
+                "style": "casual",
+                "material": "Cotton",
+                "fairTrade": true,
+                "lowWaterUsage": false,
+                "recycledMaterial": false
+              },
+              {
+                "name": "Hemp Hat",
+                "type": "accessory",
+                "color": "green",
+                "style": "casual",
+                "material": "Hemp",
+                "fairTrade": true,
+                "lowWaterUsage": true,
+                "recycledMaterial": false
+              }
+            ]
+          }
+        ],
+        "options": {}
+      },
+      "name": "Set User Data",
+      "type": "set",
+      "typeVersion": 1,
+      "position": [
+        50,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Set User Data": {
+      "main": [
+        [
+          {
+            "node": "Get Weather Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate Sustainable Outfit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Weather Data": {
+      "main": [
+        [
+          {
+            "node": "Generate Sustainable Outfit",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Generate Sustainable Outfit": {
+      "main": [
+        [
+          {
+            "node": "Format Outfit Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Outfit Message": {
+      "main": [
+        [
+          {
+            "node": "Send Email Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Telegram Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
