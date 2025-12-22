@@ -1,0 +1,159 @@
+{
+  "name": "Personalized AI-Driven Carbon Footprint Reduction Planner",
+  "nodes": [
+    {
+      "parameters": {
+        "webhookUri": "personalized-ai-driven-carbon-footprint-reduction-planner",
+        "httpMethod": "POST",
+        "responseMode": "onReceived",
+        "responseData": "allEntries",
+        "options": {
+          "responseContentType": "json"
+        },
+        "name": "Get User Input"
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const input = items[0].json;\n\n// Extract user data inputs\nconst transport = input.transportationUsage || {};\nconst energy = input.energyConsumption || {};\nconst diet = input.dietaryHabits || {};\n\nreturn [{ json: { transport, energy, diet } }];"
+      },
+      "name": "Extract Inputs",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "temperature": 0.7,
+        "options": {},
+        "prompts": [
+          {
+            "role": "system",
+            "content": "You are an AI sustainability expert. You analyze user data about transportation usage, energy consumption, and dietary habits to estimate carbon impact and generate personalized actionable tips to reduce their carbon footprint."
+          },
+          {
+            "role": "user",
+            "content": "User data:\nTransportation: {{ $json.transport }}\nEnergy: {{ $json.energy }}\nDiet: {{ $json.diet }}\n\nPlease analyze this data, estimate the carbon impact for each category, and generate a personalized sustainability plan with actionable tips and reminders."
+          }
+        ]
+      },
+      "name": "AI Carbon Impact Analysis",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const aiResponse = items[0].json.choices[0].message.content;\n\nreturn [{ json: { sustainabilityPlan: aiResponse } }];"
+      },
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const now = new Date();\nconst reminderDate = new Date(now.getTime() + 86400000); // +1 day\n\nreturn [{ json: {\n  reminder: 'Review your personalized carbon footprint reduction plan and update your activities.',\n  reminderDate: reminderDate.toISOString()\n}}];"
+      },
+      "name": "Create Daily Reminder",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "no-reply@sustainabilityapp.com",
+        "toEmail": "={{ $json.email || 'user@example.com' }}",
+        "subject": "Your Personalized Carbon Footprint Reduction Plan",
+        "text": "Hello,\n\nHere is your personalized carbon footprint reduction plan:\n\n{{$json.sustainabilityPlan}}\n\nReminder: {{$json.reminder}}\n\nStay sustainable!"
+      },
+      "name": "Send Sustainability Plan Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        350
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Extract Inputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Inputs": {
+      "main": [
+        [
+          {
+            "node": "AI Carbon Impact Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Carbon Impact Analysis": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Create Daily Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Daily Reminder": {
+      "main": [
+        [
+          {
+            "node": "Send Sustainability Plan Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
