@@ -1,0 +1,191 @@
+{
+  "name": "Quantum Computing Research Digest Aggregator",
+  "nodes": [
+    {
+      "parameters": {
+        "urls": [
+          "https://arxiv.org/rss/quant-ph",
+          "https://www.nature.com/subjects/quantum-computing.rss",
+          "https://www.quantamagazine.org/feed/",
+          "https://phys.org/rss-feed/quantum-technology/",
+          "https://www.sciencedaily.com/rss/computers_math/quantum_computing.xml"
+        ]
+      },
+      "name": "Fetch RSS Feeds",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ],
+      "notes": "Fetch latest articles from multiple RSS sources related to quantum computing",
+      "credentials": {
+        "httpBasicAuth": ""
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const parseString = require('xml2js').parseString;\nconst xml = items[0].binary.data.toString();\n\nreturn new Promise((resolve, reject) => {\n  parseString(xml, { explicitArray: false }, (err, result) => {\n    if (err) return reject(err);\n\n    const channel = result.rss?.channel;\n    const entries = [];\n\n    if (channel?.item) {\n      if (Array.isArray(channel.item)) {\n        channel.item.forEach(item => {\n          entries.push({\n            json: {\n              title: item.title,\n              link: item.link,\n              pubDate: new Date(item.pubDate).toISOString(),\n              description: item.description,\n              source: items[0].json.url\n            }\n          });\n        });\n      } else {\n        entries.push({\n          json: {\n            title: channel.item.title,\n            link: channel.item.link,\n            pubDate: new Date(channel.item.pubDate).toISOString(),\n            description: channel.item.description,\n            source: items[0].json.url\n          }\n        });\n      }\n    }\n    resolve(entries);\n  });\n});"
+      },
+      "name": "Parse RSS XML",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "mergeByKey",
+        "key": "link",
+        "additionalFields": {}
+      },
+      "name": "Merge Unique Articles",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ],
+      "notes": "Ensure no duplicate articles by their link"
+    },
+    {
+      "parameters": {
+        "functionCode": "const natural = require('natural');\nconst categories = [\n  { name: 'Research Papers', keywords: ['paper', 'arxiv', 'research', 'journal'] },\n  { name: 'News', keywords: ['news', 'announcement', 'update'] },\n  { name: 'Articles', keywords: ['article', 'opinion', 'blog'] },\n  { name: 'Tutorials', keywords: ['tutorial', 'guide', 'how-to'] }\n];\n\nreturn items.map(item => {\n  const title = item.json.title.toLowerCase();\n  const description = (item.json.description || '').toLowerCase();\n  let category = 'Other';\n\n  for (const cat of categories) {\n    for (const keyword of cat.keywords) {\n      if (title.includes(keyword) || description.includes(keyword)) {\n        category = cat.name;\n        break;\n      }\n    }\n    if (category !== 'Other') break;\n  }\n\n  return {\n    json: {\n      ...item.json,\n      category\n    }\n  };\n});"
+      },
+      "name": "Categorize Articles",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const openai = require('openai');\n\nconst configuration = new openai.Configuration({\n  apiKey: this.getCredentials('openAIApi').apiKey,\n});\n\nconst openaiClient = new openai.OpenAIApi(configuration);\n\nasync function summarize(text) {\n  const response = await openaiClient.createChatCompletion({\n    model: 'gpt-4',\n    messages: [\n      { role: 'system', content: 'You are a helpful assistant that summarizes quantum computing research papers and articles into concise bullet points.' },\n      { role: 'user', content: `Summarize the following content:\n${text}` }\n    ],\n    max_tokens: 150,\n    temperature: 0.3\n  });\n  return response.data.choices[0].message.content.trim();\n}\n\nconst summarizedItems = [];\n\nfor (const item of items) {\n  const contentToSummarize = item.json.description || item.json.title || '';\n  const summary = await summarize(contentToSummarize);\n  summarizedItems.push({\n    json: {\n      ...item.json,\n      summary\n    }\n  });\n}\n\nreturn summarizedItems;"
+      },
+      "name": "Summarize Articles",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ],
+      "credentials": {
+        "openAIApi": {
+          "id": "openAIApi",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "sendEmail",
+        "fromEmail": "quantum.digest@yourdomain.com",
+        "toEmail": "={{$json[\"recipientEmail\"] || \"your.email@domain.com\"}}",
+        "subject": "Daily Quantum Computing Research Digest",
+        "text": "={{\n  'Hello,\\n\\nHere is your daily digest of the latest quantum computing research papers, articles, and news:\\n\\n' +\n  items.map(item => {\n    return `- ${item.json.title} (${item.json.category})\\n  Link: ${item.json.link}\\n  Summary: ${item.json.summary}\\n`;\n  }).join('\\n') +\n  '\\nBest regards,\\nQuantum Computing Research Digest Aggregator'\n}}"
+      },
+      "name": "Send Email Digest",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "smtp",
+          "name": "SMTP"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "interval": 1,
+        "unit": "days",
+        "time": "08:00"
+      },
+      "name": "Trigger Daily",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        50,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Trigger Daily": {
+      "main": [
+        [
+          {
+            "node": "Fetch RSS Feeds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch RSS Feeds": {
+      "main": [
+        [
+          {
+            "node": "Parse RSS XML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse RSS XML": {
+      "main": [
+        [
+          {
+            "node": "Merge Unique Articles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Unique Articles": {
+      "main": [
+        [
+          {
+            "node": "Categorize Articles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Categorize Articles": {
+      "main": [
+        [
+          {
+            "node": "Summarize Articles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize Articles": {
+      "main": [
+        [
+          {
+            "node": "Send Email Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "id": "quantum-computing-research-digest-aggregator"
+}
