@@ -1,0 +1,152 @@
+{
+  "name": "AI-Powered Sustainable Packaging Lifecycle Optimizer",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "forecast",
+        "inputData": "={{$json[\"currentInventory\"]}}",
+        "forecastHorizon": 30
+      },
+      "name": "Inventory Forecasting",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "textGeneration",
+        "model": "gpt-4",
+        "prompt": "Given the following inventory forecast data, recommend top 3 eco-friendly packaging material suppliers, considering sustainability certifications and environmental impact:\n\n{{$json[\"forecastData\"]}}",
+        "maxTokens": 400,
+        "temperature": 0.3
+      },
+      "name": "Supplier Recommendation",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "order",
+        "operation": "create",
+        "supplier": "={{$json[\"recommendedSuppliers\"][0]}}",
+        "items": "={{$json[\"requiredMaterials\"]}}",
+        "autoApprove": true
+      },
+      "name": "Automated Ordering",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "1",
+          "name": "SupplierAPI Credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "textGeneration",
+        "model": "gpt-4",
+        "prompt": "Create a sustainability report summarizing:\n- Inventory usage patterns\n- Supplier eco-friendly certifications\n- Environmental impact reduction estimates\n\nData:\nInventory Forecast: {{$json[\"forecastData\"]}}\nSupplier Info: {{$json[\"recommendedSuppliers\"]}}\nOrder Details: {{$json[\"orderResponse\"]}}",
+        "maxTokens": 600,
+        "temperature": 0.2
+      },
+      "name": "Sustainability Reporting",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ]
+    },
+    {
+      "parameters": {},
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [
+        50,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{\n  json: {\n    currentInventory: {\n      boxes: 500,\n      fillers: 1000,\n      tapes: 750\n    },\n    requiredMaterials: [\n      { item: \"boxes\", quantity: 300 },\n      { item: \"fillers\", quantity: 500 },\n      { item: \"tapes\", quantity: 400 }\n    ]\n  }\n}];"
+      },
+      "name": "Prepare Inventory Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        150,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Prepare Inventory Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Inventory Data": {
+      "main": [
+        [
+          {
+            "node": "Inventory Forecasting",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Inventory Forecasting": {
+      "main": [
+        [
+          {
+            "node": "Supplier Recommendation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supplier Recommendation": {
+      "main": [
+        [
+          {
+            "node": "Automated Ordering",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Automated Ordering": {
+      "main": [
+        [
+          {
+            "node": "Sustainability Reporting",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
