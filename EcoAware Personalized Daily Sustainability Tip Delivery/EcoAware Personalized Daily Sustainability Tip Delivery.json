@@ -1,0 +1,182 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 8,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const { preferences, location } = $json;\nreturn [{ json: { preferences, location } }];"
+      },
+      "name": "Extract User Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.openweathermap.org/data/2.5/weather",
+        "method": "GET",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "lat",
+              "value": "={{$json[\"location\"]?.latitude}}"
+            },
+            {
+              "name": "lon",
+              "value": "={{$json[\"location\"]?.longitude}}"
+            },
+            {
+              "name": "appid",
+              "value": "YOUR_OPENWEATHERMAP_API_KEY"
+            },
+            {
+              "name": "units",
+              "value": "metric"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Fetch Local Weather",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        650,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.openaigpt.example/v1/chat/completions",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={\n  \"model\": \"gpt-4\",\n  \"messages\": [\n    { \"role\": \"system\", \"content\": \"You are EcoAware, an AI assistant providing personalized sustainability tips and habit motivation based on user preferences and local environmental data. Provide a concise daily tip, motivational message, and a community engagement prompt.\" },\n    { \"role\": \"user\", \"content\": `User preferences: ${JSON.stringify($json[\"preferences\"])}\\nLocal Weather: ${JSON.stringify($json[\"weather\"])}\\nGenerate the daily sustainability tip, motivation, and community engagement prompt.` }\n  ]\n}"
+      },
+      "name": "AI Generate Tips",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ],
+      "credentials": {
+        "openAIApi": {
+          "id": "YOUR_OPENAI_CREDENTIALS_ID"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const response = $json.choices && $json.choices[0] && $json.choices[0].message.content;\nreturn [{ json: { dailyInsight: response } }];"
+      },
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "senderName": "EcoAware Bot",
+        "recipientEmail": "={{$json[\"email\"]}}",
+        "subject": "Your Personalized Daily Sustainability Tip",
+        "text": "={{$json[\"dailyInsight\"]}}"
+      },
+      "name": "Send Email Notification",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "YOUR_SMTP_CREDENTIALS_ID"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Extract User Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract User Data": {
+      "main": [
+        [
+          {
+            "node": "Fetch Local Weather",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Local Weather": {
+      "main": [
+        [
+          {
+            "node": "AI Generate Tips",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Generate Tips": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Send Email Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
