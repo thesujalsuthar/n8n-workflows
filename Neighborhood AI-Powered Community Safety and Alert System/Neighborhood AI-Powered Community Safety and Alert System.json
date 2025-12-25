@@ -1,0 +1,291 @@
+{
+  "name": "AI-Driven Neighborhood Community Watch and Safety Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.socialmedia.com/v1/streams/monitor",
+        "responseFormat": "json",
+        "queryParameters": [
+          {
+            "name": "geo_location",
+            "value": "neighborhood_area"
+          },
+          {
+            "name": "keywords",
+            "value": "crime, alert, suspicious, emergency, safety"
+          }
+        ],
+        "options": {
+          "followRedirect": true
+        }
+      },
+      "name": "Social Media Stream",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        150,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://publicsafety.api.gov/reports/recent",
+        "responseFormat": "json",
+        "queryParameters": [
+          {
+            "name": "area",
+            "value": "neighborhood_area"
+          },
+          {
+            "name": "timeframe",
+            "value": "last_hour"
+          }
+        ],
+        "options": {
+          "followRedirect": true
+        }
+      },
+      "name": "Public Safety Reports",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        150,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const crimeStats = $items(\"Crime Stats Query\")[0].json;\nconst recentReports = $items(\"Public Safety Reports\")[0].json.reports;\nconst socialMediaData = $items(\"Social Media Stream\")[0].json.posts;\n\n// Aggregate data\nconst aggregateData = {\n  crimeStats,\n  recentReports,\n  socialMediaData\n};\n\nreturn [{ json: aggregateData }];"
+      },
+      "name": "Aggregate Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        400,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const data = $json;\n\n// Example AI anomaly detection placeholder\n// Replace with actual AI/ML service integration\n\nconst alerts = [];\n\nconst recentIncidents = data.recentReports.filter(report => report.severity >= 3);\n\nif (recentIncidents.length > 0) {\n  recentIncidents.forEach(incident => {\n    alerts.push({\n      type: \"Public Safety\",\n      message: incident.description,\n      location: incident.location,\n      timestamp: incident.timestamp\n    });\n  });\n}\n\n// Simple keyword scan in social media posts\nconst suspiciousPosts = data.socialMediaData.filter(post => {\n  return /suspicious|crime|emergency|alert/i.test(post.content);\n});\n\nsuspiciousPosts.forEach(post => {\n  alerts.push({\n    type: \"Social Media\",\n    message: post.content,\n    location: post.geo_location || \"Unknown\",\n    timestamp: post.created_at\n  });\n});\n\nreturn alerts.length > 0 ? [{ json: { alerts } }] : [];"
+      },
+      "name": "AI Anomaly Detection",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const alerts = $json.alerts;\nconst userPreferences = [\n  {\n    email: \"user1@example.com\",\n    phone: \"+12345678901\",\n    alertThreshold: \"medium\",\n    preferredChannels: [\"email\", \"sms\"]\n  },\n  {\n    email: \"user2@example.com\",\n    phone: \"+10987654321\",\n    alertThreshold: \"high\",\n    preferredChannels: [\"email\"]\n  }\n];\n\nfunction alertLevel(severity) {\n  if (severity >= 4) return \"high\";\n  if (severity >= 2) return \"medium\";\n  return \"low\";\n}\n\nconst filteredAlerts = [];\n\nalerts.forEach(alert => {\n  userPreferences.forEach(user => {\n    // Assuming alert has severity property - if not, map type to severity\n    let severity = 3;\n    if (alert.type === \"Public Safety\") severity = 4;\n    else if (alert.type === \"Social Media\") severity = 2;\n\n    const levels = [\"low\", \"medium\", \"high\"];\n\n    if (levels.indexOf(severity >= levels.indexOf(user.alertThreshold))) {\n      filteredAlerts.push({ user, alert });\n    }\n  });\n});\n\nreturn filteredAlerts.map(({ user, alert }) => ({ json: { user, alert }}));"
+      },
+      "name": "Filter and Customize Alerts",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "no-reply@communitywatch.com",
+        "toEmail": "={{$json[\"user\"][\"email\"]}}",
+        "subject": "Community Safety Alert: {{$json[\"alert\"][\"type\"]}} Incident Detected",
+        "text": "Alert Details:\n\nType: {{$json[\"alert\"][\"type\"]}}\nMessage: {{$json[\"alert\"][\"message\"]}}\nLocation: {{$json[\"alert\"][\"location\"]}}\nTime: {{$json[\"alert\"][\"timestamp\"]}}\n\nStay safe.\nNeighborhood Community Watch"
+      },
+      "name": "Send Email Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "to": "={{$json[\"user\"][\"phone\"]}}",
+        "message": "Community Safety Alert: {{$json[\"alert\"][\"type\"]}} detected.\n{{$json[\"alert\"][\"message\"]}}\nLocation: {{$json[\"alert\"][\"location\"]}}"
+      },
+      "name": "Send SMS Alert",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.map(item => {\n  const latLng = item.json.alert.location.coordinates || [0,0];\n  const mapUrl = `https://maps.google.com/?q=${latLng[0]},${latLng[1]}`;\n  item.json.alert.mapUrl = mapUrl;\n  return item;\n});"
+      },
+      "name": "Add Mapping Context",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "report-incident",
+        "options": {},
+        "responseHeaders": [
+          {
+            "name": "Access-Control-Allow-Origin",
+            "value": "*"
+          }
+        ]
+      },
+      "name": "Incident Report Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        150,
+        500
+      ],
+      "webhookId": "incident-report-webhook"
+    },
+    {
+      "parameters": {
+        "functionCode": "const incident = $json;\n// Here you could add enrichment, validation, and store incident\n// Push incident to it's own analysis queue or alert system\nreturn [{ json: { alert: {\n  type: 'User Reported Incident',\n  message: incident.description,\n  location: incident.location || 'Unknown',\n  timestamp: new Date().toISOString(),\n  mapUrl: incident.location ? `https://maps.google.com/?q=${incident.location.coordinates[0]},${incident.location.coordinates[1]}` : ''\n}} }];"
+      },
+      "name": "Process User Incident Report",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        400,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const incidentAlert = $json.alert;\nconst userPreferences = [\n  {\n    email: \"user1@example.com\",\n    phone: \"+12345678901\",\n    preferredChannels: [\"email\", \"sms\"]\n  },\n  {\n    email: \"user2@example.com\",\n    phone: \"+10987654321\",\n    preferredChannels: [\"email\"]\n  }\n];\n\nreturn userPreferences.map(user => {\n  return { json: { user, alert: incidentAlert } };\n});"
+      },
+      "name": "Distribute Incident Alerts",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "Social Media Stream": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Public Safety Reports": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Data": {
+      "main": [
+        [
+          {
+            "node": "AI Anomaly Detection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Anomaly Detection": {
+      "main": [
+        [
+          {
+            "node": "Filter and Customize Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter and Customize Alerts": {
+      "main": [
+        [
+          {
+            "node": "Add Mapping Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Mapping Context": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send SMS Alert",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Incident Report Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process User Incident Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process User Incident Report": {
+      "main": [
+        [
+          {
+            "node": "Distribute Incident Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Distribute Incident Alerts": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send SMS Alert",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  }
+}
