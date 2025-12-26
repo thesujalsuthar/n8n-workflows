@@ -1,0 +1,363 @@
+{
+  "name": "AI-Driven Personalized Eco-Friendly Travel Itinerary Planner and Carbon Offset Calculator",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.traveldata.com/v1/flights",
+        "responseFormat": "json",
+        "options": {},
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "origin",
+              "value": "={{$json[\"origin\"]}}"
+            },
+            {
+              "name": "destination",
+              "value": "={{$json[\"destination\"]}}"
+            },
+            {
+              "name": "departure_date",
+              "value": "={{$json[\"departureDate\"]}}"
+            },
+            {
+              "name": "return_date",
+              "value": "={{$json[\"returnDate\"]}}"
+            }
+          ]
+        },
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_TRAVELDATA_API_KEY"
+            }
+          ]
+        }
+      },
+      "name": "Fetch Flight Options",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        130,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.traveldata.com/v1/trains",
+        "responseFormat": "json",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "origin",
+              "value": "={{$json[\"origin\"]}}"
+            },
+            {
+              "name": "destination",
+              "value": "={{$json[\"destination\"]}}"
+            },
+            {
+              "name": "date",
+              "value": "={{$json[\"departureDate\"]}}"
+            }
+          ]
+        },
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_TRAVELDATA_API_KEY"
+            }
+          ]
+        }
+      },
+      "name": "Fetch Train Options",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        130,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.carrental.com/v1/cars",
+        "responseFormat": "json",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "pickup_location",
+              "value": "={{$json[\"origin\"]}}"
+            },
+            {
+              "name": "pickup_date",
+              "value": "={{$json[\"departureDate\"]}}"
+            },
+            {
+              "name": "dropoff_date",
+              "value": "={{$json[\"returnDate\"]}}"
+            }
+          ]
+        },
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_CARRENTAL_API_KEY"
+            }
+          ]
+        }
+      },
+      "name": "Fetch Car Rental Options",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        130,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const flightOptions = $items(\"Fetch Flight Options\")[0].json.flights || [];\nconst trainOptions = $items(\"Fetch Train Options\")[0].json.trains || [];\nconst carOptions = $items(\"Fetch Car Rental Options\")[0].json.cars || [];\n\n// Placeholder carbon factors (kg CO2 per km)\nconst carbonFactors = {\n  flight: 0.255,\n  train: 0.041,\n  car: 0.192\n};\n\nfunction calculateDistance(origin, destination) {\n  // Approximate distance calculation (Haversine formula could be added if coordinates available)\n  // For demo, assume 1000 km\n  return 1000;\n}\n\nconst distance = calculateDistance($json.origin, $json.destination);\n\n// Calculate carbon footprints for each option\nconst carbonFootprints = {\n  flights: flightOptions.map(flight => {\n    return {\n      id: flight.id,\n      carbon_kg: distance * carbonFactors.flight\n    };\n  }),\n  trains: trainOptions.map(train => {\n    return {\n      id: train.id,\n      carbon_kg: distance * carbonFactors.train\n    };\n  }),\n  cars: carOptions.map(car => {\n    return {\n      id: car.id,\n      carbon_kg: distance * carbonFactors.car\n    };\n  })\n};\n\nreturn [{ json: { carbonFootprints } }];"
+      },
+      "name": "Calculate Carbon Footprints",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        350,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.ecoaccommodations.com/v1/search",
+        "responseFormat": "json",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "location",
+              "value": "={{$json[\"destination\"]}}"
+            },
+            {
+              "name": "preferences",
+              "value": "={{JSON.stringify($json[\"preferences\"] || {})}}"
+            }
+          ]
+        },
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_ECOACC_API_KEY"
+            }
+          ]
+        }
+      },
+      "name": "Fetch Eco-Friendly Accommodations",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        130,
+        580
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.ecoactivities.com/v1/activities",
+        "responseFormat": "json",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "location",
+              "value": "={{$json[\"destination\"]}}"
+            },
+            {
+              "name": "type",
+              "value": "eco-friendly"
+            }
+          ]
+        },
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_ECOACT_API_KEY"
+            }
+          ]
+        }
+      },
+      "name": "Fetch Eco-Friendly Activities",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        350,
+        580
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const carbonFootprints = $items(\"Calculate Carbon Footprints\")[0].json.carbonFootprints;\nconst offsetOptions = [\n  { id: 'tree_planting', description: 'Tree Planting', cost_per_kg: 0.02 },\n  { id: 'clean_energy', description: 'Clean Energy Projects', cost_per_kg: 0.03 }\n];\n\n// Sum total carbon to offset\nconst totalCarbon = [\n  ...carbonFootprints.flights,\n  ...carbonFootprints.trains,\n  ...carbonFootprints.cars\n].reduce((acc, cur) => acc + cur.carbon_kg, 0);\n\nreturn [{ json: { totalCarbon_kg: totalCarbon, offsetOptions } }];"
+      },
+      "name": "Generate Carbon Offset Options",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        570,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: {\n  itinerary: {\n    flights: $items(\"Fetch Flight Options\")[0].json.flights || [],\n    trains: $items(\"Fetch Train Options\")[0].json.trains || [],\n    cars: $items(\"Fetch Car Rental Options\")[0].json.cars || [],\n    accommodations: $items(\"Fetch Eco-Friendly Accommodations\")[0].json.accommodations || [],\n    activities: $items(\"Fetch Eco-Friendly Activities\")[0].json.activities || [],\n    carbonFootprints: $items(\"Calculate Carbon Footprints\")[0].json.carbonFootprints,\n    carbonOffset: $items(\"Generate Carbon Offset Options\")[0].json\n  }\n}}];"
+      },
+      "name": "Assemble Sustainable Itinerary",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        770,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.carbonoffset.com/v1/purchase",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={\n  \"userId\": $json.userId,\n  \"offsetMethod\": $json.carbonOffsetOption.id,\n  \"amountKgCO2\": $json.totalCarbon_kg\n}"
+      },
+      "name": "Purchase Carbon Offset",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        970,
+        460
+      ]
+    }
+  ],
+  "connections": {
+    "Fetch Flight Options": {
+      "main": [
+        [
+          {
+            "node": "Calculate Carbon Footprints",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Assemble Sustainable Itinerary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Train Options": {
+      "main": [
+        [
+          {
+            "node": "Calculate Carbon Footprints",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Assemble Sustainable Itinerary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Car Rental Options": {
+      "main": [
+        [
+          {
+            "node": "Calculate Carbon Footprints",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Assemble Sustainable Itinerary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Carbon Footprints": {
+      "main": [
+        [
+          {
+            "node": "Generate Carbon Offset Options",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Assemble Sustainable Itinerary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Eco-Friendly Accommodations": {
+      "main": [
+        [
+          {
+            "node": "Assemble Sustainable Itinerary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Eco-Friendly Activities": {
+      "main": [
+        [
+          {
+            "node": "Assemble Sustainable Itinerary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Carbon Offset Options": {
+      "main": [
+        [
+          {
+            "node": "Assemble Sustainable Itinerary",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Purchase Carbon Offset",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assemble Sustainable Itinerary": {
+      "main": [
+        [
+          {
+            "node": "Purchase Carbon Offset",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "id": "AI-Driven_Eco_Travel_Itinerary_Workflow"
+}
