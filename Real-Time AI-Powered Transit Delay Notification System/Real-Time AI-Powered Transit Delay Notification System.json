@@ -1,0 +1,214 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.publictransit.example.com/realtime-delays",
+        "responseFormat": "json",
+        "jsonParameters": true,
+        "options": {}
+      },
+      "name": "Fetch Real-Time Transit Delay Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const delays = items[0].json.delays;\n\n// Extract affected routes\nconst affectedRoutes = delays.map(delay => ({\n  routeId: delay.route_id,\n  delayMinutes: delay.delay_minutes,\n  stopId: delay.stop_id,\n  description: delay.description\n}));\n\nreturn affectedRoutes.map(route => ({ json: route }));"
+      },
+      "name": "Extract Affected Routes",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        470,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "predict",
+        "model": "publictransit-delay-impact",
+        "inputData": "={{ { routeId: $json[\"routeId\"], delayMinutes: $json[\"delayMinutes\"], stopId: $json[\"stopId\"] } }}",
+        "options": {}
+      },
+      "name": "AI Predict Impact on Commuter Routes",
+      "type": "n8n-nodes-base.aiPrediction",
+      "typeVersion": 1,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.map(item => {\n  const impact = item.json.prediction.impact;\n  const alternatives = item.json.prediction.alternative_routes || [];\n\n  return {\n    json: {\n      routeId: item.json.routeId,\n      delayMinutes: item.json.delayMinutes,\n      stopId: item.json.stopId,\n      impact: impact,\n      alternativeRoutes: alternatives\n    }\n  };\n});"
+      },
+      "name": "Format Prediction Results",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        930,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const alerts = [];\n\nfor (const item of items) {\n  const { routeId, delayMinutes, impact, alternativeRoutes } = item.json;\n\n  if (impact === 'high') {\n    alerts.push({\n      routeId,\n      delayMinutes,\n      alternativeRoutes,\n      message: `Alert: Significant delay on route ${routeId} of ${delayMinutes} minutes. Suggested alternatives: ${alternativeRoutes.join(\", \")}`\n    });\n  }\n}\n\nreturn alerts.map(alert => ({ json: alert }));"
+      },
+      "name": "Generate Alerts for High Impact Delays",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1170,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "phoneNumber": "={{$json[\"userPhone\"]}}",
+        "message": "={{$json[\"message\"]}}"
+      },
+      "name": "Send SMS Alert",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        200
+      ],
+      "credentials": {
+        "twilioApi": "Twilio Account"
+      }
+    },
+    {
+      "parameters": {
+        "toEmail": "={{$json[\"userEmail\"]}}",
+        "subject": "Transit Delay Alert",
+        "text": "={{$json[\"message\"]}}"
+      },
+      "name": "Send Email Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        320
+      ],
+      "credentials": {
+        "smtp": "SMTP Email Account"
+      }
+    },
+    {
+      "parameters": {
+        "deviceToken": "={{$json[\"userDeviceToken\"]}}",
+        "title": "Transit Delay Alert",
+        "body": "={{$json[\"message\"]}}"
+      },
+      "name": "Send Push Notification",
+      "type": "n8n-nodes-base.pushNotification",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        440
+      ],
+      "credentials": {
+        "pushNotificationApi": "Push Notification Service"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const userSubscriptionData = [\n  {\n    userId: \"user1\",\n    userPhone: \"+1234567890\",\n    userEmail: \"user1@example.com\",\n    userDeviceToken: \"device_token_1\",\n    subscribedRoutes: [\"route_5\", \"route_10\"]\n  },\n  {\n    userId: \"user2\",\n    userPhone: \"+1234567899\",\n    userEmail: \"user2@example.com\",\n    userDeviceToken: \"device_token_2\",\n    subscribedRoutes: [\"route_2\", \"route_5\"]\n  }\n  // Add more users here\n];\n\n// Match alerts with users subscribed to affected routes\n\nconst alerts = items;\nconst outputs = [];\n\nfor (const alertItem of alerts) {\n  const alert = alertItem.json;\n  userSubscriptionData.forEach(user => {\n    if (user.subscribedRoutes.includes(alert.routeId)) {\n      outputs.push({\n        json: {\n          ...alert,\n          userId: user.userId,\n          userPhone: user.userPhone,\n          userEmail: user.userEmail,\n          userDeviceToken: user.userDeviceToken\n        }\n      });\n    }\n  });\n}\n\nreturn outputs;"
+      },
+      "name": "Match Alerts to Subscribed Users",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Fetch Real-Time Transit Delay Data": {
+      "main": [
+        [
+          {
+            "node": "Extract Affected Routes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Affected Routes": {
+      "main": [
+        [
+          {
+            "node": "AI Predict Impact on Commuter Routes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Predict Impact on Commuter Routes": {
+      "main": [
+        [
+          {
+            "node": "Format Prediction Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Prediction Results": {
+      "main": [
+        [
+          {
+            "node": "Generate Alerts for High Impact Delays",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Alerts for High Impact Delays": {
+      "main": [
+        [
+          {
+            "node": "Match Alerts to Subscribed Users",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Match Alerts to Subscribed Users": {
+      "main": [
+        [
+          {
+            "node": "Send SMS Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Push Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
