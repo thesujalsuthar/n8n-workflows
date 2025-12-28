@@ -1,0 +1,292 @@
+{
+  "name": "Quantum Collaboration and Innovation Tracker",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.crossref.org/works",
+        "queryParameters": {
+          "filter": "query:quantum computing,from-pub-date:2023-01-01",
+          "rows": 10,
+          "sort": "published",
+          "order": "desc"
+        },
+        "responseFormat": "json"
+      },
+      "name": "Fetch Academic Publications",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.arxiv.org/query",
+        "queryParameters": {
+          "search_query": "all:quantum computing",
+          "start": 0,
+          "max_results": 10,
+          "sortBy": "lastUpdatedDate",
+          "sortOrder": "descending"
+        },
+        "responseFormat": "xml"
+      },
+      "name": "Fetch Preprint Publications",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.linkedin.com/v2/search",
+        "options": {},
+        "headers": {
+          "Authorization": "Bearer {{$credentials.linkedinApi.accessToken}}"
+        },
+        "queryParameters": {
+          "q": "people",
+          "keywords": "quantum computing",
+          "count": 10
+        },
+        "responseFormat": "json"
+      },
+      "name": "Fetch Collaboration Opportunities",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "credentials": {
+        "linkedinApi": {
+          "id": "1",
+          "name": "LinkedIn API"
+        }
+      },
+      "position": [
+        250,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "googleSheets",
+        "operation": "append",
+        "spreadsheetId": "your-google-sheet-id",
+        "range": "Sheet1!A:E",
+        "valueInputMode": "RAW",
+        "options": {},
+        "data": "={{$json[\"message\"] ? $json[\"message\"] : JSON.stringify($json)}}"
+      },
+      "name": "Log Raw API Data",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "2",
+          "name": "Google Sheets OAuth2"
+        }
+      },
+      "position": [
+        600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const publications = [];\nconst arxivItems = items.find(i => i.name === 'Fetch Preprint Publications').json.feed.entry || [];\nconst crossrefItems = items.find(i => i.name === 'Fetch Academic Publications').json.message.items || [];\n\nfunction mapArxiv(entry) {\n  return {\n    title: entry.title[0],\n    authors: entry.author.map(a => a.name[0]).join(', '),\n    published: entry.published[0],\n    source: 'arXiv',\n    link: entry.id[0]\n  };\n}\n\nfunction mapCrossref(item) {\n  return {\n    title: item.title ? item.title[0] : '',\n    authors: item.author ? item.author.map(a => a.family + ' ' + a.given).join(', ') : '',\n    published: item.published ? item.published['date-parts'][0].join('-') : '',\n    source: 'CrossRef',\n    link: item.URL\n  };\n}\n\narxivItems.forEach(e => publications.push(mapArxiv(e)));\ncrossrefItems.forEach(e => publications.push(mapCrossref(e)));\n\nreturn publications.map(p => ({ json: p }));"
+      },
+      "name": "Consolidate Research Publications",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const now = new Date();\nconst reportDate = now.toISOString().split('T')[0];\n\nconst report = {\n  title: `Quantum Computing Research Summary - ${reportDate}`,\n  entries: items.map(i => {\n    return {\n      title: i.json.title,\n      authors: i.json.authors,\n      published: i.json.published,\n      source: i.json.source,\n      link: i.json.link\n    };\n  })\n};\n\nreturn [{ json: report }];"
+      },
+      "name": "Generate Summary Report",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "docs",
+        "operation": "create",
+        "title": "={{$json.title}}",
+        "content": "={{JSON.stringify($json.entries, null, 2)}}",
+        "mimeType": "text/plain"
+      },
+      "name": "Create Report Document",
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 1,
+      "credentials": {
+        "googleDocsOAuth2Api": {
+          "id": "3",
+          "name": "Google Docs OAuth2"
+        }
+      },
+      "position": [
+        850,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "gmail",
+        "operation": "send",
+        "toEmail": "research-team@example.com",
+        "subject": "Quantum Computing Research Summary",
+        "body": "The latest summary report for quantum computing research publications is ready. Please check the attached document.",
+        "attachmentsUi": {
+          "variable": [
+            {
+              "propertyName": "attachments",
+              "value": "={{[{ data: Buffer.from($items('Create Report Document')[0].binary.data.data, 'base64'), fileName: 'Quantum_Research_Summary.txt' }]}}"
+            }
+          ]
+        }
+      },
+      "name": "Send Summary Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 1,
+      "credentials": {
+        "gmailOAuth2Api": {
+          "id": "4",
+          "name": "Gmail OAuth2"
+        }
+      },
+      "position": [
+        1050,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const people = items[0].json.elements || [];\nconst matches = [];\n\n// Simple matchmaking by overlapping keywords or fields\npeople.forEach(person => {\n  if (person.headline && person.headline.toLowerCase().includes('quantum')) {\n    matches.push({\n      name: person.firstName + ' ' + person.lastName,\n      headline: person.headline,\n      linkedinProfile: person.publicProfileUrl || ''\n    });\n  }\n});\n\nreturn matches.map(match => ({ json: match }));"
+      },
+      "name": "Match Collaboration Opportunities",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "slack",
+        "operation": "postMessage",
+        "channel": "#quantum-collaboration",
+        "text": "New collaboration opportunities matched:\n{{$json.name}} - {{$json.headline}}\nProfile: {{$json.linkedinProfile}}"
+      },
+      "name": "Notify Collaboration Channel",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "credentials": {
+        "slackApi": {
+          "id": "5",
+          "name": "Slack API"
+        }
+      },
+      "position": [
+        650,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "Fetch Preprint Publications": {
+      "main": [
+        [
+          {
+            "node": "Consolidate Research Publications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Academic Publications": {
+      "main": [
+        [
+          {
+            "node": "Consolidate Research Publications",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Consolidate Research Publications": {
+      "main": [
+        [
+          {
+            "node": "Generate Summary Report",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log Raw API Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Summary Report": {
+      "main": [
+        [
+          {
+            "node": "Create Report Document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Report Document": {
+      "main": [
+        [
+          {
+            "node": "Send Summary Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Collaboration Opportunities": {
+      "main": [
+        [
+          {
+            "node": "Match Collaboration Opportunities",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Match Collaboration Opportunities": {
+      "main": [
+        [
+          {
+            "node": "Notify Collaboration Channel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": null
+}
