@@ -1,0 +1,187 @@
+{
+  "name": "AI-Driven Sleep Quality Improvement and Smart Alarm System",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "apiKey",
+        "url": "https://api.wearabledata.com/v1/sleep/latest",
+        "options": {}
+      },
+      "name": "Get Sleep Data",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const sleepData = items[0].json;\n\n// Prepare payload for AI analysis\nconst payload = {\n  sleepStages: sleepData.sleepStages,\n  heartRate: sleepData.heartRate,\n  breathingRate: sleepData.breathingRate,\n  duration: sleepData.duration,\n  qualityScore: sleepData.qualityScore\n};\n\nreturn [{json: {payload}}];"
+      },
+      "name": "Prepare AI Payload",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "options": {},
+        "method": "POST",
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "model",
+              "value": "gpt-4"
+            },
+            {
+              "name": "messages",
+              "value": "=[\n  {\"role\": \"system\", \"content\": \"You are an AI sleep coach.\"},\n  {\"role\": \"user\", \"content\": `Analyze the following sleep data and provide personalized tips to improve sleep quality as well as suggestions for optimal smart alarm timings based on sleep cycles: ${JSON.stringify($json.payload)}`}\n]"
+            },
+            {
+              "name": "temperature",
+              "value": 0.7
+            }
+          ]
+        }
+      },
+      "name": "Analyze Sleep Patterns with AI",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": "OpenAI API Key"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const response = items[0].json;\nconst text = response.choices[0].message.content;\n\n// Extract recommended alarm times and tips from AI response\n// Assuming AI returns JSON string within the text\nlet aiResult;\ntry {\n  const jsonStart = text.indexOf('{');\n  const jsonEnd = text.lastIndexOf('}');\n  const jsonStr = text.substring(jsonStart, jsonEnd + 1);\n  aiResult = JSON.parse(jsonStr);\n} catch(e) {\n  aiResult = { tips: text, alarmTimes: [] };\n}\n\nreturn [{ json: aiResult }];"
+      },
+      "name": "Parse AI Response",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "apiKey",
+        "url": "https://api.smartalarm.com/v1/alarms",
+        "method": "POST",
+        "bodyParametersUi": {
+          "parameter": []
+        },
+        "options": {}
+      },
+      "name": "Set Smart Alarm(s)",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const alarmTimes = items[0].json.alarmTimes || [];\n\nconst requests = alarmTimes.map(time => {\n  return {\n    json: {\n      time: time,\n      label: 'Smart Sleep Alarm'\n    }\n  };\n});\nreturn requests;"
+      },
+      "name": "Prepare Alarm Requests",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        950,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "sleepcoach@domain.com",
+        "toEmail": "={{$json.userEmail}}",
+        "subject": "Your Personalized Sleep Improvement Tips and Smart Alarm Settings",
+        "text": "={{$json.tips}}"
+      },
+      "name": "Send Sleep Tips Email",
+      "type": "emailSend",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Get Sleep Data": {
+      "main": [
+        [
+          {
+            "node": "Prepare AI Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare AI Payload": {
+      "main": [
+        [
+          {
+            "node": "Analyze Sleep Patterns with AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Sleep Patterns with AI": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Prepare Alarm Requests",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Sleep Tips Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Alarm Requests": {
+      "main": [
+        [
+          {
+            "node": "Set Smart Alarm(s)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
