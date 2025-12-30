@@ -1,0 +1,207 @@
+{
+  "name": "AI-Driven Quantum Computing Research Insight and Trend Monitoring System",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "sources": [
+          "arxiv"
+        ],
+        "term": "quantum computing",
+        "maxResults": 20,
+        "return": "metadata"
+      },
+      "name": "Fetch Latest Research Papers",
+      "type": "n8n-nodes-base.arxiv",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const papers = items.map(item => {\n  return {\n    title: item.json.title,\n    abstract: item.json.summary,\n    authors: item.json.authors,\n    url: item.json.id,\n    published: item.json.published\n  };\n});\n\nreturn papers.map(paper => ({ json: paper }));"
+      },
+      "name": "Extract Paper Details",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "action": "embedding",
+        "text": "={{$json.abstract}}"
+      },
+      "name": "Generate Embeddings",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ],
+      "credentials": {
+        "openAiApi": "OpenAI API"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const embeddings = items.map(item => item.json.embedding);\n\n// Simulate clustering or trend detection by grouping papers by keywords or semantic similarity\n// For the sake of the example, just assign a cluster randomly\n\nitems.forEach((item, index) => {\n  const clusters = ['Quantum Algorithms', 'Quantum Hardware', 'Quantum Error Correction', 'Quantum Cryptography'];\n  const assignedCluster = clusters[index % clusters.length];\n  item.json.trendCluster = assignedCluster;\n});\n\nreturn items;"
+      },
+      "name": "Analyze Trends & Cluster",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "lookup",
+        "collection": "researcherInterests",
+        "query": {},
+        "options": {
+          "limit": 100
+        }
+      },
+      "name": "Fetch Researcher Interests",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        250,
+        600
+      ],
+      "credentials": {
+        "mongoDb": "MongoDB Credentials"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const interests = items[0].json;\nconst papers = items[1].json;\n\nconst alerts = [];\n\ninterests.forEach(researcher => {\n  const matchedPapers = papers.filter(paper => {\n    return researcher.keywords.some(k => paper.trendCluster.toLowerCase().includes(k.toLowerCase()) || paper.title.toLowerCase().includes(k.toLowerCase()) || paper.abstract.toLowerCase().includes(k.toLowerCase()));\n  });\n\n  if (matchedPapers.length > 0) {\n    alerts.push({\n      researcherEmail: researcher.email,\n      matchedPapers\n    });\n  }\n});\n\nreturn alerts.map(alert => ({ json: alert }));"
+      },
+      "name": "Match Papers to Interests",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        550,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "message": "Subject: Quantum Computing Research Updates\n\nDear Researcher,\n\nBased on your specified interests, here are the latest relevant quantum computing research papers and trend insights:\n\n{{$json.matchedPapers.map(p => `Title: ${p.title}\nAuthors: ${p.authors.join(\", \")}\nPublished: ${p.published}\nLink: ${p.url}\n\nAbstract: ${p.abstract}`).join(\"\\n-----------------------\\n\")}}\n\nBest regards,\nAI-Driven Quantum Research Insight System"
+      },
+      "name": "Compose Email Summary",
+      "type": "n8n-nodes-base.functionItem",
+      "typeVersion": 1,
+      "position": [
+        750,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "no-reply@quantumresearch.ai",
+        "toEmail": "={{$json.researcherEmail}}",
+        "subject": "Quantum Computing Research Updates",
+        "text": "={{$node[\"Compose Email Summary\"].json.message}}"
+      },
+      "name": "Send Email Alert",
+      "type": "n8n-nodes-base.smtp",
+      "typeVersion": 1,
+      "position": [
+        950,
+        450
+      ],
+      "credentials": {
+        "smtp": "SMTP Credentials"
+      }
+    }
+  ],
+  "connections": {
+    "Fetch Latest Research Papers": {
+      "main": [
+        [
+          {
+            "node": "Extract Paper Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Paper Details": {
+      "main": [
+        [
+          {
+            "node": "Generate Embeddings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Embeddings": {
+      "main": [
+        [
+          {
+            "node": "Analyze Trends & Cluster",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Researcher Interests": {
+      "main": [
+        [
+          {
+            "node": "Match Papers to Interests",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Analyze Trends & Cluster": {
+      "main": [
+        [
+          {
+            "node": "Match Papers to Interests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Match Papers to Interests": {
+      "main": [
+        [
+          {
+            "node": "Compose Email Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose Email Summary": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "id": "ai-driven-quantum-computing-research-insight-and-trend-monitoring-system"
+}
