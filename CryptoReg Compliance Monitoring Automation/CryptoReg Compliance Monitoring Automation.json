@@ -1,0 +1,306 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://www.sec.gov/news/press-releases.xml",
+        "responseFormat": "string",
+        "jsonParse": true,
+        "options": {}
+      },
+      "name": "SEC RSS Feed",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://www.fca.org.uk/news.rss",
+        "responseFormat": "string",
+        "jsonParse": true,
+        "options": {}
+      },
+      "name": "FCA RSS Feed",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://www.mas.gov.sg/rss/announcements.xml",
+        "responseFormat": "string",
+        "jsonParse": true,
+        "options": {}
+      },
+      "name": "MAS RSS Feed",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "sourceDataPropertyName": "response",
+        "operation": "parseXml"
+      },
+      "name": "Parse SEC Feed",
+      "type": "xmlTransform",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "sourceDataPropertyName": "response",
+        "operation": "parseXml"
+      },
+      "name": "Parse FCA Feed",
+      "type": "xmlTransform",
+      "typeVersion": 1,
+      "position": [
+        450,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "sourceDataPropertyName": "response",
+        "operation": "parseXml"
+      },
+      "name": "Parse MAS Feed",
+      "type": "xmlTransform",
+      "typeVersion": 1,
+      "position": [
+        450,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const regionFilter = $json[\"region\"] || null;\nconst cryptoTypes = $json[\"cryptoTypes\"] || [];\n\n// Flatten feed items from different feeds\nconst feeds = [\n  $items.filter(item => item.json.name === 'Parse SEC Feed'),\n  $items.filter(item => item.json.name === 'Parse FCA Feed'),\n  $items.filter(item => item.json.name === 'Parse MAS Feed')\n];\n\nconst combinedItems = [];\n\nfeeds.forEach(feedItems => {\n  if(feedItems.length === 0) return;\n  feedItems.forEach(feedItem => {\n    let items = [];\n    if(feedItem.json && feedItem.json.rss && feedItem.json.rss.channel && feedItem.json.rss.channel.item) {\n      items = feedItem.json.rss.channel.item;\n      if(!Array.isArray(items)) items = [items];\n    }\n\n    items.forEach(i => {\n      combinedItems.push(i);\n    });\n  });\n});\n\nfunction matchesCryptoType(text, types) {\n  if (types.length === 0) return true;\n  return types.some(type => text.toLowerCase().includes(type.toLowerCase()));\n}\n\n// Filter by region and/or cryptocurrency type\nconst filtered = combinedItems.filter(item => {\n  let title = item.title || '';\n  let description = item.description || '';\n  let content = title + ' ' + description;\n\n  let regionMatch = true;\n  if(regionFilter) {\n    regionMatch = content.toLowerCase().includes(regionFilter.toLowerCase());\n  }\n\n  let cryptoMatch = matchesCryptoType(content, cryptoTypes);\n\n  return regionMatch && cryptoMatch;\n});\n\nreturn filtered.map(item => ({ json: item }));"
+      },
+      "name": "Filter and Combine Feeds",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const portfolio = $json[\"portfolio\"] || [];\nconst updates = $items.map(item => item.json);\n\n// Dummy impact analysis: score impact by counting mentions of portfolio crypto\nfunction analyzeImpact(update, portfolio) {\n  let impactScore = 0;\n  portfolio.forEach(asset => {\n    if(!asset.name) return;\n    const regex = new RegExp(asset.name, 'i');\n    if(regex.test(update.title) || regex.test(update.description)) {\n      impactScore += 1;\n    }\n  });\n  return impactScore;\n}\n\nconst analyzed = updates.map(update => {\n  const impact = analyzeImpact(update, portfolio);\n  return {\n    ...update,\n    impactScore: impact\n  };\n}).filter(u => u.impactScore > 0);\n\nreturn analyzed.map(item => ({ json: item }));"
+      },
+      "name": "Analyze Impact on Portfolio",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const reportItems = $items.map(item => {\n  return `- Title: ${item.json.title}\\n  Link: ${item.json.link || 'N/A'}\\n  Date: ${item.json.pubDate || 'N/A'}\\n  Impact Score: ${item.json.impactScore}`;\n});\n\nconst report = `Cryptocurrency Regulatory Compliance Report\\n\\n${reportItems.join('\\n\\n')}`;\n\nreturn [{ json: { reportText: report } }];"
+      },
+      "name": "Generate Compliance Report",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "text": "={{$json[\"reportText\"]}}",
+        "subject": "Cryptocurrency Regulatory Compliance Report",
+        "toEmail": "={{$json[\"email\"] || $credentials.smtp.defaultEmail}}"
+      },
+      "name": "Send Compliance Report Email",
+      "type": "emailSend",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        350
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "1",
+          "name": "SMTP Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "message": "={{$json[\"reportText\"]}}",
+        "channel": "={{$json[\"slackChannel\"] || '#general'}}"
+      },
+      "name": "Send Slack Alert",
+      "type": "slack",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        450
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "2",
+          "name": "Slack API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "workflowRequestUrl": "https://hooks.n8n.cloud/webhook/your-custom-webhook",
+        "options": {}
+      },
+      "name": "Trigger Webhook",
+      "type": "webhook",
+      "typeVersion": 1,
+      "position": [
+        50,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Trigger Webhook": {
+      "main": [
+        [
+          {
+            "node": "SEC RSS Feed",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "FCA RSS Feed",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "MAS RSS Feed",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "SEC RSS Feed": {
+      "main": [
+        [
+          {
+            "node": "Parse SEC Feed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FCA RSS Feed": {
+      "main": [
+        [
+          {
+            "node": "Parse FCA Feed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MAS RSS Feed": {
+      "main": [
+        [
+          {
+            "node": "Parse MAS Feed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse SEC Feed": {
+      "main": [
+        [
+          {
+            "node": "Filter and Combine Feeds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse FCA Feed": {
+      "main": [
+        [
+          {
+            "node": "Filter and Combine Feeds",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Parse MAS Feed": {
+      "main": [
+        [
+          {
+            "node": "Filter and Combine Feeds",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Filter and Combine Feeds": {
+      "main": [
+        [
+          {
+            "node": "Analyze Impact on Portfolio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Impact on Portfolio": {
+      "main": [
+        [
+          {
+            "node": "Generate Compliance Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Compliance Report": {
+      "main": [
+        [
+          {
+            "node": "Send Compliance Report Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Slack Alert",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
