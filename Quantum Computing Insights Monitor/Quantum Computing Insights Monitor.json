@@ -1,0 +1,290 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.crossref.org/works?query=quantum+computing&rows=20&sort=published&order=desc",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Fetch Publications - CrossRef",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://newsapi.org/v2/everything?q=quantum+computing&sortBy=publishedAt&pageSize=20",
+        "headers": {
+          "x-api-key": "={{$credentials.newsApi.apiKey}}"
+        },
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Fetch News - NewsAPI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.twitter.com/2/tweets/search/recent?query=quantum%20computing&max_results=20",
+        "headers": {
+          "Authorization": "Bearer {{$credentials.twitterApi.bearerToken}}"
+        },
+        "responseFormat": "json"
+      },
+      "name": "Fetch Tweets - Twitter API v2",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        550
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "function flattenItems(data, path) {\n  let items = [];\n  for (const item of path.split('.').reduce((a, b) => a ? a[b] : null, data)) {\n    items.push(item);\n  }\n  return items;\n}\n\nconst crossrefItems = items[0].json.message.items || [];\nconst newsItems = items[1].json.articles || [];\nconst tweetsItems = items[2].json.data || [];\n\nlet combined = [];\n\ncrossrefItems.forEach(pub => {\n  combined.push({\n    source: 'publication',\n    title: pub.title ? pub.title[0] : '',\n    abstract: pub.abstract || '',\n    publishedAt: pub.published ? pub.published['date-parts'][0].join('-') : '',\n    url: pub.URL || ''\n  });\n});\nnewsItems.forEach(news => {\n  combined.push({\n    source: 'news',\n    title: news.title || '',\n    description: news.description || '',\n    publishedAt: news.publishedAt || '',\n    url: news.url || ''\n  });\n});\ntweetsItems.forEach(tweet => {\n  combined.push({\n    source: 'twitter',\n    text: tweet.text,\n    createdAt: tweet.created_at || '',\n    id: tweet.id\n  });\n});\n\nreturn combined.map(item => ({ json: item }));"
+      },
+      "name": "Combine & Flatten Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-3.5-turbo",
+        "resource": "chatCompletion",
+        "options": {},
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an expert AI assistant specialized in natural language processing and trend analysis for scientific and tech domains."
+          },
+          {
+            "role": "user",
+            "content": "Analyze the following quantum computing related content for sentiment and relevance. Return JSON with fields: sentiment (positive, negative, neutral), relevanceScore (0-1), summary (brief). Content: {{$json.text || $json.abstract || $json.description || $json.title}}"
+          }
+        ]
+      },
+      "name": "Analyze Sentiment & Relevance - OpenAI",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        700,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const threshold = 0.6;\n\nconst filtered = items.filter(item => {\n  const result = item.json;\n  return result.relevanceScore >= threshold;\n});\n\nreturn filtered;"
+      },
+      "name": "Filter Relevant Trends",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "let topics = {};\n\nitems.forEach(item => {\n  const content = (item.json.text || item.json.abstract || item.json.description || item.json.title || '').toLowerCase();\n\n  // Simple keyword frequency counting\n  ['quantum advantage', 'quantum supremacy', 'qiskit', 'ion trap', 'superconducting qubit', 'quantum error correction', 'variational algorithm', 'quantum cryptography', 'quantum machine learning'].forEach(keyword => {\n    if (content.includes(keyword)) {\n      topics[keyword] = (topics[keyword] || 0) + 1;\n    }\n  });\n});\n\n// Return topics with their counts\nreturn Object.entries(topics).map(([topic, count]) => ({ json: { topic, count } }));"
+      },
+      "name": "Detect Emerging Topics",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "let sorted = [...items].sort((a,b) => b.json.count - a.json.count);\n\nconst topTopics = sorted.slice(0,5).map(t => `${t.json.topic} (${t.json.count})`).join(', ');\n\nreturn [{ json: { summary: `Top emerging quantum computing topics: ${topTopics}` } }];"
+      },
+      "name": "Prepare Summary Report",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "alerts@quantumtrends.com",
+        "toEmail": "={{$credentials.userEmail.email}}",
+        "subject": "Quantum Computing Trend Alert",
+        "text": "={{$node[\"Prepare Summary Report\"].json[\"summary\"]}}",
+        "html": "<h3>Quantum Computing Trend Alert</h3><p>{{$node[\"Prepare Summary Report\"].json[\"summary\"]}}</p>"
+      },
+      "name": "Send Alert Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "accessToken",
+        "resource": "chat.postMessage",
+        "options": {},
+        "channel": "={{$credentials.slack.channelId}}",
+        "text": "={{'Quantum Computing Trend Alert: ' + $node[\"Prepare Summary Report\"].json[\"summary\"]}}"
+      },
+      "name": "Send Slack Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        550
+      ]
+    },
+    {
+      "parameters": {
+        "interval": 30,
+        "unit": "minutes"
+      },
+      "name": "Trigger Every 30 minutes",
+      "type": "n8n-nodes-base.interval",
+      "typeVersion": 1,
+      "position": [
+        50,
+        350
+      ]
+    }
+  ],
+  "connections": {
+    "Trigger Every 30 minutes": {
+      "main": [
+        [
+          {
+            "node": "Fetch Publications - CrossRef",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch News - NewsAPI",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Tweets - Twitter API v2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Publications - CrossRef": {
+      "main": [
+        [
+          {
+            "node": "Combine & Flatten Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch News - NewsAPI": {
+      "main": [
+        [
+          {
+            "node": "Combine & Flatten Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch Tweets - Twitter API v2": {
+      "main": [
+        [
+          {
+            "node": "Combine & Flatten Data",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Combine & Flatten Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze Sentiment & Relevance - OpenAI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Sentiment & Relevance - OpenAI": {
+      "main": [
+        [
+          {
+            "node": "Filter Relevant Trends",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Relevant Trends": {
+      "main": [
+        [
+          {
+            "node": "Detect Emerging Topics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect Emerging Topics": {
+      "main": [
+        [
+          {
+            "node": "Prepare Summary Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Summary Report": {
+      "main": [
+        [
+          {
+            "node": "Send Alert Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Slack Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
