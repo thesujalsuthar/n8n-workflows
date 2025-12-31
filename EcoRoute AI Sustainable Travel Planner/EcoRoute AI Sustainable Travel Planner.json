@@ -1,0 +1,344 @@
+{
+  "name": "EcoRoute AI Planner",
+  "nodes": [
+    {
+      "parameters": {
+        "resource": "geocoding",
+        "operation": "forward",
+        "address": "={{$json[\"start_location\"]}}",
+        "additionalFields": {}
+      },
+      "name": "Geocode Start Location",
+      "type": "n8n-nodes-base.openStreetMap",
+      "typeVersion": 1,
+      "position": [
+        200,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "geocoding",
+        "operation": "forward",
+        "address": "={{$json[\"destination_location\"]}}",
+        "additionalFields": {}
+      },
+      "name": "Geocode Destination Location",
+      "type": "n8n-nodes-base.openStreetMap",
+      "typeVersion": 1,
+      "position": [
+        200,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "={{`https://api.publictransit.example.com/routes?startLat=${$node[\"Geocode Start Location\"].json[0].lat}&startLon=${$node[\"Geocode Start Location\"].json[0].lon}&endLat=${$node[\"Geocode Destination Location\"].json[0].lat}&endLon=${$node[\"Geocode Destination Location\"].json[0].lon}&mode=transit`}}",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer PUBLIC_TRANSIT_API_KEY"
+            }
+          ]
+        }
+      },
+      "name": "Fetch Transit Routes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        500,
+        170
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "={{`https://api.bikeroutes.example.com/routes?startLat=${$node[\"Geocode Start Location\"].json[0].lat}&startLon=${$node[\"Geocode Start Location\"].json[0].lon}&endLat=${$node[\"Geocode Destination Location\"].json[0].lat}&endLon=${$node[\"Geocode Destination Location\"].json[0].lon}`}}",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "x-api-key",
+              "value": "BIKEROUTES_API_KEY"
+            }
+          ]
+        }
+      },
+      "name": "Fetch Bike Routes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        500,
+        370
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "={{`https://api.walkingpaths.example.com/routes?startLat=${$node[\"Geocode Start Location\"].json[0].lat}&startLon=${$node[\"Geocode Start Location\"].json[0].lon}&endLat=${$node[\"Geocode Destination Location\"].json[0].lat}&endLon=${$node[\"Geocode Destination Location\"].json[0].lon}`}}",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer WALKING_PATHS_API_KEY"
+            }
+          ]
+        }
+      },
+      "name": "Fetch Walking Paths",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        500,
+        570
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const transitRoutes = $node[\"Fetch Transit Routes\"].json.routes || [];\nconst bikeRoutes = $node[\"Fetch Bike Routes\"].json.routes || [];\nconst walkingPaths = $node[\"Fetch Walking Paths\"].json.routes || [];\n\nfunction calculateCarbonFootprint(route, mode) {\n  let emissionFactor = 0;\n  switch (mode) {\n    case 'transit':\n      emissionFactor = 0.05; // kg CO2 per km (example)\n      break;\n    case 'bike':\n      emissionFactor = 0; // zero emissions\n      break;\n    case 'walk':\n      emissionFactor = 0; // zero emissions\n      break;\n  }\n  return route.distance * emissionFactor;\n}\n\nfunction calculateTravelTime(route) {\n  return route.duration; // assuming duration is in minutes\n}\n\n// Combine all routes into one array with mode and metrics\nconst combinedRoutes = [];\n\ntransitRoutes.forEach(route => {\n  combinedRoutes.push({\n    mode: 'transit',\n    route: route,\n    carbonFootprint: calculateCarbonFootprint(route, 'transit'),\n    travelTime: calculateTravelTime(route)\n  });\n});\n\nbikeRoutes.forEach(route => {\n  combinedRoutes.push({\n    mode: 'bike',\n    route: route,\n    carbonFootprint: calculateCarbonFootprint(route, 'bike'),\n    travelTime: calculateTravelTime(route)\n  });\n});\n\nwalkingPaths.forEach(route => {\n  combinedRoutes.push({\n    mode: 'walk',\n    route: route,\n    carbonFootprint: calculateCarbonFootprint(route, 'walk'),\n    travelTime: calculateTravelTime(route)\n  });\n});\n\n// Optimize routes by lowest carbon footprint and shortest time\ncombinedRoutes.sort((a, b) => {\n  if (a.carbonFootprint === b.carbonFootprint) {\n    return a.travelTime - b.travelTime;\n  }\n  return a.carbonFootprint - b.carbonFootprint;\n});\n\nreturn combinedRoutes;\n"
+      },
+      "name": "Optimize Routes",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        370
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const chosenRoute = $items()[0];\nconst offsetApiUrl = 'https://api.carbonoffset.example.com/suggest';\nconst offsetApiKey = 'CARBON_OFFSET_API_KEY';\n\nconst totalCarbon = chosenRoute.json.carbonFootprint || 0;\n\nreturn [{\n  json: {\n    carbonFootprint: totalCarbon,\n    offsetApiUrl: offsetApiUrl,\n    offsetApiKey: offsetApiKey\n  }\n}];"
+      },
+      "name": "Prepare Carbon Offset Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        370
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "={{$json[\"offsetApiUrl\"]}}",
+        "method": "POST",
+        "options": {},
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "carbon_amount",
+              "value": "={{$json[\"carbonFootprint\"]}}"
+            },
+            {
+              "name": "currency",
+              "value": "USD"
+            }
+          ]
+        },
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$json[\"offsetApiKey\"]}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        }
+      },
+      "name": "Get Carbon Offset Suggestions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        370
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const chosenRoute = $items()[0].json;\nconst offsetData = $items()[1].json;\n\nreturn [{\n  json: {\n    itinerary: {\n      mode: chosenRoute.mode,\n      details: chosenRoute.route,\n      carbonFootprintKgCO2: chosenRoute.carbonFootprint,\n      travelTimeMinutes: chosenRoute.travelTime\n    },\n    carbonOffsetSuggestions: offsetData.suggestions || offsetData\n  }\n}];"
+      },
+      "name": "Compile Final Itinerary",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        370
+      ]
+    },
+    {
+      "parameters": {
+        "webhookId": "ecoroute_ai_webhook",
+        "path": "ecoroute-ai",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "name": "Webhook Start",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        50,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: { start_location: $json.body.start_location, destination_location: $json.body.destination_location } }];"
+      },
+      "name": "Extract Input",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        150,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Start": {
+      "main": [
+        [
+          {
+            "node": "Extract Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Input": {
+      "main": [
+        [
+          {
+            "node": "Geocode Start Location",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Geocode Destination Location",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Geocode Start Location": {
+      "main": [
+        [
+          {
+            "node": "Fetch Transit Routes",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Bike Routes",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Walking Paths",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Geocode Destination Location": {
+      "main": [
+        [
+          {
+            "node": "Fetch Transit Routes",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "Fetch Bike Routes",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "Fetch Walking Paths",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch Transit Routes": {
+      "main": [
+        [
+          {
+            "node": "Optimize Routes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Bike Routes": {
+      "main": [
+        [
+          {
+            "node": "Optimize Routes",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch Walking Paths": {
+      "main": [
+        [
+          {
+            "node": "Optimize Routes",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Optimize Routes": {
+      "main": [
+        [
+          {
+            "node": "Prepare Carbon Offset Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Carbon Offset Data": {
+      "main": [
+        [
+          {
+            "node": "Get Carbon Offset Suggestions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Carbon Offset Suggestions": {
+      "main": [
+        [
+          {
+            "node": "Compile Final Itinerary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
