@@ -1,0 +1,320 @@
+{
+  "name": "SmartHome AI Energy Optimizer & Carbon Footprint Reducer",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.openweathermap.org/data/2.5/weather",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "q",
+              "value": "YOUR_CITY"
+            },
+            {
+              "name": "appid",
+              "value": "YOUR_OPENWEATHERMAP_API_KEY"
+            },
+            {
+              "name": "units",
+              "value": "metric"
+            }
+          ]
+        }
+      },
+      "name": "Fetch Weather Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.energyprice.com/v1/current",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "region",
+              "value": "YOUR_REGION_CODE"
+            },
+            {
+              "name": "apikey",
+              "value": "YOUR_ENERGYPRICE_API_KEY"
+            }
+          ]
+        }
+      },
+      "name": "Fetch Energy Pricing",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const weather = items[0].json;\nconst energy = items[1].json;\n\n// Example: Determine optimal thermostat temperature based on weather and energy price\nconst outdoorTemp = weather.main.temp;\nconst energyPrice = energy.price_per_kwh;\n\n// Base target temp (e.g. 21 C)\nlet targetTemp = 21;\n\nif (energyPrice > 0.30) {\n  // Peak price - reduce heating or cooling to save energy\n  if (outdoorTemp < 15) {\n    targetTemp = 19; // reduce heating\n  } else if (outdoorTemp > 25) {\n    targetTemp = 25; // increase cooling threshold\n  }\n} else if (energyPrice < 0.15) {\n  // Low price - comfortable temperature\n  targetTemp = 21;\n} else {\n  // Moderate price\n  targetTemp = 20;\n}\n\nreturn [{json: {targetTemperature: targetTemp, energyPrice, outdoorTemp}}];"
+      },
+      "name": "Calculate Optimal Temperature",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        200
+      ],
+      "notesInFlow": true,
+      "notes": "Use weather and energy pricing data to decide optimal thermostat temperature."
+    },
+    {
+      "parameters": {
+        "deviceId": "YOUR_THERMOSTAT_DEVICE_ID",
+        "command": "setTemperature",
+        "parametersUi": {
+          "parameter": [
+            {
+              "name": "temperature",
+              "value": "={{$json[\"targetTemperature\"]}}"
+            }
+          ]
+        }
+      },
+      "name": "Set Thermostat Temperature",
+      "type": "n8n-nodes-base.smartHome",
+      "typeVersion": 1,
+      "position": [
+        750,
+        200
+      ],
+      "credentials": {
+        "smartHomeApi": {
+          "id": "YOUR_SMARTHOME_CREDENTIAL_ID",
+          "name": "SmartHome Credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "deviceId": "YOUR_SMART_DEVICE_ID",
+        "command": "optimizeEnergyUsage",
+        "parametersUi": {
+          "parameter": [
+            {
+              "name": "energyPrice",
+              "value": "={{$json[\"energyPrice\"]}}"
+            }
+          ]
+        }
+      },
+      "name": "Optimize Additional Devices",
+      "type": "n8n-nodes-base.smartHome",
+      "typeVersion": 1,
+      "position": [
+        750,
+        350
+      ],
+      "credentials": {
+        "smartHomeApi": {
+          "id": "YOUR_SMARTHOME_CREDENTIAL_ID",
+          "name": "SmartHome Credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "expression": "={{$json[\"energyPrice\"] > 0.30}}"
+      },
+      "name": "Check High Energy Price",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        650,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "chatId": "YOUR_CHAT_ID",
+        "text": "Alert: High energy prices detected. Optimizing your smart home devices to reduce energy consumption and carbon footprint."
+      },
+      "name": "Send Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        850,
+        400
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "append",
+        "content": "Time: {{$now.toISOString()}}\nOutdoor Temp: {{$json[\"outdoorTemp\"]}} °C\nEnergy Price: {{$json[\"energyPrice\"]}} $/kWh\nTarget Thermostat Temp: {{$json[\"targetTemperature\"]}} °C\n---\n",
+        "filename": "energy-optimization-log.txt"
+      },
+      "name": "Log Optimization Data",
+      "type": "n8n-nodes-base.appendBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        750,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "chatId": "YOUR_CHAT_ID",
+        "text": "Daily Energy Use Report:\n\nOutdoor Temp: {{$json[\"outdoorTemp\"]}} °C\nEnergy Price: {{$json[\"energyPrice\"]}} $/kWh\nTarget Thermostat Temp: {{$json[\"targetTemperature\"]}} °C\nCarbon Footprint Reduction Estimate: {{((21 - $json[\"targetTemperature\"]) * 0.5).toFixed(2)}} kg CO2"
+      },
+      "name": "Send Daily Report",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        500
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "interval": 300,
+        "unit": "seconds"
+      },
+      "name": "Trigger Every 5 Minutes",
+      "type": "n8n-nodes-base.interval",
+      "typeVersion": 1,
+      "position": [
+        50,
+        200
+      ]
+    }
+  ],
+  "connections": {
+    "Trigger Every 5 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Fetch Energy Pricing",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Weather Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Energy Pricing": {
+      "main": [
+        [
+          {
+            "node": "Calculate Optimal Temperature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Weather Data": {
+      "main": [
+        [
+          {
+            "node": "Calculate Optimal Temperature",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Calculate Optimal Temperature": {
+      "main": [
+        [
+          {
+            "node": "Set Thermostat Temperature",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Optimize Additional Devices",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log Optimization Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Check High Energy Price",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Thermostat Temperature": {
+      "main": [
+        []
+      ]
+    },
+    "Optimize Additional Devices": {
+      "main": [
+        []
+      ]
+    },
+    "Log Optimization Data": {
+      "main": [
+        [
+          {
+            "node": "Send Daily Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check High Energy Price": {
+      "main": [
+        [
+          {
+            "node": "Send Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Send Alert": {
+      "main": [
+        []
+      ]
+    },
+    "Send Daily Report": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
