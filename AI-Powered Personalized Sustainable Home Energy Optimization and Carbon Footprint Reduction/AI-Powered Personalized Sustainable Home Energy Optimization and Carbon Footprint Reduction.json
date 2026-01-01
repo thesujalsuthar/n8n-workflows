@@ -1,0 +1,226 @@
+{
+  "name": "AI-Driven Personalized Sustainable Home Energy Optimization and Carbon Footprint Reduction",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.smarthomeenergy.com/v1/data",
+        "options": {}
+      },
+      "name": "Fetch Smart Home Energy Data",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.weather.com/v3/wx/forecast/daily/5day",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "geocode",
+              "value": "={{$json[\"location\"].latitude + ',' + $json[\"location\"].longitude}}"
+            },
+            {
+              "name": "format",
+              "value": "json"
+            },
+            {
+              "name": "units",
+              "value": "e"
+            }
+          ]
+        }
+      },
+      "name": "Fetch Real-time Weather Forecast",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        200,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "from": "user_data@smarthome.com",
+        "subject": "Retrieve User Energy Consumption Patterns",
+        "options": {}
+      },
+      "name": "Retrieve User Energy Consumption Patterns",
+      "type": "emailReadImap",
+      "typeVersion": 1,
+      "position": [
+        200,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const energyData = items[0].json;\nconst weatherData = items[1].json;\nconst userPatterns = items[2].json;\n\n// Example simple aggregated inputs\nconst avgDailyUsage = userPatterns.usageStats.avgDailyUsage;\nconst forecastTemp = weatherData.forecasts[0].tempMax;\n\n// Simple heuristic for recommendations\nlet recommendations = [];\n\nif (avgDailyUsage > 30) {\n  recommendations.push('Consider reducing peak hour appliance use to save energy.');\n}\nif (forecastTemp > 85) {\n  recommendations.push('Pre-cool home in early morning to reduce AC load during peak heat.');\n} else if (forecastTemp < 60) {\n  recommendations.push('Optimize heating schedule based on occupancy to avoid overuse.');\n}\n\nreturn [{ json: { recommendations } }];"
+      },
+      "name": "AI Recommend Energy-saving Actions",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const energyData = items[0].json;\nconst recommendations = items[3].json.recommendations;\n\n// Simulated optimization logic for appliance usage scheduling\nconst optimizedSchedule = {\n  appliance1: '22:00-06:00',\n  appliance2: '14:00-16:00',\n  appliance3: '08:00-09:00'\n};\nconst estimatedSavings = {\n  costSavings: 12.5,\n  carbonReductionKg: 3.8\n};\n\nreturn [{ json: { optimizedSchedule, estimatedSavings, recommendations } }];"
+      },
+      "name": "Optimize Appliance Usage Schedule",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const currentUsage = items[0].json.currentUsage;\nconst avgUsage = items[2].json.usageStats.avgUsage;\n\nif (currentUsage > avgUsage * 1.5) {\n  return [{ json: { alert: 'Unusual high energy consumption detected!' } }];\n}\nreturn [];"
+      },
+      "name": "Detect Unusual Consumption",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "message": "Unusual energy consumption detected at home. Please check appliance status and usage patterns."
+      },
+      "name": "Send Alert Notification",
+      "type": "emailSend",
+      "typeVersion": 1,
+      "position": [
+        650,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const optimizationResults = items[4].json;\nconst period = 'Last 7 days';\n\nconst report = {\n  period,\n  costSavings: optimizationResults.estimatedSavings.costSavings,\n  carbonReduction: optimizationResults.estimatedSavings.carbonReductionKg,\n  recommendations: optimizationResults.recommendations,\n  timestamp: new Date().toISOString()\n};\n\nreturn [{ json: report }];"
+      },
+      "name": "Generate Periodic Energy Report",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "toEmail": "user@smarthome.com",
+        "subject": "Weekly Sustainable Home Energy Report",
+        "text": "Report Period: {{$json.period}}\nCost Savings: ${{$json.costSavings}}\nCarbon Reduction: {{$json.carbonReduction}} kg CO2e\nRecommendations:\n{{$json.recommendations.join('\\n- ')}}",
+        "attachments": []
+      },
+      "name": "Send Energy Report Email",
+      "type": "emailSend",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Retrieve User Energy Consumption Patterns": {
+      "main": [
+        [
+          {
+            "node": "Fetch Smart Home Energy Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Real-time Weather Forecast",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Smart Home Energy Data": {
+      "main": [
+        [
+          {
+            "node": "AI Recommend Energy-saving Actions",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Detect Unusual Consumption",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Real-time Weather Forecast": {
+      "main": [
+        [
+          {
+            "node": "AI Recommend Energy-saving Actions",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "AI Recommend Energy-saving Actions": {
+      "main": [
+        [
+          {
+            "node": "Optimize Appliance Usage Schedule",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Optimize Appliance Usage Schedule": {
+      "main": [
+        [
+          {
+            "node": "Generate Periodic Energy Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Periodic Energy Report": {
+      "main": [
+        [
+          {
+            "node": "Send Energy Report Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect Unusual Consumption": {
+      "main": [
+        [
+          {
+            "node": "Send Alert Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
