@@ -1,0 +1,185 @@
+{
+  "name": "AI-Powered Real-Time Urban Heat Island Monitoring and Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "topicName": "iot/sensors/temperature",
+        "options": {},
+        "dataPropertyName": "sensorData"
+      },
+      "name": "IoT Temperature Sensor (MQTT)",
+      "type": "n8n-nodes-base.mqttTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.openweathermap.org/data/2.5/weather",
+        "options": {},
+        "queryParameters": {
+          "q": "={{$json[\"city\"]}}",
+          "appid": "={{$credentials.weatherApi.apiKey}}",
+          "units": "metric"
+        },
+        "responseFormat": "json"
+      },
+      "name": "Real-Time Weather API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nMerge sensor data and real-time weather API data\nExtract temperature, humidity, and other relevant features\n*/\n\nconst sensorData = $items(\"IoT Temperature Sensor (MQTT)\")[0].json;\nconst weatherData = $items(\"Real-Time Weather API\")[0].json;\n\nreturn [{\n  json: {\n    temperatureSensor: sensorData.temperature,\n    location: sensorData.location,\n    timestamp: sensorData.timestamp,\n    temperatureWeatherAPI: weatherData.main.temp,\n    humidity: weatherData.main.humidity,\n    windSpeed: weatherData.wind.speed,\n    city: weatherData.name\n  }\n}];"
+      },
+      "name": "Merge and Prepare Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        690,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": "urban-heat-island-model",
+        "input": "={{ $json }}",
+        "options": {
+          "additionalFields": {}
+        }
+      },
+      "name": "Machine Learning Model - Predict Heat Island Intensity",
+      "type": "n8n-nodes-base.ai",
+      "typeVersion": 1,
+      "position": [
+        940,
+        300
+      ],
+      "credentials": {
+        "aiApi": {
+          "id": "aiApiCredentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nBased on prediction, determine alert level and actionable recommendations\n*/\n\nconst prediction = $json.prediction ?? 0;\nconst temperatureSensor = $json.temperatureSensor;\nconst location = $json.location;\nconst city = $json.city;\n\nlet alertLevel = \"Normal\";\nlet recommendations = [];\n\nif (prediction > 7) {\n  alertLevel = \"High\";\n  recommendations = [\n    \"Activate additional cooling centers.\",\n    \"Issue heat advisory alerts to residents.\",\n    \"Increase urban greenery and water features.\",\n    \"Limit outdoor physical activities during peak heat hours.\"\n  ];\n} else if (prediction > 4) {\n  alertLevel = \"Moderate\";\n  recommendations = [\n    \"Encourage residents to stay hydrated.\",\n    \"Monitor vulnerable populations closely.\",\n    \"Advise reducing outdoor exposure during midday.\"\n  ];\n} else {\n  alertLevel = \"Low\";\n  recommendations = [\"Maintain regular monitoring.\"];\n}\n\nreturn [{\n  json: {\n    alertLevel,\n    recommendations,\n    temperatureSensor,\n    location,\n    city,\n    prediction,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "name": "Determine Alerts and Recommendations",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1190,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "channel": "urban-heat-alerts",
+        "message": "={{`Alert Level: ${$json.alertLevel}\nLocation: ${$json.location}\nCity: ${$json.city}\nCurrent Sensor Temp: ${$json.temperatureSensor}°C\nPredicted Heat Island Intensity: ${$json.prediction}\nRecommendations:\n- ${$json.recommendations.join('\\n- ')}\nTimestamp: ${$json.timestamp}`}}"
+      },
+      "name": "Send Slack Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1440,
+        300
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "slackApiCredentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toEmail": "city.manager@example.com,residents@cityalerts.example.com",
+        "subject": "Urban Heat Island Alert: {{$json.alertLevel}} Level Detected",
+        "text": "Alert Level: {{$json.alertLevel}}\nLocation: {{$json.location}}\nCity: {{$json.city}}\nCurrent Sensor Temperature: {{$json.temperatureSensor}}°C\nPredicted Heat Island Intensity: {{$json.prediction}}\n\nRecommendations:\n- {{$json.recommendations.join('\\n- ')}}\n\nTimestamp: {{$json.timestamp}}"
+      },
+      "name": "Send Email Notification",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1440,
+        450
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "smtpCredentials"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "IoT Temperature Sensor (MQTT)": {
+      "main": [
+        [
+          {
+            "node": "Real-Time Weather API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Real-Time Weather API": {
+      "main": [
+        [
+          {
+            "node": "Merge and Prepare Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge and Prepare Data": {
+      "main": [
+        [
+          {
+            "node": "Machine Learning Model - Predict Heat Island Intensity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Machine Learning Model - Predict Heat Island Intensity": {
+      "main": [
+        [
+          {
+            "node": "Determine Alerts and Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Determine Alerts and Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Send Slack Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Email Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
