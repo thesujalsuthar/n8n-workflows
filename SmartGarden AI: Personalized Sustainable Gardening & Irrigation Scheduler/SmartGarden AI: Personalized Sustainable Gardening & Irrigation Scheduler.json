@@ -1,0 +1,239 @@
+{
+  "name": "AI-Driven Sustainable Gardening Advisor and Smart Irrigation Scheduler",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "analyzePlantData",
+        "options": {},
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "plantTypes",
+              "value": "={{$json[\"plantTypes\"]}}"
+            },
+            {
+              "name": "soilMoisture",
+              "value": "={{$json[\"soilMoisture\"]}}"
+            },
+            {
+              "name": "weatherForecast",
+              "value": "={{$json[\"weather\"]}}"
+            }
+          ]
+        }
+      },
+      "name": "Send Data to AI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        600,
+        300
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "1",
+          "name": "AI_API_Credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {},
+        "resource": "weather",
+        "operation": "getForecast",
+        "location": "={{$json[\"location\"]}}",
+        "returnAll": false,
+        "limit": 7
+      },
+      "name": "Get Weather Forecast",
+      "type": "n8n-nodes-base.weather",
+      "typeVersion": 1,
+      "position": [
+        200,
+        200
+      ],
+      "credentials": {
+        "weatherApi": {
+          "id": "2",
+          "name": "OpenWeather_API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {},
+        "resource": "sensor",
+        "operation": "getData",
+        "sensorId": "soilMoistureSensor1"
+      },
+      "name": "Get Soil Moisture Data",
+      "type": "n8n-nodes-base.genericApi",
+      "typeVersion": 1,
+      "position": [
+        200,
+        400
+      ],
+      "credentials": {
+        "genericApi": {
+          "id": "3",
+          "name": "SoilMoistureSensor_API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const plantTypes = $json[\"plantTypes\"] || [];\nconst weather = $json[\"weather\"];\nconst soilMoisture = $json[\"soilMoisture\"];\n\n// Simple heuristic-based tips\nlet tips = [];\nplantTypes.forEach(plant => {\n  if (soilMoisture < 30) {\n    tips.push(`Water your ${plant} carefully, moisture is low.`);\n  } else {\n    tips.push(`Moisture level good for ${plant}.`);\n  }\n  if (weather.daily && weather.daily.some(day => day.rain > 50)) {\n    tips.push(`Rain expected soon, consider reducing irrigation for ${plant}.`);\n  }\n});\n\n// Disease prevention based on humidity and precipitation\nlet diseaseWarnings = [];\nif (weather.current.humidity > 80) {\n  diseaseWarnings.push('High humidity detected, increase airflow around plants to prevent fungal diseases.');\n}\nif (weather.daily.some(day => day.precipitation > 10)) {\n  diseaseWarnings.push('Wet days ahead, monitor plants for disease symptoms.');\n}\n\nreturn [{ json: { gardeningTips: tips, diseasePrevention: diseaseWarnings } }];"
+      },
+      "name": "Generate Gardening Tips",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        600,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const soilMoisture = $json[\"soilMoisture\"];\nconst weather = $json[\"weather\"];\n\n// Simple irrigation schedule logic\nlet schedule = [];\n\nif (soilMoisture < 30) {\n  schedule.push({\n    time: '06:00',\n    duration: 20,\n    note: 'Morning irrigation - moisture low'\n  });\n} else if (soilMoisture >= 30 && soilMoisture < 60) {\n  schedule.push({\n    time: '06:00',\n    duration: 10,\n    note: 'Morning irrigation - moderate moisture'\n  });\n} else {\n  schedule.push({\n    time: 'skip',\n    duration: 0,\n    note: 'No irrigation needed'\n  });\n}\n\n// Reduce irrigation if rain expected\nif (weather.daily.some(day => day.pop > 60)) {\n  schedule = [{ time: 'skip', duration: 0, note: 'Rain expected, skip irrigation' }];\n}\n\nreturn [{ json: { irrigationSchedule: schedule } }];"
+      },
+      "name": "Create Irrigation Schedule",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        600,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "mergeStrategy": "mergeByIndex",
+        "options": {}
+      },
+      "name": "Merge Data",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 1,
+      "position": [
+        500,
+        400
+      ],
+      "notes": "Merges weather data and soil moisture data into one JSON"
+    },
+    {
+      "parameters": {
+        "waitTill": "={{ new Date().setHours(5,0,0,0) > Date.now() ? new Date().setHours(5,0,0,0) : new Date(Date.now() + 86400000).setHours(5,0,0,0) }}"
+      },
+      "name": "Trigger Daily at 5AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "email",
+        "operation": "send",
+        "fromEmail": "garden.advisor@example.com",
+        "toEmail": "={{$json[\"userEmail\"]}}",
+        "subject": "Your Daily AI-Driven Gardening Tips and Irrigation Schedule",
+        "text": "={{\n  `Hello,\n\nHere are your personalized gardening tips for today:\n\n${$json[\"gardeningTips\"].join(\"\\n- \")}\n\nDisease prevention advice:\n- ${$json[\"diseasePrevention\"].join(\"\\n- \")}\n\nIrrigation Schedule:\n${$json[\"irrigationSchedule\"].map(s => `* ${s.time === 'skip' ? 'No irrigation needed.' : s.time + ', duration ' + s.duration + ' minutes (' + s.note + ')'}`).join(\"\\n\")}\n\nHappy Gardening! 🌱\n`}}"
+      },
+      "name": "Send Gardening Advice Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        900,
+        500
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "4",
+          "name": "SMTP_Email_Credentials"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Trigger Daily at 5AM": {
+      "main": [
+        [
+          {
+            "node": "Get Weather Forecast",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Soil Moisture Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Weather Forecast": {
+      "main": [
+        [
+          {
+            "node": "Merge Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Soil Moisture Data": {
+      "main": [
+        [
+          {
+            "node": "Merge Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Data": {
+      "main": [
+        [
+          {
+            "node": "Generate Gardening Tips",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create Irrigation Schedule",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Gardening Tips": {
+      "main": [
+        [
+          {
+            "node": "Send Gardening Advice Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Irrigation Schedule": {
+      "main": [
+        [
+          {
+            "node": "Send Gardening Advice Email",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
