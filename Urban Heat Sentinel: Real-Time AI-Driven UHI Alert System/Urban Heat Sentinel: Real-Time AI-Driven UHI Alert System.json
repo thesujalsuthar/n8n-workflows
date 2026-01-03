@@ -1,0 +1,121 @@
+{
+  "name": "AI-Powered Real-Time Urban Heat Island Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "schedule": "*/5 * * * *",
+        "options": {}
+      },
+      "name": "Trigger - Every 5 Minutes",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "none",
+        "url": "https://api.openweathermap.org/data/2.5/weather?q=CityName&appid=YOUR_API_KEY&units=metric",
+        "options": {}
+      },
+      "name": "Fetch Urban Temperature Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        550,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/* Analyze fetched temperature data to detect Urban Heat Island anomalies */\nconst data = items[0].json;\n\n// Example thresholds and logic (this can be refined)\nconst heatIslandThreshold = 5; // degrees Celsius above baseline\nconst baselineTemp = 30; // baseline average urban temperature (could be dynamic)\n\nconst currentTemp = data.main.temp;\n\nconst anomalyDetected = currentTemp - baselineTemp >= heatIslandThreshold;\nconst anomalySeverity = anomalyDetected ? (currentTemp - baselineTemp) : 0;\n\nreturn [{\n  json: {\n    currentTemp,\n    baselineTemp,\n    anomalyDetected,\n    anomalySeverity,\n    location: data.name,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "name": "Detect Heat Island Anomaly",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const item = items[0].json;\n\nif (!item.anomalyDetected) {\n  // No anomaly, end workflow\n  return [];\n}\n\nconst severity = item.anomalySeverity;\n\nlet recommendations = [];\n\nif (severity >= 8) {\n  recommendations.push(\"Activate cooling centers immediately.\");\n  recommendations.push(\"Issue urgent public heat warnings.\");\n  recommendations.push(\"Increase green space watering frequency.\");\n} else if (severity >= 5) {\n  recommendations.push(\"Advise residents to stay hydrated and avoid outdoor activity during peak hours.\");\n  recommendations.push(\"Check vulnerable populations for heat stress.\");\n  recommendations.push(\"Deploy mobile misting stations.\");\n} else {\n  recommendations.push(\"Monitor temperatures closely.\");\n  recommendations.push(\"Encourage use of shade and light clothing.\");\n}\n\nreturn [{\n  json: {\n    ...item,\n    recommendations\n  }\n}];"
+      },
+      "name": "Generate Actionable Recommendations",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "alerts@urbanheatmonitor.com",
+        "toEmail": "local.authorities@example.com,residents@example.com",
+        "subject": "Urban Heat Island Alert - {{ $json.location }} - {{ $json.timestamp }}",
+        "text": "Heat anomaly detected in {{ $json.location }}.\n\nCurrent Temperature: {{ $json.currentTemp }}°C\nBaseline Temperature: {{ $json.baselineTemp }}°C\nSeverity Level: {{ $json.anomalySeverity }}°C above baseline\n\nRecommended Actions:\n- {{ $json.recommendations.join('\\n- ') }}\n\nPlease take necessary precautions to mitigate heat risks.",
+        "options": {}
+      },
+      "name": "Send Alert Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Trigger - Every 5 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Fetch Urban Temperature Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Urban Temperature Data": {
+      "main": [
+        [
+          {
+            "node": "Detect Heat Island Anomaly",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect Heat Island Anomaly": {
+      "main": [
+        [
+          {
+            "node": "Generate Actionable Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Actionable Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Send Alert Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
