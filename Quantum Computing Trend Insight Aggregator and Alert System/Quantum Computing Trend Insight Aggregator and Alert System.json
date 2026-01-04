@@ -1,0 +1,251 @@
+{
+  "name": "Quantum Computing Research Trend Analyzer and Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "http://export.arxiv.org/api/query?search_query=all:quantum+computing&start=0&max_results=5&sortBy=submittedDate&sortOrder=descending",
+        "responseFormat": "string",
+        "jsonParse": true
+      },
+      "name": "HTTP Request - arXiv",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "none",
+        "url": "https://serpapi.com/search.json?q=quantum+computing&engine=google_scholar&api_key={{ $credentials.serpApiApiKey.apiKey }}",
+        "responseFormat": "json"
+      },
+      "name": "HTTP Request - Google Scholar",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://newsapi.org/v2/everything?q=quantum+computing&sortBy=publishedAt&pageSize=5&apiKey={{ $credentials.newsApiKey.apiKey }}",
+        "responseFormat": "json"
+      },
+      "name": "HTTP Request - NewsAPI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        740
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const parseArxivXml = (xml) => {\n  const parser = new DOMParser();\n  const xmlDoc = parser.parseFromString(xml, 'text/xml');\n  const entries = xmlDoc.getElementsByTagName('entry');\n  let results = [];\n  for (let i = 0; i < entries.length; i++) {\n    const entry = entries[i];\n    results.push({\n      title: entry.getElementsByTagName('title')[0]?.textContent || '',\n      summary: entry.getElementsByTagName('summary')[0]?.textContent || '',\n      published: entry.getElementsByTagName('published')[0]?.textContent || '',\n      link: entry.getElementsByTagName('id')[0]?.textContent || ''\n    });\n  }\n  return results;\n};\n\nconst arxivRaw = items[0].json;\nconst xmlString = arxivRaw.toString();\n\n// Since DOMParser doesn't exist in Node, use a regex fallback parsing for demo\nlet entries = [];\nconst entryRegex = /<entry>([\\s\\S]*?)<\\/entry>/g;\nlet match;\nwhile ((match = entryRegex.exec(xmlString)) !== null) {\n  const entryText = match[1];\n  const getText = (tag) => {\n    const regex = new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`);\n    const res = regex.exec(entryText);\n    return res ? res[1].replace(/\\n/g, ' ').trim() : '';\n  };\n  entries.push({\n    title: getText('title'),\n    summary: getText('summary'),\n    published: getText('published'),\n    link: getText('id')\n  });\n}\n\nreturn entries.map(i => ({ json: i }));"
+      },
+      "name": "Parse arXiv XML",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ],
+      "notesInWorkflow": true
+    },
+    {
+      "parameters": {
+        "functionCode": "const itemsGoogleScholar = items[0].json['organic_results'] || [];\nconst results = itemsGoogleScholar.slice(0, 5).map(item => ({\n  title: item.title || '',\n  snippet: item.snippet || '',\n  link: item.link || ''\n}));\nreturn results.map(i => ({ json: i }));"
+      },
+      "name": "Extract Google Scholar Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const articles = items.map(i => i.json).flat();\nconst newsItems = articles.map(n => ({\n  title: n.title || '',\n  description: n.description || '',\n  url: n.url || '',\n  publishedAt: n.publishedAt || ''\n}));\nreturn newsItems.map(i => ({ json: i }));"
+      },
+      "name": "Extract NewsAPI Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        740
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "passThrough",
+        "functionCode": "const allEntries = [];\n\n// Pull data arrays from previous nodes\nconst arxivPapers = $items('Parse arXiv XML');\nconst scholarPapers = $items('Extract Google Scholar Data');\nconst newsArticles = $items('Extract NewsAPI Data');\n\narxivPapers.forEach(item => allEntries.push({\n  source: 'arXiv',\n  title: item.json.title,\n  summary: item.json.summary,\n  link: item.json.link,\n  published: item.json.published\n}));\nscholarPapers.forEach(item => allEntries.push({\n  source: 'Google Scholar',\n  title: item.json.title,\n  summary: item.json.snippet,\n  link: item.json.link\n}));\nnewsArticles.forEach(item => allEntries.push({\n  source: 'News',\n  title: item.json.title,\n  summary: item.json.description,\n  link: item.json.url,\n  published: item.json.publishedAt\n}));\n\nreturn allEntries.map(i => ({ json: i }));"
+      },
+      "name": "Aggregate All Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        700,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "post",
+        "operation": "postComment",
+        "text": "Function placeholder — replace with real integration if available."
+      },
+      "name": "Placeholder NLP - Summarization",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        520
+      ],
+      "notesInWorkflow": "This node should be replaced with an NLP node or a call to an external NLP API to generate summarized insights and trend analysis."
+    },
+    {
+      "parameters": {
+        "fromEmail": "alerts@quantumhub.example",
+        "toEmail": "={{$node[\"Set Subscribers\"].json[\"emailAddresses\"].join(\",\")}}",
+        "subject": "Quantum Computing Trend Alert",
+        "text": "={{ $node[\"Placeholder NLP - Summarization\"].json.summary || 'New updates on Quantum Computing research and news.' }}"
+      },
+      "name": "Send Email Alerts",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "emailAddresses",
+              "value": "user1@example.com,user2@example.com"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set Subscribers",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "HTTP Request - arXiv": {
+      "main": [
+        [
+          {
+            "node": "Parse arXiv XML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - Google Scholar": {
+      "main": [
+        [
+          {
+            "node": "Extract Google Scholar Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - NewsAPI": {
+      "main": [
+        [
+          {
+            "node": "Extract NewsAPI Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse arXiv XML": {
+      "main": [
+        [
+          {
+            "node": "Aggregate All Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Google Scholar Data": {
+      "main": [
+        [
+          {
+            "node": "Aggregate All Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract NewsAPI Data": {
+      "main": [
+        [
+          {
+            "node": "Aggregate All Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Subscribers": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate All Data": {
+      "main": [
+        [
+          {
+            "node": "Placeholder NLP - Summarization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Placeholder NLP - Summarization": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
