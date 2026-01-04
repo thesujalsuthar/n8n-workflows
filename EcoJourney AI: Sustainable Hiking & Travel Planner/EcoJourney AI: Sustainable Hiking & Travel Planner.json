@@ -1,0 +1,187 @@
+{
+  "name": "EcoJourney AI: Personalized Sustainable Hiking and Travel Planner",
+  "nodes": [
+    {
+      "parameters": {
+        "functionCode": "return [\n  {\n    userPreferences: {\n      location: $json.location || \"\",\n      hikingDifficulty: $json.hikingDifficulty || \"moderate\",\n      travelDates: $json.travelDates || { start: null, end: null },\n      interests: $json.interests || [\"nature\", \"culture\"],\n      sustainabilityFocus: $json.sustainabilityFocus || true\n    }\n  }\n];"
+      },
+      "name": "Get User Preferences",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        150,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.openweathermap.org/data/2.5/onecall",
+        "method": "GET",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "lat",
+              "value": "={{$json.location.latitude}}"
+            },
+            {
+              "name": "lon",
+              "value": "={{$json.location.longitude}}"
+            },
+            {
+              "name": "exclude",
+              "value": "minutely,hourly"
+            },
+            {
+              "name": "appid",
+              "value": "={{$env.OPENWEATHER_API_KEY}}"
+            },
+            {
+              "name": "units",
+              "value": "metric"
+            }
+          ]
+        },
+        "responseFormat": "json"
+      },
+      "name": "Fetch Environmental Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        400,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.carboninterface.com/v1/estimates",
+        "method": "POST",
+        "headers": {
+          "Authorization": "Bearer {{$env.CARBON_INTERFACE_API_KEY}}",
+          "Content-Type": "application/json"
+        },
+        "bodyParametersJson": "={\n  \"type\": \"hiking_and_travel\",\n  \"distance_unit\": \"km\",\n  \"distance_value\": $json.travelDistance || 100,\n  \"origin\": $json.origin || \"\",\n  \"destination\": $json.location.name || \"\"\n}"
+      },
+      "name": "Calculate Environmental Impact",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        650,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.carbonfund.org/v1/projects",
+        "method": "GET",
+        "responseFormat": "json",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "category",
+              "value": "forest"
+            },
+            {
+              "name": "region",
+              "value": "global"
+            }
+          ]
+        }
+      },
+      "name": "Get Carbon Offset Options",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        650,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const envData = $items(\"Fetch Environmental Data\")[0].json;\nconst impactData = $items(\"Calculate Environmental Impact\")[0].json;\nconst offsets = $items(\"Get Carbon Offset Options\")[0].json.projects || [];\n\nreturn [{\n  personalizedPlan: {\n    recommendedHikes: [\n      {\n        name: `Trail near ${$json.location.name || \"selected location\"}`,\n        difficulty: $json.hikingDifficulty || \"moderate\",\n        weatherForecast: envData.daily.map(d => ({ date: d.dt, temp: d.temp.day, weather: d.weather[0].description })),\n        notes: \"Focus on Leave No Trace principles and carry reusable gear.\"\n      }\n    ],\n    travelTips: {\n      bestTravelDates: $json.travelDates,\n      sustainabilityFocus: true,\n      tips: [\n        \"Use public transportation or carpool.\",\n        \"Choose eco-friendly lodging.\",\n        \"Minimize waste and avoid single-use plastics.\"\n      ]\n    },\n    environmentalImpact: impactData.data || {},\n    carbonOffsetOptions: offsets.slice(0,3).map(p => ({\n      name: p.name,\n      price: p.price_per_ton,\n      description: p.description,\n      url: p.url\n    }))\n  }\n}];"
+      },
+      "name": "Compile Personalized Plan",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "passThrough"
+      },
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [
+        50,
+        250
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Get User Preferences",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get User Preferences": {
+      "main": [
+        [
+          {
+            "node": "Fetch Environmental Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Calculate Environmental Impact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Environmental Data": {
+      "main": [
+        []
+      ]
+    },
+    "Calculate Environmental Impact": {
+      "main": [
+        [
+          {
+            "node": "Get Carbon Offset Options",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Carbon Offset Options": {
+      "main": [
+        [
+          {
+            "node": "Compile Personalized Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compile Personalized Plan": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
