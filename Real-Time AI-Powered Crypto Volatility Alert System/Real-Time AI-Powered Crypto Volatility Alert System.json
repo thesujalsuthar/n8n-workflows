@@ -1,0 +1,220 @@
+{
+  "name": "Real-Time AI Crypto Market Volatility Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.coingecko.com/api/v3/simple/price",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "ids",
+              "value": "bitcoin,ethereum,ripple"
+            },
+            {
+              "name": "vs_currencies",
+              "value": "usd"
+            },
+            {
+              "name": "include_24hr_change",
+              "value": "true"
+            }
+          ]
+        },
+        "responseFormat": "json"
+      },
+      "name": "Fetch Crypto Prices",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ],
+      "credentials": {}
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nAnalyze volatility using simple AI-driven pattern recognition.\nFor demonstration: we calculate if 24h price change exceeds a customizable threshold.\nReturn alert object for significant movements.\n*/\n\nconst data = items[0].json;\n\nconst alertThreshold = parseFloat($items(\"Set Alert Threshold\")[0].json.threshold) || 5.0;\n\nconst alerts = [];\n\nfor (const [coin, info] of Object.entries(data)) {\n  const priceChange = info.usd_24h_change;\n  if (priceChange === undefined) continue;\n\n  if (Math.abs(priceChange) >= alertThreshold) {\n    alerts.push({\n      coin,\n      priceChange,\n      message: `${coin.toUpperCase()} price changed by ${priceChange.toFixed(2)}% in the last 24 hours.`\n    });\n  }\n}\n\nif (alerts.length === 0) {\n  return [];\n}\n\nreturn alerts.map(alert => ({ json: alert }));"
+      },
+      "name": "AI Volatility Analyzer",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        550,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "value": "5"
+      },
+      "name": "Set Alert Threshold",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        50,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "recipientEmail": "={{$json[\"email\"] || \"your-email@example.com\"}}",
+        "subject": "Crypto Market Volatility Alert: {{$json[\"coin\"].toUpperCase()}}",
+        "text": "{{$json[\"message\"]}}\nCurrent 24h Change: {{$json[\"priceChange\"].toFixed(2)}}%",
+        "options": {}
+      },
+      "name": "Send Email Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        900,
+        200
+      ],
+      "credentials": {
+        "smtp": "SMTP Credential"
+      }
+    },
+    {
+      "parameters": {
+        "phoneNumber": "={{$json[\"phone\"] || \"+1234567890\"}}",
+        "message": "Alert: {{$json[\"message\"]}} (24h change: {{$json[\"priceChange\"].toFixed(2)}}%)"
+      },
+      "name": "Send SMS Alert",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        900,
+        350
+      ],
+      "credentials": {
+        "twilioApi": "Twilio API Credential"
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{$json[\"telegramChatId\"] || \"@yourtelegramchannel\"}}",
+        "text": "🚨 *Crypto Volatility Alert*\n\n{{$json[\"message\"]}}\n\n24h Change: {{$json[\"priceChange\"].toFixed(2)}}%"
+      },
+      "name": "Send Telegram Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        900,
+        500
+      ],
+      "credentials": {
+        "telegramApi": "Telegram Bot"
+      }
+    },
+    {
+      "parameters": {
+        "interval": 300
+      },
+      "name": "Cron Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        50,
+        150
+      ]
+    },
+    {
+      "parameters": {},
+      "name": "Set Notification Preferences",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        50,
+        450
+      ],
+      "notes": "User can customize notification channels and contact info here",
+      "notesInFlow": true,
+      "values": {
+        "string": [
+          {
+            "name": "email",
+            "value": "your-email@example.com"
+          },
+          {
+            "name": "phone",
+            "value": "+1234567890"
+          },
+          {
+            "name": "telegramChatId",
+            "value": "@yourtelegramchannel"
+          }
+        ]
+      }
+    }
+  ],
+  "connections": {
+    "Cron Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Crypto Prices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Crypto Prices": {
+      "main": [
+        [
+          {
+            "node": "AI Volatility Analyzer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Alert Threshold": {
+      "main": [
+        [
+          {
+            "node": "AI Volatility Analyzer",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "AI Volatility Analyzer": {
+      "main": [
+        [
+          {
+            "node": "Set Notification Preferences",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Notification Preferences": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send SMS Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Telegram Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
