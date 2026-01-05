@@ -1,0 +1,362 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 7,
+              "minute": 0,
+              "mode": "everyDays"
+            }
+          ]
+        }
+      },
+      "name": "Daily Scheduler",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        150,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://arxiv.org/search/?query=quantum+computing&searchtype=all&source=header",
+        "responseFormat": "string",
+        "options": {}
+      },
+      "name": "Arxiv Research Scraper",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        400,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://news.google.com/rss/search?q=quantum+computing&hl=en-US&gl=US&ceid=US:en",
+        "responseFormat": "string",
+        "options": {}
+      },
+      "name": "Google News RSS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        400,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://quantum.country/feed.xml",
+        "responseFormat": "string",
+        "options": {}
+      },
+      "name": "Quantum Country Blog RSS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        400,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const xpath = require('xpath');\nconst dom = require('xmldom').DOMParser;\n\n// Parse arXiv HTML to extract paper metadata\nconst html = items[0].json.body || items[0].json;\nconst doc = new dom().parseFromString(html);\n\nconst nodes = xpath.select(\"//li[@class='arxiv-result']\", doc);\n\nconst papers = nodes.map(node => {\n  const titleNode = xpath.select1(\".//p[@class='title is-5 mathjax']\", node);\n  const authorsNode = xpath.select1(\".//p[@class='authors']\", node);\n  const abstractNode = xpath.select1(\".//span[@class='abstract-full has-text-grey-dark mathjax']\", node);\n  const linkNode = xpath.select1(\".//p[@class='list-title is-inline-block']/a\", node);\n\n  return {\n    title: titleNode ? titleNode.textContent.trim() : '',\n    authors: authorsNode ? authorsNode.textContent.replace('Authors:', '').trim() : '',\n    abstract: abstractNode ? abstractNode.textContent.trim() : '',\n    link: linkNode ? linkNode.getAttribute('href') : ''\n  };\n});\n\nreturn papers.map(p => ({ json: p }));"
+      },
+      "name": "Parse Arxiv Results",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const { parseString } = require('xml2js');\n\nconst xml = items[0].json.body || items[0].json;\n\nreturn new Promise((resolve, reject) => {\n  parseString(xml, { trim: true }, (err, result) => {\n    if (err) {\n      reject(err);\n      return;\n    }\n    const entries = result.rss.channel[0].item || [];\n    const newsItems = entries.map(item => ({\n      title: item.title[0],\n      link: item.link[0],\n      pubDate: item.pubDate[0],\n      description: item.description[0]\n    }));\n    resolve(newsItems.map(n => ({ json: n })));\n  });\n});"
+      },
+      "name": "Parse Google News RSS",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const { parseString } = require('xml2js');\nconst xml = items[0].json.body || items[0].json;\n\nreturn new Promise((resolve, reject) => {\n  parseString(xml, { trim: true }, (err, result) => {\n    if (err) {\n      reject(err);\n      return;\n    }\n    const posts = result.rss.channel[0].item || [];\n    const blogPosts = posts.map(post => ({\n      title: post.title[0],\n      link: post.link[0],\n      pubDate: post.pubDate[0],\n      description: post.description[0]\n    }));\n    resolve(blogPosts.map(b => ({ json: b })));\n  });\n});"
+      },
+      "name": "Parse Quantum Country RSS",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "append",
+        "propertyName": "combined",
+        "propertyValue": "={{ $items(\"Parse Arxiv Results\").map(item => item.json).concat($items(\"Parse Google News RSS\").map(item => item.json)).concat($items(\"Parse Quantum Country RSS\").map(item => item.json)) }}"
+      },
+      "name": "Combine Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        850,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "text",
+        "model": "gpt-4",
+        "temperature": 0.3,
+        "maxTokens": 1024,
+        "prompt": "You are an expert AI assistant analyzing scientific content.\n\nAnalyze the following list of items for sentiment and relevance to quantum computing research. For each item, return tags related to topics (e.g. 'Qubits', 'Quantum Algorithms', 'Quantum Hardware', 'Error Correction', 'Quantum Cryptography'), a sentiment score (positive, neutral, negative), and a relevance score (0-1).\n\nItems: {{ $json.combined }}\n\nReturn a JSON array with objects containing title, tags, sentiment, relevance, and link."
+      }
+    },
+    {
+      "name": "AI Sentiment and Relevance Analysis",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        150
+      ],
+      "parameters": {
+        "resource": "text",
+        "operation": "chatCompletion",
+        "model": "gpt-4",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an expert AI assistant analyzing scientific content."
+          },
+          {
+            "role": "user",
+            "content": "Analyze the following list of items for sentiment and relevance to quantum computing research. For each item, return tags related to topics (e.g. 'Qubits', 'Quantum Algorithms', 'Quantum Hardware', 'Error Correction', 'Quantum Cryptography'), a sentiment score (positive, neutral, negative), and a relevance score (0-1).\n\nItems: {{$json.combined}}\n\nReturn a JSON array with objects containing title, tags, sentiment, relevance, and link."
+          }
+        ],
+        "temperature": 0.3,
+        "max_tokens": 1024
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "try {\n  const text = items[0].json.choices[0].message.content;\n  return [{ json: { analysis: JSON.parse(text) } }];\n} catch {\n  return [{ json: { analysis: [] } }];\n}"
+      },
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const analysis = items[0].json.analysis || [];\n\n// Group by relevance (>0.7), tag top 5 important\nconst important = analysis.filter(i => i.relevance > 0.7);\nconst sortedImportant = important.sort((a, b) => b.relevance - a.relevance);\n\nreturn sortedImportant.slice(0, 20).map(item => ({ json: item }));"
+      },
+      "name": "Filter Important Updates",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const summary = items.map(i => `- ${i.json.title} [${i.json.sentiment}] - Tags: ${i.json.tags.join(', ')}\\n  Link: ${i.json.link}`).join('\\n');\n\nreturn [{ json: { summary } }];"
+      },
+      "name": "Build Email Content",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1700,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "quantumalerts@example.com",
+        "toEmail": "researchers@example.com",
+        "subject": "Daily Quantum Computing Research Update",
+        "text": "={{ $items(\"Build Email Content\")[0].json.summary }}",
+        "html": "={{ $items(\"Build Email Content\")[0].json.summary.replace(/\\n/g, '<br>') }}"
+      },
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1900,
+        150
+      ]
+    }
+  ],
+  "connections": {
+    "Daily Scheduler": {
+      "main": [
+        [
+          {
+            "node": "Arxiv Research Scraper",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Google News RSS",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Quantum Country Blog RSS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Arxiv Research Scraper": {
+      "main": [
+        [
+          {
+            "node": "Parse Arxiv Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google News RSS": {
+      "main": [
+        [
+          {
+            "node": "Parse Google News RSS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Quantum Country Blog RSS": {
+      "main": [
+        [
+          {
+            "node": "Parse Quantum Country RSS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Arxiv Results": {
+      "main": [
+        []
+      ]
+    },
+    "Parse Google News RSS": {
+      "main": [
+        []
+      ]
+    },
+    "Parse Quantum Country RSS": {
+      "main": [
+        []
+      ]
+    },
+    "Parse Arxiv Results": {
+      "main": [
+        [
+          {
+            "node": "Combine Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Google News RSS": {
+      "main": [
+        [
+          {
+            "node": "Combine Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Quantum Country RSS": {
+      "main": [
+        [
+          {
+            "node": "Combine Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine Data": {
+      "main": [
+        [
+          {
+            "node": "AI Sentiment and Relevance Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Sentiment and Relevance Analysis": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Filter Important Updates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Important Updates": {
+      "main": [
+        [
+          {
+            "node": "Build Email Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Email Content": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
