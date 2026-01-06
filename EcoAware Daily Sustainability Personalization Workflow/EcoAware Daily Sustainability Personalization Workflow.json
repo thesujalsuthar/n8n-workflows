@@ -1,0 +1,283 @@
+{
+  "name": "EcoAware Personalized Daily Sustainability Engagement Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "get",
+        "resource": "user",
+        "ui": {}
+      },
+      "name": "Get User Preferences",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.sustainabilitynews.example/v1/daily-tips",
+        "options": {},
+        "headerAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$credentials.sustainabilityNewsApi.apiKey}}"
+        },
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "category",
+              "value": "={{$json.preferences.category || 'general'}}"
+            },
+            {
+              "name": "location",
+              "value": "={{$json.preferences.location || ''}}"
+            }
+          ]
+        }
+      },
+      "name": "Get Sustainability News",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        550,
+        100
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "sustainabilityNewsApi"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.localenvdata.example/v1/environmental-metrics",
+        "options": {},
+        "headerAuth": {
+          "name": "x-api-key",
+          "value": "={{$credentials.localEnvDataApi.apiKey}}"
+        },
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "location",
+              "value": "={{$json.preferences.location}}"
+            }
+          ]
+        }
+      },
+      "name": "Get Local Environmental Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        550,
+        250
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "localEnvDataApi"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.userhabittracker.example/v1/recent-activities",
+        "options": {},
+        "headerAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$credentials.userHabitTrackerApi.apiKey}}"
+        },
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "userId",
+              "value": "={{$json.userId}}"
+            },
+            {
+              "name": "since",
+              "value": "={{new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()}}"
+            }
+          ]
+        }
+      },
+      "name": "Get User Recent Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        550,
+        400
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "userHabitTrackerApi"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const tips = items[0].json.tips || [];\nconst localData = items[1].json.data || {};\nconst activities = items[2].json.activities || [];\nconst preferences = items[3].json.preferences || {};\n\n// Analyze recent activity and preferences to personalize tip\nlet personalizedTip = 'Here is your sustainability tip for the day!';\n\n// Basic adaptive logic example\nif (activities.length > 0) {\n  const frequentType = activities.reduce((acc, act) => {\n    acc[act.type] = (acc[act.type] || 0) + 1;\n    return acc;\n  }, {});\n  const maxType = Object.entries(frequentType).sort((a,b) => b[1]-a[1])[0] ? Object.entries(frequentType).sort((a,b) => b[1]-a[1])[0][0] : null;\n  if (maxType && tips.length > 0) {\n    const filteredTips = tips.filter(t => t.type === maxType || !t.type);\n    personalizedTip = filteredTips.length > 0 ? filteredTips[0].text : tips[0].text;\n  } else if (tips.length > 0) {\n    personalizedTip = tips[0].text;\n  }\n} else if (tips.length > 0) {\n  personalizedTip = tips[0].text;\n}\n\n// Incorporate local environmental data (e.g., air quality)\nif (localData.airQualityIndex) {\n  if (localData.airQualityIndex > 150) {\n    personalizedTip += ' Note: The air quality is poor today in your area; consider minimizing outdoor activities or using public transport.';\n  }\n}\n\nreturn [{ json: { personalizedTip, userId: items[3].json.userId, contact: items[3].json.contact, preferences } }];"
+      },
+      "name": "Personalize Tip",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "no-reply@ecoaware.example",
+        "toEmail": "={{$json.contact.email}}",
+        "subject": "Your EcoAware Daily Sustainability Tip",
+        "text": "={{$json.personalizedTip}}"
+      },
+      "name": "Send Daily Email Notification",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "message": "={{$json.personalizedTip}}",
+        "chatId": "={{$json.contact.chatId}}"
+      },
+      "name": "Send Daily Message Notification",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        300
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegramApi"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "engagement",
+        "operation": "update",
+        "userId": "={{$json.userId}}",
+        "jsonParameters": true,
+        "updateFieldsJson": "={\"lastTipSent\": new Date().toISOString(),\"engagementScore\": ($json.engagementScore || 0) + 1}"
+      },
+      "name": "Track User Engagement",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        250
+      ]
+    }
+  ],
+  "connections": {
+    "Get User Preferences": {
+      "main": [
+        [
+          {
+            "node": "Get Sustainability News",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Local Environmental Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get User Recent Activity",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Personalize Tip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Sustainability News": {
+      "main": [
+        [
+          {
+            "node": "Personalize Tip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Local Environmental Data": {
+      "main": [
+        [
+          {
+            "node": "Personalize Tip",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Get User Recent Activity": {
+      "main": [
+        [
+          {
+            "node": "Personalize Tip",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Personalize Tip": {
+      "main": [
+        [
+          {
+            "node": "Send Daily Email Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Daily Message Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Daily Email Notification": {
+      "main": [
+        [
+          {
+            "node": "Track User Engagement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Daily Message Notification": {
+      "main": [
+        [
+          {
+            "node": "Track User Engagement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
