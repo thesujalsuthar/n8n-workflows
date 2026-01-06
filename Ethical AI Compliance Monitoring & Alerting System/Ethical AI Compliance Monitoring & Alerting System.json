@@ -1,0 +1,175 @@
+{
+  "name": "Ethical AI Compliance Monitoring & Alerting Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "interval": 3600,
+        "options": {}
+      },
+      "name": "Scheduler",
+      "type": "n8n-nodes-base.interval",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "log",
+        "operation": "getAll",
+        "returnAll": true,
+        "filters": {}
+      },
+      "name": "Fetch AI Logs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        500,
+        200
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "YOUR_HTTP_BASIC_AUTH_CREDENTIAL_ID",
+          "name": "YourHttpBasicAuthCredential"
+        }
+      },
+      "notes": "Configure this HTTP Request node to fetch AI system logs from your connected AI service's API endpoint."
+    },
+    {
+      "parameters": {
+        "resource": "aiOutput",
+        "operation": "getAll",
+        "returnAll": true,
+        "filters": {}
+      },
+      "name": "Fetch AI Outputs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        500,
+        400
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "YOUR_HTTP_BASIC_AUTH_CREDENTIAL_ID",
+          "name": "YourHttpBasicAuthCredential"
+        }
+      },
+      "notes": "Configure this HTTP Request node to fetch AI outputs from your connected AI service's API endpoint."
+    },
+    {
+      "parameters": {
+        "functionCode": "const logs = $json[\"logs\"] || $items(\"Fetch AI Logs\").map(item => item.json);\nconst outputs = $json[\"outputs\"] || $items(\"Fetch AI Outputs\").map(item => item.json);\n\n// Placeholder for loading predefined ethical guidelines\n// Assume guidelines are hardcoded or retrieved from settings\nconst ethicalGuidelines = {\n  fairnessThreshold: 0.1, // example threshold for bias detection\n  transparencyRequiredFields: [\"modelVersion\", \"explanation\"],\n  privacySensitiveFields: [\"personalData\", \"PII\"]\n};\n\n// Example function to analyze logs for privacy issues\nfunction analyzeLogsForPrivacyIssues(logs) {\n  return logs.filter(log => {\n    return ethicalGuidelines.privacySensitiveFields.some(field => log[field] !== undefined);\n  });\n}\n\n// Example function to analyze outputs for fairness/bias\nfunction analyzeOutputsForFairness(outputs) {\n  // Simple heuristic example: check if biasScore > threshold\n  return outputs.filter(output => output.biasScore && output.biasScore > ethicalGuidelines.fairnessThreshold);\n}\n\n// Example function to check transparency\nfunction analyzeOutputsForTransparency(outputs) {\n  return outputs.filter(output => {\n    return !ethicalGuidelines.transparencyRequiredFields.every(field => field in output);\n  });\n}\n\nconst privacyIssues = analyzeLogsForPrivacyIssues(logs);\nconst fairnessIssues = analyzeOutputsForFairness(outputs);\nconst transparencyIssues = analyzeOutputsForTransparency(outputs);\n\nreturn [{\n  json: {\n    privacyIssues,\n    fairnessIssues,\n    transparencyIssues,\n    complianceStatus: (privacyIssues.length === 0 && fairnessIssues.length === 0 && transparencyIssues.length === 0) ? \"Compliant\" : \"Violations detected\",\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "name": "Analyze Ethical Compliance",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "toEmail": "ethics-team@example.com",
+        "subject": "AI Ethical Compliance Alert: {{ $json[\"complianceStatus\"] }}",
+        "text": "Date: {{ $json[\"timestamp\"] }}\n\nCompliance Status: {{ $json[\"complianceStatus\"] }}\n\nPrivacy Issues:\n{{ JSON.stringify($json[\"privacyIssues\"], null, 2) }}\n\nFairness Issues:\n{{ JSON.stringify($json[\"fairnessIssues\"], null, 2) }}\n\nTransparency Issues:\n{{ JSON.stringify($json[\"transparencyIssues\"], null, 2) }}\n\nPlease review the detected issues promptly.\n\n--\nEthical AI Compliance Monitoring System",
+        "fromEmail": "no-reply@example.com"
+      },
+      "name": "Send Alert Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        250
+      ],
+      "enabled": true,
+      "conditions": {
+        "boolean": [
+          {
+            "value1": "={{$json[\"complianceStatus\"] !== \"Compliant\"}}",
+            "operation": "equal",
+            "value2": true
+          }
+        ]
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "postMessage",
+        "channelId": "C1234567890",
+        "text": "Ethical AI Compliance Report ({{ $json[\"timestamp\"] }}):\nStatus: {{ $json[\"complianceStatus\"] }}\nPrivacy Issues: {{ $json[\"privacyIssues\"].length }}\nFairness Issues: {{ $json[\"fairnessIssues\"].length }}\nTransparency Issues: {{ $json[\"transparencyIssues\"].length }}\n\nReview details in email alerts if violations detected.",
+        "additionalFields": {}
+      },
+      "name": "Send Compliance Report Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        350
+      ]
+    }
+  ],
+  "connections": {
+    "Scheduler": {
+      "main": [
+        [
+          {
+            "node": "Fetch AI Logs",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch AI Outputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch AI Logs": {
+      "main": [
+        [
+          {
+            "node": "Analyze Ethical Compliance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch AI Outputs": {
+      "main": [
+        [
+          {
+            "node": "Analyze Ethical Compliance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Ethical Compliance": {
+      "main": [
+        [
+          {
+            "node": "Send Alert Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Compliance Report Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "id": "1"
+}
