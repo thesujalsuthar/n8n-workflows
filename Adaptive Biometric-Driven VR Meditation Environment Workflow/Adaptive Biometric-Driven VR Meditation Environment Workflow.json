@@ -1,0 +1,193 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.biometric-sensor.com/v1/data",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $credentials.biometricApi.apiKey }}"
+            }
+          ]
+        }
+      },
+      "name": "Get Biometric Data",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const biometricData = items[0].json;\n\n// Extract relevant biometric data for mood analysis\nconst biometricMetrics = {\n  heartRate: biometricData.heartRate,\n  skinConductance: biometricData.skinConductance,\n  breathingRate: biometricData.breathingRate\n};\n\nreturn [{ json: biometricMetrics }];"
+      },
+      "name": "Extract Biometric Metrics",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.mood-ai.com/v1/analyze",
+        "method": "POST",
+        "options": {},
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "heartRate",
+              "value": "={{$json.heartRate}}"
+            },
+            {
+              "name": "skinConductance",
+              "value": "={{$json.skinConductance}}"
+            },
+            {
+              "name": "breathingRate",
+              "value": "={{$json.breathingRate}}"
+            }
+          ]
+        },
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $credentials.moodApi.apiKey }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        }
+      },
+      "name": "Analyze Mood via AI",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const moodResponse = items[0].json;\n\n// Determine VR environment parameters based on mood\nlet environmentSettings = {\n  ambientColor: null,\n  soundscape: null,\n  lightingIntensity: null,\n  relaxationLevel: null\n};\n\nif (moodResponse.mood === 'stressed') {\n  environmentSettings = {\n    ambientColor: '#4A90E2',\n    soundscape: 'ocean_waves',\n    lightingIntensity: 0.5,\n    relaxationLevel: 'high'\n  };\n} else if (moodResponse.mood === 'anxious') {\n  environmentSettings = {\n    ambientColor: '#7ED6DF',\n    soundscape: 'forest_birds',\n    lightingIntensity: 0.6,\n    relaxationLevel: 'medium'\n  };\n} else if (moodResponse.mood === 'calm') {\n  environmentSettings = {\n    ambientColor: '#A3D9A5',\n    soundscape: 'wind_chimes',\n    lightingIntensity: 0.7,\n    relaxationLevel: 'low'\n  };\n} else {\n  environmentSettings = {\n    ambientColor: '#CCCCCC',\n    soundscape: 'minimal',\n    lightingIntensity: 0.5,\n    relaxationLevel: 'medium'\n  };\n}\n\nreturn [{ json: environmentSettings }];"
+      },
+      "name": "Determine VR Environment Settings",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.vr-meditation.com/v1/customizeEnvironment",
+        "method": "POST",
+        "options": {},
+        "bodyParametersJson": "={{$json}}",
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $credentials.vrPlatformApi.apiKey }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        }
+      },
+      "name": "Update VR Environment",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: { message: 'VR Meditation Environment updated successfully.' } }];"
+      },
+      "name": "Success Message",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Get Biometric Data": {
+      "main": [
+        [
+          {
+            "node": "Extract Biometric Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Biometric Metrics": {
+      "main": [
+        [
+          {
+            "node": "Analyze Mood via AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Mood via AI": {
+      "main": [
+        [
+          {
+            "node": "Determine VR Environment Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Determine VR Environment Settings": {
+      "main": [
+        [
+          {
+            "node": "Update VR Environment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update VR Environment": {
+      "main": [
+        [
+          {
+            "node": "Success Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
