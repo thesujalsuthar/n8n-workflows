@@ -1,0 +1,305 @@
+{
+  "name": "EcoAware: AI-Driven Personalized Sustainability Tips & Habit Motivation",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.curatedsustainabilitytips.com/daily",
+        "options": {},
+        "responseFormat": "json"
+      },
+      "id": "FetchDailyTips",
+      "name": "Fetch Daily Sustainability Tips",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "sheet",
+        "operation": "getAll",
+        "sheetId": "USER_PREFERENCES_SHEET_ID",
+        "returnAll": true
+      },
+      "id": "FetchUserPreferences",
+      "name": "Fetch User Preferences",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [
+        250,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "temperature": 0.7,
+        "maxTokens": 500,
+        "prompt": "You are an AI assistant tasked with personalizing daily sustainability tips for users.\n\nUser Preferences and Behaviors:\n{{ $json[\"userPreferences\"] }}\n\nDaily Sustainability Tips:\n{{ $json[\"dailyTips\"] }}\n\nProvide 1-3 personalized, actionable eco-friendly habit suggestions based on these inputs, written in an encouraging tone."
+      },
+      "id": "PersonalizeTipsAI",
+      "name": "Personalize Tips with AI",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        500,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "no-reply@ecoaware.com",
+        "toEmail": "={{$json[\"userEmail\"]}}",
+        "subject": "Your Daily Personalized Sustainability Tips 🌿",
+        "text": "={{$json[\"personalizedMessage\"]}}",
+        "html": "={{$json[\"personalizedMessage\"].replace(/\\n/g, \"<br>\")}}"
+      },
+      "id": "SendEmailNotification",
+      "name": "Send Email Notification",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        750,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "phoneNumber": "={{$json[\"userPhone\"]}}",
+        "text": "={{$json[\"personalizedMessage\"]}}"
+      },
+      "id": "SendSMSNotification",
+      "name": "Send SMS Notification",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        750,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "platform": "firebase",
+        "notificationTitle": "EcoAware: Daily Sustainability Tips",
+        "notificationBody": "={{$json[\"personalizedMessage\"]}}",
+        "targetUserId": "={{$json[\"userId\"]}}"
+      },
+      "id": "SendPushNotification",
+      "name": "Send Push Notification",
+      "type": "n8n-nodes-base.pushNotifications",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "append",
+        "sheetId": "USER_ENGAGEMENT_SHEET_ID",
+        "range": "Engagement!A:D",
+        "valueInputMode": "RAW",
+        "values": [
+          [
+            "={{$json[\"userId\"]}}",
+            "={{$json[\"date\"]}}",
+            "={{$json[\"tipId\"]}}",
+            "={{$json[\"engagementMetric\"]}}"
+          ]
+        ]
+      },
+      "id": "TrackUserEngagement",
+      "name": "Track User Engagement",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "runQuery",
+        "query": "SELECT userId, SUM(engagementScore) as totalEngagement, AVG(progressPercent) as avgProgress FROM user_engagement_data GROUP BY userId"
+      },
+      "id": "AnalyticsQuery",
+      "name": "Generate Analytical Insights",
+      "type": "n8n-nodes-base.sql",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "temperature": 0.5,
+        "maxTokens": 400,
+        "prompt": "You are an AI analyst providing insights into users' sustainability progress based on aggregated engagement data:\n\n{{ $json[\"analyticsData\"] }}\n\nSummarize key insights and provide recommendations to optimize future sustainability tip suggestions."
+      },
+      "id": "InsightsAI",
+      "name": "Generate Insights with AI",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.map(item => {\n  item.json.userPreferences = item.context.userPreferences;\n  item.json.dailyTips = item.context.dailyTips;\n  return item;\n});"
+      },
+      "id": "MergePreferencesAndTips",
+      "name": "Merge Preferences and Tips",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        400,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.map(item => {\n  item.json.engagementMetric = item.json.engagement || 0;\n  item.json.date = new Date().toISOString().split('T')[0];\n  return item;\n});"
+      },
+      "id": "FormatEngagementData",
+      "name": "Format Engagement Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        200
+      ]
+    }
+  ],
+  "connections": {
+    "FetchUserPreferences": {
+      "main": [
+        [
+          {
+            "node": "MergePreferencesAndTips",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FetchDailyTips": {
+      "main": [
+        [
+          {
+            "node": "MergePreferencesAndTips",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "MergePreferencesAndTips": {
+      "main": [
+        [
+          {
+            "node": "PersonalizeTipsAI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PersonalizeTipsAI": {
+      "main": [
+        [
+          {
+            "node": "SendEmailNotification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "SendSMSNotification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "SendPushNotification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SendEmailNotification": {
+      "main": [
+        [
+          {
+            "node": "FormatEngagementData",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SendSMSNotification": {
+      "main": [
+        [
+          {
+            "node": "FormatEngagementData",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SendPushNotification": {
+      "main": [
+        [
+          {
+            "node": "FormatEngagementData",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FormatEngagementData": {
+      "main": [
+        [
+          {
+            "node": "TrackUserEngagement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TrackUserEngagement": {
+      "main": [
+        [
+          {
+            "node": "AnalyticsQuery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AnalyticsQuery": {
+      "main": [
+        [
+          {
+            "node": "InsightsAI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
