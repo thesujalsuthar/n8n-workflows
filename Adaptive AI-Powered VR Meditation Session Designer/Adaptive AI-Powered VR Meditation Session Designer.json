@@ -1,0 +1,177 @@
+{
+  "name": "Adaptive AI-Powered VR Meditation Environment Designer",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "biometric-data",
+        "options": {}
+      },
+      "name": "Receive Biometric Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const biometricData = $json;\n// Extract key biometric metrics\nconst heartRate = biometricData.heartRate || 70;\nconst skinConductance = biometricData.skinConductance || 0.5;\nconst brainWave = biometricData.brainWave || {};\n\n// Determine stress level (simple heuristic)\nlet stressScore = 0;\nstressScore += heartRate > 75 ? (heartRate - 75) * 0.4 : 0;\nstressScore += skinConductance > 0.6 ? (skinConductance - 0.6) * 100 : 0;\nstressScore += brainWave.beta ? brainWave.beta * 0.5 : 0;\n\n// Clamp stressScore\nstressScore = Math.min(Math.max(stressScore, 0), 100);\n\nreturn [{\n  json: {\n    heartRate,\n    skinConductance,\n    brainWave,\n    stressScore\n  }\n}];"
+      },
+      "name": "Evaluate Stress Level",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an expert AI assistant for designing adaptive VR meditation environments based on biometric input and stress levels."
+          },
+          {
+            "role": "user",
+            "content": "Given the biometric data with heart rate {{ $json.heartRate }}, skin conductance {{ $json.skinConductance }}, brain wave info {{ $json.brainWave }}, and stress score {{ $json.stressScore }}, generate a VR meditation environment configuration (including visuals, ambient sounds, guided meditation style, session length) tailored to reduce stress effectively."
+          }
+        ],
+        "options": {}
+      },
+      "name": "Generate Adaptive VR Environment Config",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const envConfigRaw = $json.choices[0].message.content;\n\n// Parse the AI generated config safely:\nlet envConfig = {};\ntry {\n  envConfig = JSON.parse(envConfigRaw);\n} catch (e) {\n  // fallback: wrap in object\n  envConfig = { configuration: envConfigRaw };\n}\n\nreturn [{ json: envConfig }];"
+      },
+      "name": "Parse VR Environment Config",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nPrepare VR session payload for the VR system.\nThis includes environment visuals, ambient sounds, guided meditation instructions, and timing.\n*/\n\nconst config = $json;\n\nreturn [{\n  json: {\n    vrSessionPayload: {\n      visuals: config.visuals || 'Calm nature scenes with flowing water and soft lighting',\n      ambientSounds: config.ambientSounds || 'Gentle forest sounds with birdcalls',\n      guidedMeditationStyle: config.guidedMeditationStyle || 'Breath awareness with progressive muscle relaxation',\n      sessionLengthMinutes: config.sessionLengthMinutes || 15\n    }\n  }\n}];"
+      },
+      "name": "Prepare VR Session Payload",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://vrmeditation.example.com/session/start",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={{JSON.stringify($json.vrSessionPayload)}}"
+      },
+      "name": "Start VR Meditation Session",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{\n  json: {\n    message: 'Adaptive VR Meditation session has been started successfully.',\n    details: $json\n  }\n}];"
+      },
+      "name": "Success Confirmation",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1750,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Receive Biometric Data": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Stress Level",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Stress Level": {
+      "main": [
+        [
+          {
+            "node": "Generate Adaptive VR Environment Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Adaptive VR Environment Config": {
+      "main": [
+        [
+          {
+            "node": "Parse VR Environment Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse VR Environment Config": {
+      "main": [
+        [
+          {
+            "node": "Prepare VR Session Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare VR Session Payload": {
+      "main": [
+        [
+          {
+            "node": "Start VR Meditation Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start VR Meditation Session": {
+      "main": [
+        [
+          {
+            "node": "Success Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
