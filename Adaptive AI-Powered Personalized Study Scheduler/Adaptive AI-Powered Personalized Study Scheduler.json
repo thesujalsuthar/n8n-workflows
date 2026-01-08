@@ -1,0 +1,267 @@
+{
+  "name": "Adaptive AI-Driven Personalized Study Scheduler",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "submit-study-data",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "name": "Webhook - Receive Study Data",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Extract user study data from webhook\nconst data = $json;\n\n// Example expected input: {\n//   subjects: [{name: 'Math', priority: 3, deadlines: ['2024-06-15']}, ...],\n//   pastStudySessions: [{subject: 'Math', duration: 60, date: '2024-06-10'}, ...],\n//   preferences: {dailyStudyHours: 4, preferredHours: [18,19,20]},\n//   calendarId: 'user_calendar_id',\n//   userId: '12345'\n// }\n\nreturn [{\n  json: data\n}];"
+      },
+      "name": "Extract Study Input",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "prompt": "You are an AI study scheduling assistant. Given the user's subjects, priorities, deadlines, past study sessions, and preferences, generate a personalized study schedule for the upcoming week. Optimize study times to maximize retention and meet deadlines, adaptively allocating time based on historical learning patterns and subject priority. Format the output as JSON with daily time blocks in this structure:\n\n{\n  \"YYYY-MM-DD\": [\n    {\"subject\": \"Math\", \"startTime\": \"18:00\", \"endTime\": \"19:00\"},\n    ...\n  ],\n  ...\n}\n\nUser Input:\n{{ $json | json }}",
+        "options": {},
+        "temperature": 0.7,
+        "maxTokens": 1000
+      },
+      "name": "Generate Adaptive Schedule",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const schedule = JSON.parse(items[0].json.choices[0].message.content);\nreturn [{ json: schedule }];"
+      },
+      "name": "Parse Schedule JSON",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "calendarId": "={{$json[\"calendarId\"]}}",
+        "resource": "events",
+        "fields": "summary,start,end,description",
+        "textParameters": {
+          "resource": "events",
+          "body": "={{$json[\"subject\"] + ' study session'}}",
+          "start": {
+            "dateTime": "={{$item(\"\").$jsonKey}}T{{$item(\"\").json.startTime}}:00",
+            "timeZone": "America/New_York"
+          },
+          "end": {
+            "dateTime": "={{$item(\"\").$jsonKey}}T{{$item(\"\").json.endTime}}:00",
+            "timeZone": "America/New_York"
+          },
+          "description": "Adaptive AI generated study session for {{$json[\"subject\"]}}"
+        }
+      },
+      "name": "Create Calendar Events",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": "Google Calendar Account"
+      },
+      "runOnce": true,
+      "notesInFlow": "This node creates calendar events for each study session."
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "to": "={{$json[\"userEmail\"]}}",
+        "subject": "Your Weekly Adaptive Study Schedule",
+        "text": "Hello,\n\nYour adaptive personalized study schedule for the upcoming week has been created and added to your calendar.\n\nStay consistent and good luck!\n\n- Adaptive AI Study Scheduler",
+        "html": "<p>Hello,</p><p>Your adaptive personalized study schedule for the upcoming week has been created and added to your calendar.</p><p>Stay consistent and good luck!</p><p>- Adaptive AI Study Scheduler</p>"
+      },
+      "name": "Send Schedule Email Notification",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        300
+      ],
+      "credentials": {
+        "smtp": "User SMTP Credentials"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const notifications = [];\nfor (const [date, sessions] of Object.entries($json)) {\n  sessions.forEach(session => {\n    const dateTime = new Date(`${date}T${session.startTime}:00`);\n    notifications.push({\n      json: {\n        to: $items(\"Webhook - Receive Study Data\")[0].json.userEmail,\n        subject: `Reminder: Study ${session.subject} at ${session.startTime}`,\n        text: `This is your reminder to study ${session.subject} starting at ${session.startTime} on ${date}. Good luck!`,\n        dateTime: dateTime.toISOString()\n      }\n    });\n  });\n}\nreturn notifications;"
+      },
+      "name": "Prepare Reminder Notifications",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        550
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "to": "={{$json[\"to\"]}}",
+        "subject": "={{$json[\"subject\"]}}",
+        "text": "={{$json[\"text\"]}}"
+      },
+      "name": "Send Reminder Emails",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        550
+      ],
+      "credentials": {
+        "smtp": "User SMTP Credentials"
+      }
+    },
+    {
+      "parameters": {
+        "interval": 60,
+        "unit": "minutes"
+      },
+      "name": "Scheduler Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        550
+      ]
+    },
+    {
+      "parameters": {},
+      "name": "Fetch Latest User Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        500,
+        550
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "user": "apiUser",
+          "password": "apiPassword"
+        }
+      },
+      "notesInFlow": "This node fetches the latest study and user data from an external API to update the schedule."
+    }
+  ],
+  "connections": {
+    "Webhook - Receive Study Data": {
+      "main": [
+        [
+          {
+            "node": "Extract Study Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Study Input": {
+      "main": [
+        [
+          {
+            "node": "Generate Adaptive Schedule",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Adaptive Schedule": {
+      "main": [
+        [
+          {
+            "node": "Parse Schedule JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Schedule JSON": {
+      "main": [
+        [
+          {
+            "node": "Create Calendar Events",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Reminder Notifications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Calendar Events": {
+      "main": [
+        [
+          {
+            "node": "Send Schedule Email Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Reminder Notifications": {
+      "main": [
+        [
+          {
+            "node": "Send Reminder Emails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scheduler Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Latest User Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Latest User Data": {
+      "main": [
+        [
+          {
+            "node": "Generate Adaptive Schedule",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
