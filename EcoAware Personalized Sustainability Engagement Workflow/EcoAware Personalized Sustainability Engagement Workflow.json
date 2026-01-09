@@ -1,0 +1,179 @@
+{
+  "name": "EcoAware Daily Sustainability Engagement",
+  "nodes": [
+    {
+      "parameters": {
+        "functionCode": "return [\n  {\n    userId: 1,\n    name: 'Alice',\n    email: 'alice@example.com',\n    preferences: ['water conservation', 'recycling'],\n    location: 'San Francisco, CA'\n  },\n  {\n    userId: 2,\n    name: 'Bob',\n    email: 'bob@example.com',\n    preferences: ['energy saving', 'plant-based diet'],\n    location: 'Austin, TX'\n  }\n];"
+      },
+      "name": "User Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        150,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.openweathermap.org/data/2.5/air_pollution",
+        "method": "GET",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "lat",
+              "value": "={{ $json.location === 'San Francisco, CA' ? '37.7749' : '30.2672' }}"
+            },
+            {
+              "name": "lon",
+              "value": "={{ $json.location === 'San Francisco, CA' ? '-122.4194' : '-97.7431' }}"
+            },
+            {
+              "name": "appid",
+              "value": "YOUR_OPENWEATHER_API_KEY"
+            }
+          ]
+        }
+      },
+      "name": "Fetch Local Environmental Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        450,
+        250
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "1",
+          "name": "OpenWeather API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const preferences = $json.preferences;\nconst envData = $json.body.list[0].components;\n\nconst tips = [];\n\nif (preferences.includes('water conservation')) {\n  tips.push('Remember to turn off the tap while brushing your teeth to save water!');\n}\nif (preferences.includes('recycling')) {\n  tips.push('Separate your waste properly to improve recycling efficiency.');\n}\nif (preferences.includes('energy saving')) {\n  tips.push('Unplug electronics when not in use to reduce standby energy consumption.');\n}\nif (preferences.includes('plant-based diet')) {\n  tips.push('Try incorporating one plant-based meal today to reduce your carbon footprint.');\n}\n\nif (envData.pm2_5 > 15) {\n  tips.push('Air quality is moderate to poor today, consider limiting outdoor activities.');\n} else {\n  tips.push('Air quality is good today. A perfect day for a walk!');\n}\n\nreturn [{\n  userId: $json.userId,\n  email: $json.email,\n  name: $json.name,\n  tip: tips.join(' ')\n}];"
+      },
+      "name": "Generate Personalized Tip",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        700,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "prompt": "You are an AI assistant specialized in habit-building motivation for sustainability. Given the user tip: {{ $json.tip }} and the user's name: {{ $json.name }}, generate a motivational message encouraging the user to adopt this tip as a daily habit, emphasizing positive impact and easy steps.",
+        "model": "gpt-4",
+        "temperature": 0.7,
+        "max_tokens": 200
+      },
+      "name": "AI Motivation Message",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        950,
+        250
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "1",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "no-reply@ecoaware.org",
+        "toEmail": "={{$json.email}}",
+        "subject": "Your Daily Sustainability Tip & Motivation",
+        "text": "Hi {{$json.name}},\n\nHere's your personalized sustainability tip for today:\n\n{{$json.tip}}\n\nMotivation for you:\n{{$json.choices[0].message.content}}\n\nKeep making a positive impact!\n\n- The EcoAware Team"
+      },
+      "name": "Send Email",
+      "type": "n8n-nodes-base.sendEmail",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        250
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "1",
+          "name": "SMTP Email"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "resource": "record",
+        "collection": "community_impact",
+        "data": "={\n  userId: $json.userId,\n  date: new Date().toISOString().split('T')[0],\n  tip: $json.tip,\n  motivation: $json.choices[0].message.content\n}",
+        "options": {}
+      },
+      "name": "Track Community Impact",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        250
+      ],
+      "credentials": {
+        "mongoDb": {
+          "id": "1",
+          "name": "MongoDB Community Impact"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "User Data": {
+      "main": [
+        [
+          {
+            "node": "Fetch Local Environmental Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Local Environmental Data": {
+      "main": [
+        [
+          {
+            "node": "Generate Personalized Tip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Personalized Tip": {
+      "main": [
+        [
+          {
+            "node": "AI Motivation Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Motivation Message": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Track Community Impact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
