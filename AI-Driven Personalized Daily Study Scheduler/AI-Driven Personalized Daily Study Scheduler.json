@@ -1,0 +1,157 @@
+{
+  "name": "Adaptive AI-Powered Study Planner and Engagement System",
+  "nodes": [
+    {
+      "parameters": {
+        "functionCode": "const progress = items[0].json.progress || 0;\nconst preferences = items[0].json.preferences || {};\nreturn [{ json: { progress, preferences } }];"
+      },
+      "name": "Extract User Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an AI assistant that creates personalized study schedules and motivational strategies."
+          },
+          {
+            "role": "user",
+            "content": "Create a study schedule and motivational plan for a user. The user's progress is: {{$json[\"progress\"]}}%. Preferences: {{$json[\"preferences\"]}}."
+          }
+        ],
+        "temperature": 0.7,
+        "maxTokens": 500
+      },
+      "name": "Generate Personalized Plan",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        550,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: { schedule: $items(\"Generate Personalized Plan\")[0].json.choices[0].message.content } }];"
+      },
+      "name": "Parse Plan Output",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "channel": "user-study-planning",
+        "text": "Here is your personalized study schedule and motivational plan:\n\n{{$json[\"schedule\"]}}"
+      },
+      "name": "Send Plan to User",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 7,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.interval",
+      "typeVersion": 1,
+      "position": [
+        50,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "path": "users/{{ $json.userId }}.json"
+      },
+      "name": "Fetch User Data",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        150,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch User Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch User Data": {
+      "main": [
+        [
+          {
+            "node": "Extract User Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract User Data": {
+      "main": [
+        [
+          {
+            "node": "Generate Personalized Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Personalized Plan": {
+      "main": [
+        [
+          {
+            "node": "Parse Plan Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Plan Output": {
+      "main": [
+        [
+          {
+            "node": "Send Plan to User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "id": "1"
+}
