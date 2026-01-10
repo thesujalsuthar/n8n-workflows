@@ -1,0 +1,99 @@
+{
+  "title": "AI-Driven Personalized Eco-Friendly Travel Planner & Carbon Offset Optimizer",
+  "description": "A workflow that integrates real-time travel suggestions with carbon footprint calculations to recommend the most sustainable travel options and provide optimized carbon offset solutions.",
+  "steps": [
+    {
+      "id": "user_input",
+      "type": "input",
+      "parameters": {
+        "fields": [
+          "origin",
+          "destination",
+          "travel_dates",
+          "user_preferences",
+          "budget"
+        ]
+      },
+      "description": "Collects user's trip details and preferences."
+    },
+    {
+      "id": "real_time_travel_data",
+      "type": "api_call",
+      "parameters": {
+        "service": "TravelDataAPI",
+        "endpoint": "/search",
+        "query_params": {
+          "origin": "{{user_input.origin}}",
+          "destination": "{{user_input.destination}}",
+          "dates": "{{user_input.travel_dates}}",
+          "preferences": "{{user_input.user_preferences}}"
+        }
+      },
+      "description": "Fetches real-time travel options matching user input."
+    },
+    {
+      "id": "carbon_footprint_calculation",
+      "type": "function",
+      "parameters": {
+        "function_name": "calculateCarbonFootprint",
+        "inputs": {
+          "travelOptions": "{{real_time_travel_data.results}}"
+        }
+      },
+      "description": "Calculates the carbon footprint for each travel option."
+    },
+    {
+      "id": "sustainability_ranker",
+      "type": "function",
+      "parameters": {
+        "function_name": "rankBySustainability",
+        "inputs": {
+          "travelOptionsWithFootprint": "{{carbon_footprint_calculation.output}}"
+        }
+      },
+      "description": "Ranks travel options based on sustainability criteria, including carbon footprint, user budget, and preferences."
+    },
+    {
+      "id": "carbon_offset_recommendations",
+      "type": "api_call",
+      "parameters": {
+        "service": "CarbonOffsetAPI",
+        "endpoint": "/recommend",
+        "body": {
+          "carbonEmissions": "{{sustainability_ranker.topOption.carbonFootprint}}"
+        }
+      },
+      "description": "Obtains recommended carbon offset plans for the selected sustainable travel option."
+    },
+    {
+      "id": "final_output",
+      "type": "output",
+      "parameters": {
+        "fields": [
+          "topSustainableTravelOptions",
+          "carbonFootprintDetails",
+          "offsetRecommendations",
+          "estimatedCost",
+          "travelItinerary"
+        ],
+        "values": {
+          "topSustainableTravelOptions": "{{sustainability_ranker.rankedOptions}}",
+          "carbonFootprintDetails": "{{carbon_footprint_calculation.output}}",
+          "offsetRecommendations": "{{carbon_offset_recommendations.data}}",
+          "estimatedCost": "{{sustainability_ranker.topOption.cost}}",
+          "travelItinerary": "{{real_time_travel_data.results}}"
+        }
+      },
+      "description": "Delivers the best sustainable travel options along with carbon footprint and offset recommendations back to the user."
+    }
+  ],
+  "metadata": {
+    "version": "1.0",
+    "createdBy": "AI Workflow Generator",
+    "dateCreated": "2024-06-18",
+    "integrations": [
+      "TravelDataAPI",
+      "CarbonOffsetAPI"
+    ]
+  }
+}
