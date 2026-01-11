@@ -1,0 +1,220 @@
+{
+  "name": "AI-Powered Crypto Sentiment Analysis and Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.coingecko.com/api/v3/simple/price",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "ids",
+              "value": "bitcoin,ethereum"
+            },
+            {
+              "name": "vs_currencies",
+              "value": "usd"
+            }
+          ]
+        },
+        "responseFormat": "json"
+      },
+      "name": "Get Crypto Prices",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "bearer",
+        "url": "https://api.twitter.com/2/tweets/search/recent",
+        "qsParametersUi": {
+          "parameter": [
+            {
+              "name": "query",
+              "value": "#bitcoin OR #btc OR #ethereum OR #eth lang:en"
+            },
+            {
+              "name": "max_results",
+              "value": "100"
+            }
+          ]
+        },
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$credentials.TwitterApi.credentials.bearerToken}}"
+            }
+          ]
+        },
+        "responseFormat": "json"
+      },
+      "name": "Get Tweets",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        250,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "text",
+        "model": "gpt-3.5-turbo",
+        "temperature": 0.7,
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are a helpful assistant specialized in analyzing cryptocurrency sentiment from social media content."
+          },
+          {
+            "role": "user",
+            "content": "Analyze the sentiment of the following tweets in JSON format indicating the sentiment score from -1 (very negative) to 1 (very positive) for each tweet: {{$json[\"data\"]}}"
+          }
+        ]
+      },
+      "name": "Sentiment Analysis",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        550,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const prices = items[0].json;\nconst sentimentRaw = items[1].json.choices[0].message.content;\n\nlet sentimentData = [];\ntry {\n  // Attempt to parse the AI response as JSON\n  sentimentData = JSON.parse(sentimentRaw);\n} catch (error) {\n  // If parsing fails, return empty array\n  sentimentData = [];\n}\n\nconst sentiments = sentimentData.map(t => t.sentimentScore || 0);\n\nconst avgSentiment = sentiments.length > 0 ? sentiments.reduce((a,b) => a+b, 0)/sentiments.length : 0;\n\nreturn [{ json: { \n  prices, \n  avgSentiment, \n  sentimentData \n} }];"
+      },
+      "name": "Process Sentiment and Prices",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        800,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json[\"avgSentiment\"]}}",
+              "operation": "smaller",
+              "value2": -0.3
+            },
+            {
+              "value1": "={{$json[\"avgSentiment\"]}}",
+              "operation": "larger",
+              "value2": 0.3
+            }
+          ]
+        }
+      },
+      "name": "Check Alert Threshold",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "alerts@cryptosentiment.ai",
+        "toEmail": "user@example.com",
+        "subject": "Crypto Sentiment Alert: {{$json[\"avgSentiment\"] > 0 ? 'Positive' : 'Negative'}} Sentiment Detected",
+        "text": "Current Prices:\nBitcoin: ${{$json.prices.bitcoin.usd}}\nEthereum: ${{$json.prices.ethereum.usd}}\n\nAverage Sentiment Score: {{$json.avgSentiment}}\n\nDetailed Sentiment Data:\n{{$json.sentimentData}}",
+        "html": "<h3>Crypto Sentiment Alert</h3><p><strong>Current Prices:</strong></p><ul><li>Bitcoin: ${{$json.prices.bitcoin.usd}}</li><li>Ethereum: ${{$json.prices.ethereum.usd}}</li></ul><p><strong>Average Sentiment Score:</strong> {{$json.avgSentiment}}</p><p><strong>Detailed Sentiment Data:</strong><br>{{$json.sentimentData}}</p>"
+      },
+      "name": "Send Alert Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "text": "Crypto sentiment and prices are stable with average sentiment score of {{$json.avgSentiment}}. No alert triggered."
+      },
+      "name": "No Alert Log",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        700
+      ]
+    }
+  ],
+  "connections": {
+    "Get Crypto Prices": {
+      "main": [
+        [
+          {
+            "node": "Check Alert Threshold",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Tweets": {
+      "main": [
+        [
+          {
+            "node": "Sentiment Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sentiment Analysis": {
+      "main": [
+        [
+          {
+            "node": "Process Sentiment and Prices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Sentiment and Prices": {
+      "main": [
+        [
+          {
+            "node": "Check Alert Threshold",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Check Alert Threshold": {
+      "main": [
+        [
+          {
+            "node": "Send Alert Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "No Alert Log",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
