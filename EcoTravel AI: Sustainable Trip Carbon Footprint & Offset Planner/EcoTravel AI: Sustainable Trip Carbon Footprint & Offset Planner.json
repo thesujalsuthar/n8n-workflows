@@ -1,0 +1,202 @@
+{
+  "name": "EcoTravel AI: Personalized Sustainable Trip Planner & Carbon Offset Optimizer",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.traveldataservice.com/v1/flights",
+        "queryParameters": [
+          {
+            "name": "origin",
+            "value": "={{$json[\"origin\"]}}"
+          },
+          {
+            "name": "destination",
+            "value": "={{$json[\"destination\"]}}"
+          },
+          {
+            "name": "date",
+            "value": "={{$json[\"date\"]}}"
+          }
+        ],
+        "options": {}
+      },
+      "name": "Get Travel Data",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "1",
+          "name": "Travel API Basic Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const travelData = items[0].json;\n\n// Extract relevant data for carbon calculation\nconst distance = travelData.totalDistanceKm || 0;\nconst transportMode = travelData.transportMode || 'flight';\n\n// Emission factors (kg CO2 per km) for different transport modes\nconst emissionFactors = {\n  flight: 0.150,\n  train: 0.041,\n  bus: 0.105,\n  car: 0.192\n};\n\nconst emissionFactor = emissionFactors[transportMode.toLowerCase()] || 0.15;\nconst carbonEmissionsKg = distance * emissionFactor;\n\nreturn [{ json: { distance, transportMode, carbonEmissionsKg } }];"
+      },
+      "name": "Calculate Carbon Footprint",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "url": "https://api.sustainabletravel.com/v1/recommendations",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={\n  \"origin\": $json.origin,\n  \"destination\": $json.destination,\n  \"date\": $json.date,\n  \"carbonEmissionsKg\": $json.carbonEmissionsKg,\n  \"preferredTransportModes\": [\"train\",\"bus\",\"car\"],\n  \"optimizeFor\": \"carbon\"\n}"
+      },
+      "name": "Get Sustainable Travel Recommendations",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "2",
+          "name": "Sustainable Travel API Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.carbonoffsets.com/v1/options",
+        "queryParameters": [
+          {
+            "name": "amount",
+            "value": "={{$json[\"carbonEmissionsKg\"]}}"
+          },
+          {
+            "name": "region",
+            "value": "global"
+          }
+        ],
+        "options": {}
+      },
+      "name": "Get Carbon Offset Options",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ],
+      "credentials": {
+        "apiKeyAuth": {
+          "id": "3",
+          "name": "Carbon Offset API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: {\n  message: `Your trip from ${$json.origin} to ${$json.destination} on ${$json.date} generates approximately ${$json.carbonEmissionsKg.toFixed(2)} kg CO2.` +\n  ` We recommend the following sustainable travel options: ${items[2].json.recommendations}, and carbon offset options suitable for your footprint.`\n}}];"
+      },
+      "name": "Format Notification Message",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "message": "={{$json[\"message\"]}}",
+        "to": "={{$json[\"userContact\"]}}",
+        "options": {}
+      },
+      "name": "Send Notification",
+      "type": "twilio",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        300
+      ],
+      "credentials": {
+        "twilioApi": {
+          "id": "4",
+          "name": "Twilio API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Get Travel Data": {
+      "main": [
+        [
+          {
+            "node": "Calculate Carbon Footprint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Carbon Footprint": {
+      "main": [
+        [
+          {
+            "node": "Get Sustainable Travel Recommendations",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Carbon Offset Options",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Sustainable Travel Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Format Notification Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Carbon Offset Options": {
+      "main": [
+        [
+          {
+            "node": "Format Notification Message",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Format Notification Message": {
+      "main": [
+        [
+          {
+            "node": "Send Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
