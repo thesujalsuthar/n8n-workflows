@@ -1,0 +1,292 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 9,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "passThrough",
+        "operation": "mergeByKey",
+        "keys": [
+          "location"
+        ],
+        "property": "data",
+        "mergeStrategy": "mergeByKey"
+      },
+      "name": "Merge User Input",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 1,
+      "position": [
+        600,
+        300
+      ],
+      "notes": "Merge user inputs such as destination, preferences, and dates"
+    },
+    {
+      "parameters": {
+        "resource": "weather",
+        "operation": "getCurrent",
+        "location": "={{$json[\"destination\"]}}",
+        "options": {}
+      },
+      "name": "Get Weather Forecast",
+      "type": "n8n-nodes-base.openweathermap",
+      "typeVersion": 1,
+      "position": [
+        900,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "httpRequestFunctionCode": "const location = items[0].json.destination;\nreturn [{json: {location}}];"
+      },
+      "name": "Extract Location",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.environmentaldata.org/eco-data?location={{$json[\"location\"]}}",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_ENV_DATA_API_KEY"
+            }
+          ]
+        },
+        "queryParametersUi": {
+          "parameter": []
+        }
+      },
+      "name": "Fetch Environmental Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        900,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const distanceKm = $json.distanceKm || 10;\nconst avgEmissionPerKm = 0.12; // kg CO2 per km average for hiking-related travel\nconst carbonFootprint = distanceKm * avgEmissionPerKm;\nreturn [{json: {carbonFootprint}}];"
+      },
+      "name": "Calculate Carbon Footprint",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.sustainablelodging.com/search?location={{$json[\"location\"]}}&checkin={{$json[\"startDate\"]}}&checkout={{$json[\"endDate\"]}}",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "x-api-key",
+              "value": "YOUR_SUSTAINABLE_LODGING_API_KEY"
+            }
+          ]
+        }
+      },
+      "name": "Find Sustainable Accommodations",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.greentravelactivities.com/activities?location={{$json[\"location\"]}}&date={{$json[\"startDate\"]}}",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_GREEN_ACTIVITIES_API_KEY"
+            }
+          ]
+        }
+      },
+      "name": "Get Sustainable Activities",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const weather = $json[\"weather\"]; \nconst carbonFootprint = $json[\"carbonFootprint\"];\nconst accommodations = $json[\"accommodations\"] || [];\nconst activities = $json[\"activities\"] || [];\n\nconst tips = [];\n\nif(weather.temperature > 30) {\n  tips.push('Wear light, breathable clothing and stay hydrated to reduce heat stress while minimizing extra energy use.');\n} else if(weather.temperature < 5) {\n  tips.push('Dress in layers to stay warm instead of using energy-consuming devices.');\n}\n\nif(carbonFootprint > 1) {\n  tips.push('Consider offsetting your carbon footprint or choosing closer locations to reduce emissions.');\n}\n\nif(accommodations.length === 0) {\n  tips.push('No sustainable accommodations found; try eco-certified lodgings or camping where permitted.');\n} else {\n  tips.push('Book accommodations with LEED certification or similar eco-labels to minimize impact.');\n}\n\nif(activities.length === 0) {\n  tips.push('Limit activities that disturb local wildlife and focus on low-impact experiences.');\n} else {\n  tips.push('Engage in activities that support local conservation efforts.');\n}\n\nreturn [{json: {tips}}];"
+      },
+      "name": "Generate Eco-Friendly Tips",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "chatId": "={{$json[\"userChatId\"]}}",
+        "text": "={{\n  '📍 Your EcoJourney to ' + $json[\"location\"] + '\\n' +\n  '🌡 Weather: ' + $json[\"weather\"].description + ', ' + $json[\"weather\"].temperature + '°C\\n' +\n  '🌳 Carbon Footprint Estimate: ' + $json[\"carbonFootprint\"].toFixed(2) + ' kg CO2\\n' +\n  '🏡 Suggested Sustainable Accommodations: ' + ($json[\"accommodations\"].map(a => a.name).join(', ') || 'None found') + '\\n' +\n  '🎯 Suggested Activities: ' + ($json[\"activities\"].map(a => a.name).join(', ') || 'None found') + '\\n\\n' +\n  '💡 Tips to minimize your environmental impact:\\n' + $json[\"tips\"].map((t, i) => (i+1) + '. ' + t).join('\\n')\n}}"
+      },
+      "name": "Send User Update",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1800,
+        420
+      ]
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Extract Location",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Location": {
+      "main": [
+        [
+          {
+            "node": "Merge User Input",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Weather Forecast",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Environmental Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Find Sustainable Accommodations",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Sustainable Activities",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge User Input": {
+      "main": [
+        [
+          {
+            "node": "Calculate Carbon Footprint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Weather Forecast": {
+      "main": [
+        [
+          {
+            "node": "Generate Eco-Friendly Tips",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Environmental Data": {
+      "main": [
+        []
+      ]
+    },
+    "Find Sustainable Accommodations": {
+      "main": [
+        [
+          {
+            "node": "Generate Eco-Friendly Tips",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Sustainable Activities": {
+      "main": [
+        [
+          {
+            "node": "Generate Eco-Friendly Tips",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Carbon Footprint": {
+      "main": [
+        [
+          {
+            "node": "Generate Eco-Friendly Tips",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Eco-Friendly Tips": {
+      "main": [
+        [
+          {
+            "node": "Send User Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
