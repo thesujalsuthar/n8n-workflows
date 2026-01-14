@@ -1,0 +1,217 @@
+{
+  "name": "SmartUrban Garden AI Care Automation with Pest Detection and Eco-Friendly Treatment Scheduler",
+  "nodes": [
+    {
+      "parameters": {
+        "webhookId": "smarturban-garden-sensor-webhook",
+        "httpMethod": "POST",
+        "path": "smarturban-garden-sensor-data",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "name": "Sensor Data Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ],
+      "webhookId": "smarturban-garden-sensor-webhook"
+    },
+    {
+      "parameters": {
+        "functionCode": "const sensorData = items[0].json;\n\n// Basic validation and structuring\nreturn [{\n  json: {\n    temperature: sensorData.temperature,\n    humidity: sensorData.humidity,\n    soilMoisture: sensorData.soilMoisture,\n    lightLevel: sensorData.lightLevel,\n    pestImageUrl: sensorData.pestImageUrl || null,\n    timestamp: sensorData.timestamp || new Date().toISOString()\n  }\n}];"
+      },
+      "name": "Parse Sensor Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "text",
+        "operation": "generate",
+        "model": "gpt-4",
+        "prompt": "Analyze the following urban garden sensor data and detect any signs of plant health issues or pest presence:\n\nTemperature: {{$json[\"temperature\"]}} °C\nHumidity: {{$json[\"humidity\"]}} %\nSoil Moisture: {{$json[\"soilMoisture\"]}} %\nLight Level: {{$json[\"lightLevel\"]}} lux\n\nAlso inspect the image for pest detection if a URL is provided: {{$json[\"pestImageUrl\"]}}\n\nReturn a JSON with keys: healthStatus (\"Healthy\", \"Stress Detected\", \"Pest Detected\"), issues (array of strings), pestDetected (boolean), and recommendedTreatments (array of suggested eco-friendly interventions).",
+        "temperature": 0.3,
+        "maxTokens": 400,
+        "topP": 1,
+        "frequencyPenalty": 0,
+        "presencePenalty": 0,
+        "stop": []
+      },
+      "name": "AI Plant Health & Pest Analysis",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const analysis = JSON.parse(items[0].json.choices[0].message.content);\n\nreturn [{\n  json: {\n    healthStatus: analysis.healthStatus,\n    issues: analysis.issues,\n    pestDetected: analysis.pestDetected,\n    recommendedTreatments: analysis.recommendedTreatments\n  }\n}];"
+      },
+      "name": "Parse AI Analysis JSON",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json[\"pestDetected\"]}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "If Pest Detected?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "basic",
+        "fromEmail": "notifications@smarturban.garden",
+        "toEmail": "user@smarturban.garden",
+        "subject": "Pest Detected in Your Urban Garden",
+        "text": "Pest presence has been detected in your garden. Recommended eco-friendly treatments:\n\n{{$json[\"recommendedTreatments\"].join('\\n- ')}}",
+        "html": "<p>Pest presence has been detected in your garden.</p><p>Recommended eco-friendly treatments:</p><ul>{{ $json[\"recommendedTreatments\"].map(t => `<li>${t}</li>`).join('') }}</ul>"
+      },
+      "name": "Notify User Pest Detected",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "event",
+        "operation": "create",
+        "calendarId": "ecoFriendlyGardening",
+        "summary": "Eco-Friendly Treatment Intervention",
+        "description": "Scheduled treatment based on AI recommendations:\n\n{{$json[\"recommendedTreatments\"].join('\\n- ')}}",
+        "start": "={{new Date().toISOString()}}",
+        "end": "={{new Date(Date.now() + 3600000).toISOString()}}",
+        "attendees": [],
+        "reminders": [
+          {
+            "method": "popup",
+            "minutes": 15
+          }
+        ]
+      },
+      "name": "Schedule Treatment Event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "basic",
+        "fromEmail": "notifications@smarturban.garden",
+        "toEmail": "user@smarturban.garden",
+        "subject": "Plant Health Status Update",
+        "text": "Current plant health status: {{$json[\"healthStatus\"]}}\nIssues detected:\n{{$json[\"issues\"].join('\\n- ')}}",
+        "html": "<p>Current plant health status: <strong>{{$json[\"healthStatus\"]}}</strong></p><p>Issues detected:</p><ul>{{ $json[\"issues\"].map(i => `<li>${i}</li>`).join('') }}</ul>"
+      },
+      "name": "Notify User Healthy or Stress Update",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "Sensor Data Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Sensor Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Sensor Data": {
+      "main": [
+        [
+          {
+            "node": "AI Plant Health & Pest Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Plant Health & Pest Analysis": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Analysis JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Analysis JSON": {
+      "main": [
+        [
+          {
+            "node": "If Pest Detected?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Pest Detected?": {
+      "main": [
+        [
+          {
+            "node": "Notify User Pest Detected",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Schedule Treatment Event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify User Healthy or Stress Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "smarturban-garden-ai-care-automation-001"
+}
