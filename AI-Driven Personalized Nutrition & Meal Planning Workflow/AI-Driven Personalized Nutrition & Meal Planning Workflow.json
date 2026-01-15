@@ -1,0 +1,212 @@
+{
+  "name": "Interactive AI-Powered Personalized Nutrition and Meal Planning Assistant",
+  "nodes": [
+    {
+      "parameters": {
+        "choices": [
+          {
+            "name": "Meal Preferences",
+            "value": "mealPreferences"
+          },
+          {
+            "name": "Health Goals",
+            "value": "healthGoals"
+          },
+          {
+            "name": "Ingredient Availability",
+            "value": "ingredientAvailability"
+          }
+        ],
+        "question": "Please select the type of input you want to provide:",
+        "options": {}
+      },
+      "name": "User Input Type Selection",
+      "type": "n8n-nodes-base.promptNode",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "questions": [
+          {
+            "question": "Please list your meal preferences (e.g. vegan, gluten-free, keto):",
+            "name": "mealPreferences",
+            "type": "string"
+          },
+          {
+            "question": "Please specify your health goals (e.g. weight loss, muscle gain, heart health):",
+            "name": "healthGoals",
+            "type": "string"
+          },
+          {
+            "question": "Please list ingredients you currently have available (comma separated):",
+            "name": "ingredientAvailability",
+            "type": "string"
+          }
+        ],
+        "options": {},
+        "mode": "single"
+      },
+      "name": "User Input Collection",
+      "type": "n8n-nodes-base.promptNode",
+      "typeVersion": 1,
+      "position": [
+        550,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={{JSON.stringify({\n  model: 'gpt-4',\n  messages: [\n    {\n      role: 'system',\n      content: 'You are a nutrition and meal planning assistant. Generate a personalized 7-day meal plan including breakfast, lunch, and dinner, based on user dietary preferences, health goals, and available ingredients. Include grocery list items needed to prepare the meal plan.'\n    },\n    {\n      role: 'user',\n      content: `Meal Preferences: ${$json[\"mealPreferences\"] || \"none\"}\\nHealth Goals: ${$json[\"healthGoals\"] || \"none\"}\\nIngredients Available: ${$json[\"ingredientAvailability\"] || \"none\"}`\n    }\n  ],\n  temperature: 0.7\n})}}",
+        "headerParametersJson": "={\"Authorization\": \"Bearer YOUR_OPENAI_API_KEY\",\"Content-Type\": \"application/json\"}"
+      },
+      "name": "AI-Based Meal Plan Generation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const mealPlanText = $json[\"choices\"][0][\"message\"][\"content\"];\n\n// Extract grocery list (assumed at end after a keyword \"Grocery List:\") and meal plan separately\nconst groceryListIndex = mealPlanText.indexOf('Grocery List:');\n\nlet mealPlan = mealPlanText;\nlet groceryList = '';\n\nif (groceryListIndex !== -1) {\n  mealPlan = mealPlanText.substring(0, groceryListIndex).trim();\n  groceryList = mealPlanText.substring(groceryListIndex + 'Grocery List:'.length).trim();\n}\n\nreturn [{\n  json: {\n    mealPlan,\n    groceryList\n  }\n}];"
+      },
+      "name": "Parse Meal Plan and Grocery List",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "https://nutrition-analysis-api.example.com/analyze",
+        "headers": {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer YOUR_NUTRITION_API_KEY"
+        },
+        "bodyParametersJson": "={\"text\": $json[\"mealPlan\"]}"
+      },
+      "name": "Nutritional Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        1250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "https://grocery-delivery-api.example.com/orders",
+        "headers": {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer YOUR_GROCERY_API_KEY"
+        },
+        "bodyParametersJson": "={\n  \"items\": $json[\"groceryList\"].split(/\\r?\\n|,|;/).map(item => item.trim()).filter(item => item.length > 0).map(item => ({\"name\": item, \"quantity\": 1}))\n}"
+      },
+      "name": "Place Grocery Order",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        1450,
+        300
+      ]
+    },
+    {
+      "parameters": {},
+      "name": "Finalize and Output",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1650,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "User Input Type Selection": {
+      "main": [
+        [
+          {
+            "node": "User Input Collection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "User Input Collection": {
+      "main": [
+        [
+          {
+            "node": "AI-Based Meal Plan Generation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI-Based Meal Plan Generation": {
+      "main": [
+        [
+          {
+            "node": "Parse Meal Plan and Grocery List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Meal Plan and Grocery List": {
+      "main": [
+        [
+          {
+            "node": "Nutritional Analysis",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Place Grocery Order",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Nutritional Analysis": {
+      "main": [
+        [
+          {
+            "node": "Finalize and Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Place Grocery Order": {
+      "main": [
+        [
+          {
+            "node": "Finalize and Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {}
+}
