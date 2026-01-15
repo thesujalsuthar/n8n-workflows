@@ -1,0 +1,168 @@
+{
+  "name": "SmartHome AI Energy Optimizer & Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "basicAuth",
+        "url": "<SMART_METER_API_ENDPOINT>",
+        "options": {},
+        "responseFormat": "json"
+      },
+      "name": "Get Smart Meter Data",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "noAuth",
+        "url": "<WEATHER_FORECAST_API_ENDPOINT>",
+        "options": {},
+        "responseFormat": "json"
+      },
+      "name": "Get Weather Forecast",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        100,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "basicAuth",
+        "url": "<USER_BEHAVIOR_API_ENDPOINT>",
+        "options": {},
+        "responseFormat": "json"
+      },
+      "name": "Get User Behavior Data",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        100,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const smartMeterData = items[0].json;\nconst weatherData = items[1].json;\nconst userBehavior = items[2].json;\n\n// Combine the data\nconst combinedData = {\n  energyUsage: smartMeterData.energyUsage,\n  timeStamps: smartMeterData.timeStamps,\n  weather: weatherData,\n  behavior: userBehavior\n};\n\nreturn [{ json: combinedData }];"
+      },
+      "name": "Merge Data",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        300,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Placeholder for AI-driven analytics.\n  In a practical setup, this could call an external AI service,\n  or embed a predictive model here.\n*/\n\nconst data = items[0].json;\n\n// Simple heuristic example:\n// Flag abnormal usage if usage is above threshold\nconst threshold = 1000; // example threshold in watts\nconst abnormalUsage = data.energyUsage.some(value => value > threshold);\n\n// Generate recommendations based on weather and behavior\nconst recommendations = [];\n\nif (data.weather.currentTemperature > 25) {\n  recommendations.push('Consider using ceiling fans instead of AC to save energy.');\n}\nif (data.behavior.awayFromHome) {\n  recommendations.push('Set HVAC to eco mode while away to reduce energy waste.');\n}\n\nreturn [{\n  json: {\n    abnormalUsage,\n    recommendations\n  }\n}];"
+      },
+      "name": "AI Energy Analytics",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "number": "{{$json[\"phoneNumber\"]}}",
+        "message": "={{ $json.abnormalUsage ? 'Alert: Abnormal energy usage detected. Please check your appliances.' : '' }}\n{{ $json.recommendations.length > 0 ? ' Recommendations: ' + $json.recommendations.join(' ') : '' }}",
+        "options": {}
+      },
+      "name": "Send SMS Notification",
+      "type": "twilio",
+      "typeVersion": 1,
+      "position": [
+        700,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "toEmail": "={{ $json[\"email\"] }}",
+        "subject": "SmartHome Energy Alert & Recommendations",
+        "text": "={{ $json.abnormalUsage ? 'Alert: Abnormal energy usage detected. Please check your appliances.' : '' }}\n\n{{ $json.recommendations.length > 0 ? 'Recommendations:\n- ' + $json.recommendations.join('\\n- ') : 'No immediate recommendations.' }}",
+        "options": {}
+      },
+      "name": "Send Email Notification",
+      "type": "emailSend",
+      "typeVersion": 1,
+      "position": [
+        700,
+        200
+      ]
+    }
+  ],
+  "connections": {
+    "Get Smart Meter Data": {
+      "main": [
+        [
+          {
+            "node": "Merge Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Weather Forecast": {
+      "main": [
+        [
+          {
+            "node": "Merge Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Get User Behavior Data": {
+      "main": [
+        [
+          {
+            "node": "Merge Data",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Merge Data": {
+      "main": [
+        [
+          {
+            "node": "AI Energy Analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Energy Analytics": {
+      "main": [
+        [
+          {
+            "node": "Send SMS Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Email Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
