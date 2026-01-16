@@ -1,0 +1,160 @@
+{
+  "name": "Real-Time Cryptocurrency Market Arbitrage Opportunity Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.binance.com/api/v3/ticker/price",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "symbols",
+              "value": "[\"BTCUSDT\",\"ETHUSDT\",\"LTCUSDT\"]"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Get Binance Prices",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.kraken.com/0/public/Ticker",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "pair",
+              "value": "XBTUSDT,ETHUSDT,LTCUSDT"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Get Kraken Prices",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        200,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const binanceData = items[0].json;\nconst krakenData = items[1].json;\n\n// Parsing Binance prices into a map: symbol -> price\nconst binancePrices = {};\nfor (const entry of binanceData) {\n  binancePrices[entry.symbol] = parseFloat(entry.price);\n}\n\n// Kraken returns nested structure keyed by pair string\nconst krakenPrices = {};\nconst krakenPairs = Object.keys(krakenData.result);\nfor (const pair of krakenPairs) {\n  // Kraken price is in c[0] (last trade price)\n  krakenPrices[pair] = parseFloat(krakenData.result[pair].c[0]);\n}\n\n// Normalizing Kraken pair symbols to Binance style\nconst normalizeKrakenSymbol = (krakenPair) => {\n  // Kraken 'XBTUSDT' -> Binance 'BTCUSDT'\n  return krakenPair.replace('XBT', 'BTC');\n};\n\nconst symbols = ['BTCUSDT', 'ETHUSDT', 'LTCUSDT'];\n\n// Configurable parameters\nconst minProfitPercentage = 0.5; // Minimum profit threshold %\n\nconst arbitrageOpportunities = [];\n\nfor (const symbol of symbols) {\n  const binancePrice = binancePrices[symbol];\n  const krakenPair = Object.keys(krakenPrices).find(p => normalizeKrakenSymbol(p) === symbol);\n  if (!binancePrice || !krakenPair) continue;\n  const krakenPrice = krakenPrices[krakenPair];\n\n  // Calculate potential profits in both directions\n  // Buy Binance, sell Kraken:\n  const profitPct1 = ((krakenPrice - binancePrice) / binancePrice) * 100;\n  // Buy Kraken, sell Binance:\n  const profitPct2 = ((binancePrice - krakenPrice) / krakenPrice) * 100;\n\n  if (profitPct1 >= minProfitPercentage) {\n    arbitrageOpportunities.push({\n      pair: symbol,\n      buyExchange: 'Binance',\n      sellExchange: 'Kraken',\n      buyPrice: binancePrice,\n      sellPrice: krakenPrice,\n      profitPercent: profitPct1.toFixed(2)\n    });\n  }\n  if (profitPct2 >= minProfitPercentage) {\n    arbitrageOpportunities.push({\n      pair: symbol,\n      buyExchange: 'Kraken',\n      sellExchange: 'Binance',\n      buyPrice: krakenPrice,\n      sellPrice: binancePrice,\n      profitPercent: profitPct2.toFixed(2)\n    });\n  }\n}\n\nreturn arbitrageOpportunities.length > 0 ? [{ json: { arbitrage: arbitrageOpportunities } }] : [];"
+      },
+      "name": "Compare Prices & Detect Arbitrage",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        600,
+        400
+      ],
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "mode": "single",
+        "subject": "Crypto Arbitrage Alert - {{ $json.arbitrage[0].pair }}",
+        "text": "Arbitrage opportunity detected!\n\nPair: {{ $json.arbitrage[0].pair }}\nBuy on: {{ $json.arbitrage[0].buyExchange }} at price: {{ $json.arbitrage[0].buyPrice }}\nSell on: {{ $json.arbitrage[0].sellExchange }} at price: {{ $json.arbitrage[0].sellPrice }}\nEstimated Profit Percentage: {{ $json.arbitrage[0].profitPercent }}%\n\nCheck your accounts to execute the trade.",
+        "options": {}
+      },
+      "name": "Send Email Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        900,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "webhookUri": "",
+        "text": "🚨 Arbitrage opportunity detected for {{ $json.arbitrage[0].pair }}!\nBuy on {{ $json.arbitrage[0].buyExchange }} at {{ $json.arbitrage[0].buyPrice }} and sell on {{ $json.arbitrage[0].sellExchange }} at {{ $json.arbitrage[0].sellPrice }}.\nProfit: {{ $json.arbitrage[0].profitPercent }}%",
+        "options": {}
+      },
+      "name": "Send Slack Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        900,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "interval": 60,
+        "options": {}
+      },
+      "name": "Trigger Every Minute",
+      "type": "n8n-nodes-base.timeTrigger",
+      "typeVersion": 1,
+      "position": [
+        50,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Trigger Every Minute": {
+      "main": [
+        [
+          {
+            "node": "Get Binance Prices",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Kraken Prices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Binance Prices": {
+      "main": [
+        [
+          {
+            "node": "Compare Prices & Detect Arbitrage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Kraken Prices": {
+      "main": [
+        [
+          {
+            "node": "Compare Prices & Detect Arbitrage",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Compare Prices & Detect Arbitrage": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Slack Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
