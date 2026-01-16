@@ -1,0 +1,304 @@
+{
+  "name": "AI-Powered Sustainable Urban Mobility Planner",
+  "nodes": [
+    {
+      "parameters": {
+        "resource": "workflow",
+        "operation": "getAll"
+      },
+      "name": "Check Existing Workflows",
+      "type": "n8n-nodes-base.workflow",
+      "typeVersion": 1,
+      "position": [
+        220,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const workflowExists = items[0].json.some(workflow => workflow.name === 'AI-Powered Sustainable Urban Mobility Planner');\nif (workflowExists) {\n  throw new Error('Workflow with this name already exists');\n}\nreturn items;"
+      },
+      "name": "Validate Workflow Uniqueness",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        460,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.citytrafficdata.example.com/v1/traffic",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Fetch Traffic Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        700,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.publictransit.example.com/v1/schedules",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Fetch Transit Schedules",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        700,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Expected input structure:\n  - trafficData: from 'Fetch Traffic Data'\n  - transitData: from 'Fetch Transit Schedules'\n  - userPreferences: from 'User Preferences'\n*/\n\nconst trafficData = items[0].json;\nconst transitData = items[1].json;\nconst userPreferences = items[2].json;\n\nreturn [{\n  json: {\n    trafficData,\n    transitData,\n    userPreferences\n  }\n}];"
+      },
+      "name": "Combine Inputs",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        940,
+        110
+      ],
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Send combined data to AI for sustainable route optimization.\n  We simulate AI call via HTTP request to an AI API endpoint.\n*/\n\nconst inputData = items[0].json;\n\nconst body = {\n  trafficData: inputData.trafficData,\n  transitData: inputData.transitData,\n  userPreferences: inputData.userPreferences,\n  focus: 'minimal environmental impact',\n  outputFormat: 'personalized route suggestions'\n};\n\nreturn [{ json: body }];"
+      },
+      "name": "Prepare AI Request",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1180,
+        110
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.openai.example.com/v1/chat/completions",
+        "method": "POST",
+        "headers": {
+          "Authorization": "Bearer {{ $credentials.openAIApiKey.apiKey }}",
+          "Content-Type": "application/json"
+        },
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "model",
+              "value": "gpt-4"
+            },
+            {
+              "name": "messages",
+              "value": "[{\"role\":\"system\",\"content\":\"You are an AI specialized in sustainable urban mobility. Optimize daily commuting routes focusing on minimal environmental impact based on provided traffic data, transit schedules, and user preferences.\"},{\"role\":\"user\",\"content\":\"${JSON.stringify($json)}\"}]"
+            }
+          ]
+        },
+        "options": {},
+        "responseFormat": "json"
+      },
+      "name": "AI Route Optimization",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1420,
+        110
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const aiResponse = items[0].json.choices[0].message.content;\nreturn [{ json: { routeSuggestions: JSON.parse(aiResponse) } }];"
+      },
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1660,
+        110
+      ]
+    },
+    {
+      "parameters": {
+        "recipient_email": "={{$json[\"userPreferences\"].email}}",
+        "subject": "Your Sustainable Commuting Route Suggestions",
+        "text": "Hello,\n\nBased on real-time traffic data, public transit schedules, and your preferences, here are your optimized commuting routes with minimal environmental impact:\n\n{{$json[\"routeSuggestions\"].map(route => `- ${route.description} (Estimated time: ${route.duration} mins)` ).join('\\n')}}\n\nSafe travels!"
+      },
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1900,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "none",
+        "httpMethod": "POST",
+        "url": "https://api.messagingplatform.example.com/sendMessage",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={\n  \"user_id\": $json[\"userPreferences\"].messagingUserId,\n  \"message\": `Hello! Your sustainable commuting routes:\n${$json[\"routeSuggestions\"].map(route => `- ${route.description} (ETA: ${route.duration} mins)`).join('\\n')}`\n}"
+      },
+      "name": "Send Message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1900,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "parallel",
+        "branches": [
+          {
+            "parameters": {},
+            "nodes": [
+              {
+                "parameters": {},
+                "name": "Send Email Branch",
+                "type": "n8n-nodes-base.emailSend",
+                "typeVersion": 1,
+                "position": [
+                  10,
+                  10
+                ]
+              }
+            ]
+          },
+          {
+            "parameters": {},
+            "nodes": [
+              {
+                "parameters": {},
+                "name": "Send Message Branch",
+                "type": "n8n-nodes-base.httpRequest",
+                "typeVersion": 1,
+                "position": [
+                  10,
+                  10
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "name": "Deliver Routes",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 1,
+      "position": [
+        1900,
+        110
+      ]
+    }
+  ],
+  "connections": {
+    "Check Existing Workflows": {
+      "main": [
+        [
+          {
+            "node": "Validate Workflow Uniqueness",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Workflow Uniqueness": {
+      "main": [
+        [
+          {
+            "node": "Fetch Traffic Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Transit Schedules",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Traffic Data": {
+      "main": [
+        [
+          {
+            "node": "Combine Inputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Transit Schedules": {
+      "main": [
+        [
+          {
+            "node": "Combine Inputs",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Combine Inputs": {
+      "main": [
+        [
+          {
+            "node": "Prepare AI Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare AI Request": {
+      "main": [
+        [
+          {
+            "node": "AI Route Optimization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Route Optimization": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
