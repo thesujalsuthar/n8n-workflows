@@ -1,0 +1,116 @@
+{
+  "name": "AI-Powered Personalized Work-Life Balance Optimizer",
+  "nodes": [
+    {
+      "parameters": {
+        "calendarId": "primary",
+        "options": {
+          "timeMin": "={{$now.toISOString()}}",
+          "timeMax": "={{new Date($now.getTime() + 24 * 60 * 60 * 1000).toISOString()}}",
+          "singleEvents": true,
+          "orderBy": "startTime"
+        }
+      },
+      "name": "Get Today's Events",
+      "type": "n8n-nodes-base.googleCalendarTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getData",
+        "deviceId": "=@$json[\"deviceId\"] || $env.WEARABLE_DEVICE_ID",
+        "dataType": "activity",
+        "fromDate": "={{$now.toISOString().split('T')[0]}}",
+        "toDate": "={{$now.toISOString().split('T')[0]}}"
+      },
+      "name": "Get Wearable Activity Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        600
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "1",
+          "name": "Wearable API Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const workEvents = $items(\"Get Today's Events\").map(e => e.json).filter(event => {\n  const lowerSummary = (event.summary || '').toLowerCase();\n  return lowerSummary.includes('work') || lowerSummary.includes('meeting') || lowerSummary.includes('project');\n});\n\nconst breakEvents = $items(\"Get Today's Events\").map(e => e.json).filter(event => {\n  const lowerSummary = (event.summary || '').toLowerCase();\n  return lowerSummary.includes('break') || lowerSummary.includes('lunch') || lowerSummary.includes('pause');\n});\n\nconst personalEvents = $items(\"Get Today's Events\").map(e => e.json).filter(event => {\n  const lowerSummary = (event.summary || '').toLowerCase();\n  return lowerSummary.includes('personal') || lowerSummary.includes('family') || lowerSummary.includes('exercise') || lowerSummary.includes('off');\n});\n\n\nfunction getDuration(event) {\n  const start = new Date(event.start.dateTime || event.start.date);\n  const end = new Date(event.end.dateTime || event.end.date);\n  return (end - start) / (1000 * 60 * 60); // hours\n}\n\nconst totalWorkHours = workEvents.reduce((acc, e) => acc + getDuration(e), 0);\nconst totalBreakHours = breakEvents.reduce((acc, e) => acc + getDuration(e), 0);\nconst totalPersonalHours = personalEvents.reduce((acc, e) => acc + getDuration(e), 0);\n\n// Wearable data - assuming $items(\"Get Wearable Activity Data\")[0].json.activities is an array of activity objects with duration in minutes\nconst wearableActivities = $items(\"Get Wearable Activity Data\")[0]?.json?.activities || [];\n\nlet totalActiveHours = 0;\nwearableActivities.forEach(activity => {\n  if (activity.type === 'walk' || activity.type === 'run' || activity.type === 'exercise') {\n    totalActiveHours += (activity.durationMinutes || 0) / 60;\n  }\n});\n\n// Generate insights\nconst recommendedWorkHours = 8;\nconst recommendedBreakHours = 1.5;\nconst recommendedPersonalHours = 3;\n\nconst alerts = [];\n\nif (totalWorkHours > recommendedWorkHours) {\n  alerts.push(`You have worked ${totalWorkHours.toFixed(1)} hours today, which exceeds the recommended ${recommendedWorkHours} hours.`);\n}\n\nif (totalBreakHours < recommendedBreakHours) {\n  alerts.push(`You have only taken ${totalBreakHours.toFixed(1)} hours of breaks. Try to take at least ${recommendedBreakHours} hours of breaks.`);\n}\n\nif (totalPersonalHours < recommendedPersonalHours) {\n  alerts.push(`Your personal time today is ${totalPersonalHours.toFixed(1)} hours. Aim for at least ${recommendedPersonalHours} hours.`);\n}\n\nif (totalActiveHours < 1) {\n  alerts.push(`You have only ${totalActiveHours.toFixed(1)} hours of physical activity today. Consider adding some exercise.`);\n}\n\nreturn [{\n  json: {\n    totalWorkHours,\n    totalBreakHours,\n    totalPersonalHours,\n    totalActiveHours,\n    alerts,\n    summary: `Work: ${totalWorkHours.toFixed(1)}h, Breaks: ${totalBreakHours.toFixed(1)}h, Personal: ${totalPersonalHours.toFixed(1)}h, Active: ${totalActiveHours.toFixed(1)}h`\n  }\n}];"
+      },
+      "name": "Analyze Work-Life Balance",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        600,
+        450
+      ],
+      "notes": "Generates actionable insights and alerts based on calendar & wearable data"
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "message": "={{$json.alerts.length > 0 ? 'Alerts:\n' + $json.alerts.join('\\n') : 'Your work-life balance looks good today! Keep it up!'}}",
+        "chatId": "={{$env.USER_CHAT_ID}}"
+      },
+      "name": "Notify User",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        900,
+        450
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "2",
+          "name": "Telegram API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Get Today's Events": {
+      "main": [
+        [
+          {
+            "node": "Analyze Work-Life Balance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Wearable Activity Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze Work-Life Balance",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Analyze Work-Life Balance": {
+      "main": [
+        [
+          {
+            "node": "Notify User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  ],
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
