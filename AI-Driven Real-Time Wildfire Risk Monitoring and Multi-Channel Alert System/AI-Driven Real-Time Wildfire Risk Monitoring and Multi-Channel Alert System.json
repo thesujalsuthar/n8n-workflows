@@ -1,0 +1,233 @@
+{
+  "name": "AI-Powered Real-Time Wildfire Risk Prediction and Community Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.weather.com/v3/wx/conditions/current?apiKey={{$credentials.weatherApi.apiKey}}&geocode={{$json.latitude}},{{$json.longitude}}&format=json",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Get Real-Time Weather Data",
+      "type": "httpRequest",
+      "typeVersion": 2,
+      "position": [
+        100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "credentials": {
+          "aws": "{{ $credentials.awsS3 }}"
+        },
+        "bucketName": "satellite-wildfire-data",
+        "prefix": "latest/",
+        "limit": 1
+      },
+      "name": "Fetch Latest Satellite Imagery",
+      "type": "awsS3",
+      "typeVersion": 1,
+      "position": [
+        100,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.sensor-network.example.com/data?type=environmental&lastMinutes=10",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Get Sensor Network Data",
+      "type": "httpRequest",
+      "typeVersion": 2,
+      "position": [
+        100,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/* Merge environmental datasets into a single structured object for model input */\nconst weather = items[0].json;\nconst satellite = items[1].json;\nconst sensors = items[2].json;\nreturn [{\n  json: {\n    weatherData: weather,\n    satelliteData: satellite,\n    sensorData: sensors\n  }\n}];"
+      },
+      "name": "Aggregate Environmental Data",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        350,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "requestBody": "You are an AI wildfire risk assessment model.\nAnalyze the following environmental data and return a wildfire risk level classified as LOW, MODERATE, HIGH, or CRITICAL along with a brief explanation.\n\nEnvironmental Data:\n{{ $json }}",
+        "options": {},
+        "additionalFields": {
+          "temperature": 0.0,
+          "top_p": 1,
+          "max_tokens": 200,
+          "stop": [
+            "\n"
+          ]
+        }
+      },
+      "name": "AI Wildfire Risk Assessment",
+      "type": "openai",
+      "typeVersion": 1,
+      "position": [
+        600,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/* Parse AI response and prepare alert details */\nconst aiResponse = items[0].json.choices[0].text.trim();\nconst lines = aiResponse.split('\\n');\nconst riskLevelLine = lines.find(line => /risk level/i.test(line));\nconst explanationLine = lines.find(line => /explanation/i.test(line));\n\nconst riskLevelMatch = riskLevelLine ? riskLevelLine.match(/(LOW|MODERATE|HIGH|CRITICAL)/i) : null;\nconst riskLevel = riskLevelMatch ? riskLevelMatch[1].toUpperCase() : 'UNKNOWN';\n\nreturn [{\n  json: {\n    riskLevel: riskLevel,\n    explanation: explanationLine ? explanationLine.replace(/Explanation:\\s*/i, '') : '',\n    alertMessage: `Wildfire Risk Alert: ${riskLevel}. ${explanationLine ? explanationLine.replace(/Explanation:\\s*/i, '') : ''}`\n  }\n}];"
+      },
+      "name": "Parse AI Risk Assessment",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "to": "={{ $json.phoneNumber }}",
+        "message": "={{ $json.alertMessage }}",
+        "additionalFields": {}
+      },
+      "name": "Send SMS Alert",
+      "type": "twilio",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        300
+      ],
+      "credentials": {
+        "twilioApi": "twilioApi"
+      }
+    },
+    {
+      "parameters": {
+        "subject": "Wildfire Risk Alert: {{$json.riskLevel}}",
+        "text": "{{$json.alertMessage}}",
+        "toEmail": "community-alerts@example.com",
+        "fromEmail": "alerts@example.com"
+      },
+      "name": "Send Email Alert",
+      "type": "emailSend",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        450
+      ],
+      "credentials": {
+        "smtp": "smtp_email"
+      }
+    },
+    {
+      "parameters": {
+        "resource": "post",
+        "operation": "create",
+        "text": "={{$json.alertMessage}}",
+        "additionalFields": {
+          "mediaUrls": []
+        }
+      },
+      "name": "Post Social Media Alert",
+      "type": "twitter",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        600
+      ],
+      "credentials": {
+        "twitterOAuth2Api": "twitterOAuth2Api"
+      }
+    }
+  ],
+  "connections": {
+    "Get Real-Time Weather Data": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Environmental Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Latest Satellite Imagery": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Environmental Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Get Sensor Network Data": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Environmental Data",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Aggregate Environmental Data": {
+      "main": [
+        [
+          {
+            "node": "AI Wildfire Risk Assessment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Wildfire Risk Assessment": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Risk Assessment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Risk Assessment": {
+      "main": [
+        [
+          {
+            "node": "Send SMS Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Post Social Media Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
