@@ -1,0 +1,261 @@
+{
+  "name": "EcoAware: AI-Driven Personalized Sustainability Tips & Habit Motivation",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 8,
+              "minute": 0,
+              "mode": "everyDay"
+            }
+          ]
+        }
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        150,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const { userId } = $json;\nif (!userId) {\n  throw new Error('User ID is required.');\n}\nreturn [{ json: { userId } }];"
+      },
+      "name": "Ensure UserID",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        350,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oauth2",
+        "resource": "googleSheets",
+        "operation": "getRows",
+        "sheetId": "YOUR_SHEET_ID_HERE",
+        "sheetName": "UserBehavior",
+        "options": {
+          "limit": 100,
+          "filter": "userId = '= {{$json[\"userId\"]}}'"
+        }
+      },
+      "name": "Get User Behavior Data",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [
+        550,
+        250
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": "Google Sheets OAuth2"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const behaviorData = $items()[0].json;\n\n// Extract preferences and behaviors\nconst prefs = behaviorData.preferences || {};\nconst habits = behaviorData.habits || {};\n\n// Summarize or prepare data for AI prompt\nconst userProfile = {\n  preferences: prefs,\n  habits: habits\n};\n\nreturn [{ json: { userProfile } }];"
+      },
+      "name": "Parse User Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "options": {},
+        "prompt": "You are an AI assistant specialized in personalized sustainability.\n\nBased on this user profile:\n{{ JSON.stringify($json[\"userProfile\"], null, 2) }}\n\nGenerate a unique, personalized daily sustainability tip and motivational habit advice tailored to the user's preferences and recent behavior. Ensure the tip is actionable, encouraging, and innovative, not generic. Return a JSON object with 'tip' and 'motivation' fields."
+      },
+      "name": "Generate Sustainability Tip & Motivation",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        950,
+        250
+      ],
+      "credentials": {
+        "openAIApi": "OpenAI API"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const tipData = JSON.parse(items[0].json.text);\nreturn [{ json: { tip: tipData.tip, motivation: tipData.motivation } }];"
+      },
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "channel": "email",
+        "toEmail": "={{$json[\"email\"]}}",
+        "subject": "Your Daily EcoAware Sustainability Tip & Motivation",
+        "message": "Tip: {{$json[\"tip\"]}}\n\nMotivation: {{$json[\"motivation\"]}}\n\nHave a sustainable day! 🌿"
+      },
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        150
+      ],
+      "credentials": {
+        "smtp": "SMTP Credentials"
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "sendMessage",
+        "resource": "messaging",
+        "messagingServiceSid": "YOUR_TWILIO_MESSAGING_SERVICE_SID",
+        "to": "={{$json[\"phone\"]}}",
+        "body": "Daily EcoAware Tip: {{$json[\"tip\"]}} \nMotivation: {{$json[\"motivation\"]}}"
+      },
+      "name": "Send SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        350
+      ],
+      "credentials": {
+        "twilioApi": "Twilio API"
+      }
+    },
+    {
+      "parameters": {
+        "operation": "postMessage",
+        "channel": "={{$json[\"slackChannel\"]}}",
+        "text": "*Daily EcoAware Sustainability Tip*\n> {{$json[\"tip\"]}}\n\n*Motivation*\n> {{$json[\"motivation\"]}}"
+      },
+      "name": "Post Slack Message",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        450
+      ],
+      "credentials": {
+        "slackApi": "Slack API"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Combine user data information from the trigger or elsewhere.\n  For this demo, assume user info is static or mock data.\n*/\nreturn [{\n  json: {\n    userId: \"user_123456\",\n    email: \"user@example.com\",\n    phone: \"+1234567890\",\n    slackChannel: \"#ecoaware-users\"\n  }\n}];"
+      },
+      "name": "User Basic Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        150,
+        100
+      ]
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "User Basic Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "User Basic Data": {
+      "main": [
+        [
+          {
+            "node": "Ensure UserID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ensure UserID": {
+      "main": [
+        [
+          {
+            "node": "Get User Behavior Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get User Behavior Data": {
+      "main": [
+        [
+          {
+            "node": "Parse User Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse User Data": {
+      "main": [
+        [
+          {
+            "node": "Generate Sustainability Tip & Motivation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Sustainability Tip & Motivation": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send SMS",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Post Slack Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
