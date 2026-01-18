@@ -1,0 +1,236 @@
+{
+  "name": "Quantum Computing Research Trend Analyzer and Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.crossref.org/works?filter=subject:Quantum%20Computing&rows=20&sort=published&order=desc",
+        "responseFormat": "json"
+      },
+      "name": "Fetch CrossRef Publications",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.biorxiv.org/covid19/new",
+        "responseFormat": "json"
+      },
+      "name": "Fetch bioRxiv Preprints",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.arxiv.org/query?search_query=all:quantum+computing&sortBy=submittedDate&sortOrder=descending&max_results=20",
+        "responseFormat": "xml"
+      },
+      "name": "Fetch arXiv Preprints",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const crossrefItems = items[0].json.message.items;\nconst biorxivItemsRaw = items[1].json.collection;\nconst arxivXml = items[2].binary;\n\n// Parse bioRxiv data\nconst biorxivItems = biorxivItemsRaw.map(paper => ({\n  title: paper.title,\n  abstract: paper.abstract,\n  published: paper.date,\n  authors: paper.authors\n}));\n\n// Parse arXiv XML from binary data\nconst xmlData = items[2].binary.data.toString();\nconst parser = require('fast-xml-parser');\nconst arxivJson = parser.parse(xmlData, {ignoreAttributes: false});\n\nconst arxivEntriesRaw = arxivJson.feed.entry;\nconst arxivItems = arxivEntriesRaw.map(entry => ({\n  title: entry.title,\n  abstract: entry.summary,\n  published: entry.published,\n  authors: Array.isArray(entry.author) ? entry.author.map(a => a.name) : [entry.author.name]\n}));\n\n// Combine all publications\nconst allPublications = [];\n\ncrossrefItems.forEach(item => {\n  allPublications.push({\n    source: 'CrossRef',\n    title: item.title ? item.title[0] : '',\n    abstract: item.abstract || '',\n    published: item.published ? item.published['date-parts'][0].join('-') : '',\n    authors: item.author ? item.author.map(a => a.given + ' ' + a.family) : []\n  });\n});\n\nbiorxivItems.forEach(item => {\n  allPublications.push({\n    source: 'bioRxiv',\n    title: item.title,\n    abstract: item.abstract,\n    published: item.published,\n    authors: item.authors\n  });\n});\n\narxivItems.forEach(item => {\n  allPublications.push({\n    source: 'arXiv',\n    title: item.title,\n    abstract: item.abstract,\n    published: item.published,\n    authors: item.authors\n  });\n});\n\nreturn allPublications.map(pub => ({json: pub}));"
+      },
+      "name": "Aggregate and Normalize Publications",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        550,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "model": "text-davinci-003",
+        "prompt": "Extract key topics and sentiment from the following quantum computing research publication abstract:\n\nTitle: {{$json[\"title\"]}}\nAbstract: {{$json[\"abstract\"]}}\n\nReturn a JSON object with two properties: \"topics\" (an array of key topics/keywords) and \"sentiment\" (\"positive\", \"neutral\", or \"negative\").",
+        "temperature": 0.3,
+        "maxTokens": 150
+      },
+      "name": "Extract Topics and Sentiment",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        850,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const publications = items.map(item => {\n  const data = item.json;\n  let analysis = {};\n  try {\n    analysis = JSON.parse(data.choices[0].message || data.choices[0].text || data.choices[0].message.content);\n  } catch (err) {\n    analysis = { topics: [], sentiment: 'neutral' };\n  }\n  return {\n    json: {\n      source: data.source,\n      title: data.title,\n      abstract: data.abstract,\n      published: data.published,\n      authors: data.authors,\n      topics: analysis.topics || [],\n      sentiment: analysis.sentiment || 'neutral'\n    }\n  };\n});\n\nreturn publications;"
+      },
+      "name": "Parse Topics and Sentiment",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const dayjs = require('dayjs');\n\nconst trendMap = {};\n\nitems.forEach(item => {\n  const { topics, published } = item.json;\n  const pubDate = dayjs(published);\n\n  topics.forEach(topic => {\n    if (!trendMap[topic]) {\n      trendMap[topic] = { count: 0, latestDate: pubDate };\n    }\n    trendMap[topic].count += 1;\n    if (pubDate.isAfter(trendMap[topic].latestDate)) {\n      trendMap[topic].latestDate = pubDate;\n    }\n  });\n});\n\nconst trends = Object.keys(trendMap).map(topic => ({\n  topic: topic,\n  frequency: trendMap[topic].count,\n  recency: trendMap[topic].latestDate.format('YYYY-MM-DD')\n}));\n\ntrends.sort((a, b) => {\n  // Rank by frequency descending then recency descending\n  if (b.frequency === a.frequency) {\n    return dayjs(b.recency).isAfter(dayjs(a.recency)) ? 1 : -1;\n  }\n  return b.frequency - a.frequency;\n});\n\nreturn trends.map(trend => ({json: trend}));"
+      },
+      "name": "Analyze and Rank Trends",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const topTrends = items.slice(0, 5).map(trend => `- ${trend.json.topic} (Mentions: ${trend.json.frequency}, Latest: ${trend.json.recency})`).join('\\n');\n\nreturn [{\n  json: {\n    emailSubject: 'Quantum Computing Research Trends Alert',\n    emailBody: `Latest emerging quantum computing research trends and breakthroughs:\\n\\n${topTrends}\\n\\nStay updated with the latest in quantum computing!`\n  }\n}];"
+      },
+      "name": "Prepare Alert Message",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "alerts@quantumtrends.com",
+        "toEmail": "={{$json[\"userEmail\"] || \"user@example.com\"}}",
+        "subject": "={{$json[\"emailSubject\"]}}",
+        "text": "={{$json[\"emailBody\"]}}"
+      },
+      "name": "Send Email Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1850,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "message",
+        "operation": "send",
+        "channel": "={{$json[\"messagingChannel\"] || \"#quantum-alerts\"}}",
+        "text": "={{$json[\"emailBody\"]}}"
+      },
+      "name": "Send Messaging Platform Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1850,
+        450
+      ]
+    }
+  ],
+  "connections": {
+    "Fetch CrossRef Publications": {
+      "main": [
+        [
+          {
+            "node": "Aggregate and Normalize Publications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch bioRxiv Preprints": {
+      "main": [
+        [
+          {
+            "node": "Aggregate and Normalize Publications",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch arXiv Preprints": {
+      "main": [
+        [
+          {
+            "node": "Aggregate and Normalize Publications",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Aggregate and Normalize Publications": {
+      "main": [
+        [
+          {
+            "node": "Extract Topics and Sentiment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Topics and Sentiment": {
+      "main": [
+        [
+          {
+            "node": "Parse Topics and Sentiment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Topics and Sentiment": {
+      "main": [
+        [
+          {
+            "node": "Analyze and Rank Trends",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze and Rank Trends": {
+      "main": [
+        [
+          {
+            "node": "Prepare Alert Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Alert Message": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Messaging Platform Alert",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": 1
+}
