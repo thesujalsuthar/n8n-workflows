@@ -1,0 +1,192 @@
+{
+  "name": "AI-Driven Quantum Research Collaboration and Insights Dashboard",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.semanticscholar.org/graph/v1/paper/search",
+        "options": {},
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "query",
+              "value": "quantum computing",
+              "enabled": true
+            },
+            {
+              "name": "limit",
+              "value": "10",
+              "enabled": true
+            },
+            {
+              "name": "fields",
+              "value": "title,abstract,authors,year,venue,url,citations",
+              "enabled": true
+            }
+          ]
+        }
+      },
+      "name": "Fetch Quantum Papers",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const papers = items[0].json.data;\n\nreturn papers.map(paper => {\n  return {\n    json: {\n      title: paper.title,\n      abstract: paper.abstract || \"\",\n      authors: paper.authors.map(a => a.name).join(\", \"),\n      year: paper.year,\n      venue: paper.venue,\n      url: paper.url\n    }\n  };\n});"
+      },
+      "name": "Parse Papers Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "text": "={{$json[\"title\"] + \". \" + $json[\"abstract\"]}}",
+        "model": "gpt-4o-mini",
+        "options": {}
+      },
+      "name": "Analyze Trends & Insights",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "text": "={{$json[\"title\"] + \". \" + $json[\"abstract\"]}}",
+        "options": {},
+        "language": "en"
+      },
+      "name": "Sentiment Analysis",
+      "type": "n8n-nodes-base.sentimentAnalysis",
+      "typeVersion": 1,
+      "position": [
+        650,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const insights = items[0].json.choices[0].message.content;\nconst sentiment = items[1].json.sentiment;\n\nreturn [{\n  json: {\n    title: items[0].json.title || 'No Title',\n    url: items[0].json.url || '',\n    insights,\n    sentiment\n  }\n}];"
+      },
+      "name": "Combine Insights & Sentiment",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        375
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "fromEmail": "quantum-research@domain.com",
+        "toEmail": "={{$json[\"authors\"].split(\", \")[0].toLowerCase()} + \"@example.com\"}",
+        "subject": "Quantum Computing Research Update and Collaboration Opportunity",
+        "text": "Dear Researcher,\n\nWe found a new research paper that might interest you:\n\nTitle: {{$json[\"title\"]}}\nInsights: {{$json[\"insights\"]}}\nSentiment: {{$json[\"sentiment\"]}}\nRead more: {{$json[\"url\"]}}\n\nWe encourage you to consider potential collaboration opportunities.\n\nBest regards,\nQuantum Research Collaboration Team"
+      },
+      "name": "Send Notification Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        375
+      ]
+    },
+    {
+      "parameters": {
+        "webhookPath": "quantum-research-update",
+        "options": {}
+      },
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        50,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Quantum Papers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Quantum Papers": {
+      "main": [
+        [
+          {
+            "node": "Parse Papers Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Papers Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze Trends & Insights",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Sentiment Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Trends & Insights": {
+      "main": [
+        [
+          {
+            "node": "Combine Insights & Sentiment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sentiment Analysis": {
+      "main": [
+        [
+          {
+            "node": "Combine Insights & Sentiment",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Combine Insights & Sentiment": {
+      "main": [
+        [
+          {
+            "node": "Send Notification Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
