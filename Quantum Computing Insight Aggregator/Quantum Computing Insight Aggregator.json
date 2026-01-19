@@ -1,0 +1,206 @@
+{
+  "name": "Quantum Computing Daily Insight Digest",
+  "nodes": [
+    {
+      "parameters": {
+        "resources": [
+          "paper",
+          "news",
+          "insight"
+        ],
+        "searchQuery": "quantum computing",
+        "additionalFields": {},
+        "returnAll": true
+      },
+      "name": "Fetch Papers",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resources": [
+          "news"
+        ],
+        "searchQuery": "quantum computing",
+        "returnAll": true
+      },
+      "name": "Fetch News",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [
+        250,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const items = items.map(item => {\n  const title = item.json.title || item.json.titleText || '';\n  const link = item.json.link || item.json.url || '';\n  const summary = item.json.contentSnippet || item.json.summary || item.json.description || '';\n  return {\n    json: {\n      title,\n      link,\n      summary\n    }\n  };\n});\nreturn items;"
+      },
+      "name": "Normalize Items",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        375
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "passThrough"
+      },
+      "name": "Merge Data",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 1,
+      "position": [
+        650,
+        400
+      ],
+      "typeoptions": {
+        "mode": "append"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const summary = items.map(item => `- ${item.json.title}\\n  ${item.json.link}\\n  ${item.json.summary}`).join('\\n\\n');\nreturn [{ json: { summary } }];"
+      },
+      "name": "Create Summary",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "folder",
+        "operation": "create",
+        "name": "Quantum Computing Insights",
+        "parents": []
+      },
+      "name": "Create Folder If Not Exist",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "create",
+        "name": "Quantum_Computing_Digest_{{ $today.format(\"YYYY-MM-DD\") }}.txt",
+        "parents": [
+          "={{ $node[\"Create Folder If Not Exist\"].json.id }}"
+        ],
+        "binaryData": false,
+        "content": "={{ $node[\"Create Summary\"].json.summary }}",
+        "mimeType": "text/plain"
+      },
+      "name": "Save Summary to Google Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "your-email@example.com",
+        "toEmail": "recipient@example.com",
+        "subject": "Quantum Computing Daily Insight Digest - {{$today.format(\"YYYY-MM-DD\")}}",
+        "text": "={{$node[\"Create Summary\"].json.summary}}",
+        "html": "<p>{{$node[\"Create Summary\"].json.summary.replace(/\\n/g, \"<br>\")}}</p>"
+      },
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        450
+      ]
+    }
+  ],
+  "connections": {
+    "Fetch Papers": {
+      "main": [
+        [
+          {
+            "node": "Normalize Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch News": {
+      "main": [
+        [
+          {
+            "node": "Normalize Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Items": {
+      "main": [
+        [
+          {
+            "node": "Merge Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Data": {
+      "main": [
+        [
+          {
+            "node": "Create Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Summary": {
+      "main": [
+        [
+          {
+            "node": "Create Folder If Not Exist",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Folder If Not Exist": {
+      "main": [
+        [
+          {
+            "node": "Save Summary to Google Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "id": "1"
+}
