@@ -1,0 +1,299 @@
+{
+  "name": "AI-Powered Personalized Sustainability Journey Planner and Habit Optimizer",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "none",
+        "requestMethod": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "options": {},
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "model",
+              "value": "gpt-4"
+            },
+            {
+              "name": "messages",
+              "value": [
+                {
+                  "role": "system",
+                  "content": "You are an AI assistant that helps create a personalized sustainability journey plan with tips, habit strategies, and progress tracking."
+                },
+                {
+                  "role": "user",
+                  "content": "Create a personalized sustainability journey plan considering user's current habits, preferences, and goals. Include actionable tips, habit formation techniques, environmental impact assessments, and community engagement suggestions."
+                }
+              ]
+            },
+            {
+              "name": "temperature",
+              "value": 0.7
+            }
+          ]
+        },
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.OPENAI_API_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        }
+      },
+      "name": "Generate Sustainability Plan",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const planText = JSON.parse(items[0].json.body).choices[0].message.content;\nreturn [{ json: { planText } }];"
+      },
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "path": "user_habits",
+        "options": {},
+        "data": "={{ $json.planText }}",
+        "dataProperty": "plan",
+        "resource": "database",
+        "operation": "update"
+      },
+      "name": "Store Plan in DB",
+      "type": "n8n-nodes-base.firebase",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ],
+      "credentials": {
+        "firebase": "Firebase Credential"
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "none",
+        "requestMethod": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "options": {},
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "model",
+              "value": "gpt-4"
+            },
+            {
+              "name": "messages",
+              "value": [
+                {
+                  "role": "system",
+                  "content": "You are an AI assistant that evaluates environmental impact and generates progress monitoring metrics."
+                },
+                {
+                  "role": "user",
+                  "content": "Based on the following sustainability plan, generate measurable progress metrics and impact assessment: {{$node[\"Parse AI Response\"].json.planText}}"
+                }
+              ]
+            },
+            {
+              "name": "temperature",
+              "value": 0.7
+            }
+          ]
+        },
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.OPENAI_API_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        }
+      },
+      "name": "Generate Progress Metrics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        500,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const metricsText = JSON.parse(items[0].json.body).choices[0].message.content;\nreturn [{ json: { metricsText } }];"
+      },
+      "name": "Parse Progress Metrics",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "path": "user_progress",
+        "options": {},
+        "data": "={{ $json.metricsText }}",
+        "dataProperty": "metrics",
+        "resource": "database",
+        "operation": "update"
+      },
+      "name": "Store Progress Metrics",
+      "type": "n8n-nodes-base.firebase",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        500
+      ],
+      "credentials": {
+        "firebase": "Firebase Credential"
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "none",
+        "requestMethod": "GET",
+        "url": "https://community.api.example.org/engagements?user_id={{$json["userId"]}}",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": []
+        }
+      },
+      "name": "Fetch Community Engagement",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const engagements = items[0].json;\nreturn [{ json: { communityEngagements: engagements } }];"
+      },
+      "name": "Parse Community Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "path": "user_community_engagement",
+        "options": {},
+        "data": "={{ $json.communityEngagements }}",
+        "dataProperty": "engagements",
+        "resource": "database",
+        "operation": "update"
+      },
+      "name": "Store Community Engagement",
+      "type": "n8n-nodes-base.firebase",
+      "typeVersion": 1,
+      "position": [
+        750,
+        700
+      ],
+      "credentials": {
+        "firebase": "Firebase Credential"
+      }
+    }
+  ],
+  "connections": {
+    "Generate Sustainability Plan": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Store Plan in DB",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate Progress Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Progress Metrics": {
+      "main": [
+        [
+          {
+            "node": "Parse Progress Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Progress Metrics": {
+      "main": [
+        [
+          {
+            "node": "Store Progress Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Community Engagement": {
+      "main": [
+        [
+          {
+            "node": "Parse Community Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Community Data": {
+      "main": [
+        [
+          {
+            "node": "Store Community Engagement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "id": "1"
+}
