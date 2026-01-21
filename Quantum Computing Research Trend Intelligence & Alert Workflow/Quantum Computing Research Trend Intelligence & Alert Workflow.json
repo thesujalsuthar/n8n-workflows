@@ -1,0 +1,246 @@
+{
+  "name": "Quantum Computing AI Research Trend Analyzer & Real-Time Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.crossref.org/works?query=quantum+computing&sort=published&order=desc&rows=10",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Fetch Research Publications",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        150,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://newsapi.org/v2/everything",
+        "method": "GET",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "q",
+              "value": "quantum computing"
+            },
+            {
+              "name": "sortBy",
+              "value": "publishedAt"
+            },
+            {
+              "name": "language",
+              "value": "en"
+            },
+            {
+              "name": "apiKey",
+              "value": "={{$credentials.newsApi.apiKey}}"
+            }
+          ]
+        },
+        "jsonParameters": true,
+        "options": {}
+      },
+      "name": "Fetch News Articles",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        150,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "\n// Combine research publications and news articles into one unified list\nconst publications = items[0].json.message.items.map(pub => {\n  return {\n    source: 'publication',\n    title: pub.title[0],\n    abstract: pub.abstract || '',\n    url: pub.URL,\n    publishedAt: pub['published-print'] ? pub['published-print']['date-parts'][0].join('-') : pub['created']['date-time'],\n    authors: pub.author ? pub.author.map(a => a.given + ' ' + a.family).join(', ') : '',\n    content: (pub.abstract || pub.title[0])\n  };\n});\n\nconst news = items[1].json.articles.map(article => {\n  return {\n    source: 'news',\n    title: article.title,\n    abstract: article.description || '',\n    url: article.url,\n    publishedAt: article.publishedAt,\n    authors: article.author || '',\n    content: article.title + ' ' + (article.description || '')\n  };\n});\n\nreturn [...publications, ...news].map(item => ({ json: item }));"
+      },
+      "name": "Merge Content",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        400,
+        225
+      ],
+      "notesInFlow": true,
+      "notes": "Normalize and merge publications and news to a common structure."
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "temperature": 0.5,
+        "additionalFields": {},
+        "prompt": {
+          "type": "string",
+          "expression": "Analyze the sentiment and extract main topics from the following quantum computing content for research trend analysis:\n\nTitle: {{$json[\"title\"]}}\nContent: {{$json[\"content\"]}}\n\nReturn a JSON object with keys: sentiment (positive/neutral/negative), topics (array of main topics)."
+        },
+        "options": {}
+      },
+      "name": "AI Sentiment & Topic Analysis",
+      "type": "openai",
+      "typeVersion": 1,
+      "position": [
+        650,
+        225
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "\n// Parse analysis results and attach to original content\nconst results = [];\n\nfor (let i = 0; i < items.length; i += 2) {\n  const original = items[i].json;\n  const analysisRaw = items[i + 1].json.choices[0].message.content;\n  try {\n    const analysis = JSON.parse(analysisRaw);\n    results.push({\n      json: {\n        ...original,\n        sentiment: analysis.sentiment,\n        topics: analysis.topics\n      }\n    });\n  } catch (error) {\n    results.push({\n      json: {\n        ...original,\n        sentiment: 'neutral',\n        topics: []\n      }\n    });\n  }\n}\n\nreturn results;"
+      },
+      "name": "Parse AI Response",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        225
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "\n// Aggregate by topics and sentiment\nconst topicMap = {};\n\nitems.forEach(item => {\n  const { sentiment, topics, title, source, url, publishedAt } = item.json;\n  topics.forEach(topic => {\n    if (!topicMap[topic]) {\n      topicMap[topic] = {\n        positive: [],\n        neutral: [],\n        negative: []\n      };\n    }\n    topicMap[topic][sentiment].push({ title, source, url, publishedAt });\n  });\n});\n\nreturn [{ json: { summaryByTopic: topicMap } }];"
+      },
+      "name": "Aggregate Trends",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        225
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "send",
+        "fromEmail": "quantum-alerts@researchhub.org",
+        "toEmail": "={{$items(\"Subscription List\")[0].json.email}}",
+        "subject": "Real-Time Quantum Computing Research Trend Alert",
+        "text": "={{\n  const summary = $json.summaryByTopic;\n  let emailContent = 'Quantum Computing Research Trend Summary\\n\\n';\n  for (const topic in summary) {\n    emailContent += `Topic: ${topic}\\n`;\n    ['positive','neutral','negative'].forEach(sent => {\n      if(summary[topic][sent].length > 0){\n        emailContent += `  ${sent} (${summary[topic][sent].length} items):\\n`;\n        summary[topic][sent].slice(0,3).forEach(item => {\n          emailContent += `    - ${item.title} (${item.source}) - ${item.url}\\n`;\n        });\n      }\n    });\n    emailContent += '\\n';\n  }\n  emailContent += '\\nThis is an automated alert from Quantum Computing AI Research Trend Analyzer.';\n  return emailContent;\n}}"
+      },
+      "name": "Send Email Alert",
+      "type": "emailSend",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "chat.postMessage",
+        "operation": "postMessage",
+        "channel": "={{$items(\"Subscription List\")[0].json.slackChannel}}",
+        "text": "={{\n  const summary = $json.summaryByTopic;\n  let slackMessage = '*Quantum Computing Research Trend Summary*\\n';\n  for (const topic in summary) {\n    slackMessage += `*${topic}*\\n`;\n    ['positive','neutral','negative'].forEach(sent => {\n      if(summary[topic][sent].length > 0){\n        slackMessage += `_${sent}_ (${summary[topic][sent].length} items):\\n`;\n        summary[topic][sent].slice(0,3).forEach(item => {\n          slackMessage += `• <${item.url}|${item.title}> (${item.source})\\n`;\n        });\n      }\n    });\n    slackMessage += '\\n';\n  }\n  slackMessage += '_This is an automated alert from Quantum Computing AI Research Trend Analyzer._';\n  return slackMessage;\n}}"
+      },
+      "name": "Send Slack Alert",
+      "type": "slack",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "\n// Mock subscription list retrieval\nreturn [{ json: { email: 'researcher@example.com', slackChannel: '#quantum-research' } }];"
+      },
+      "name": "Subscription List",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Fetch Research Publications": {
+      "main": [
+        [
+          {
+            "node": "Fetch News Articles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch News Articles": {
+      "main": [
+        [
+          {
+            "node": "Merge Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Content": {
+      "main": [
+        [
+          {
+            "node": "AI Sentiment & Topic Analysis",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "AI Sentiment & Topic Analysis",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "AI Sentiment & Topic Analysis": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Trends",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Trends": {
+      "main": [
+        [
+          {
+            "node": "Subscription List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Subscription List": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Slack Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
