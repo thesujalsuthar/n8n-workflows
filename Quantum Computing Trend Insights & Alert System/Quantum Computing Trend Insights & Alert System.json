@@ -1,0 +1,288 @@
+{
+  "name": "Quantum Computing Research Trend Analyzer and Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.crossref.org/works?filter=subject:quantum%20computing&rows=100&sort=published&order=desc",
+        "options": {},
+        "responseFormat": "json",
+        "jsonParameters": true
+      },
+      "name": "Fetch Publications - CrossRef",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://newsapi.org/v2/everything?q=quantum%20computing&language=en&sortBy=publishedAt&pageSize=100",
+        "options": {},
+        "headers": {
+          "x-api-key": "={{$credentials.NewsAPI.apiKey}}"
+        },
+        "responseFormat": "json"
+      },
+      "name": "Fetch News - NewsAPI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const publications = [];\n\nitems.forEach(item => {\n  if (item.json.message && item.json.message.items) {\n    item.json.message.items.forEach(pub => {\n      publications.push({\n        title: pub.title ? pub.title[0] : '',\n        abstract: pub.abstract || '',\n        publishedDate: pub.published ? pub.published['date-parts'][0].join('-') : '',\n        authors: pub.author ? pub.author.map(a => `${a.given} ${a.family}`).join(', ') : '',\n        url: pub.URL || ''\n      });\n    });\n  }\n});\n\nreturn publications.map(pub => ({ json: pub }));"
+      },
+      "name": "Parse Publications",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const newsArticles = [];\n\nitems.forEach(item => {\n  if (item.json.articles) {\n    item.json.articles.forEach(article => {\n      newsArticles.push({\n        title: article.title,\n        description: article.description,\n        content: article.content || '',\n        publishedAt: article.publishedAt,\n        source: article.source.name,\n        url: article.url\n      });\n    });\n  }\n});\n\nreturn newsArticles.map(article => ({ json: article }));"
+      },
+      "name": "Parse News Articles",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const combinedTexts = [];\n\nitems.forEach(item => {\n  combinedTexts.push(item.json.title || '');\n  combinedTexts.push(item.json.abstract || '');\n  combinedTexts.push(item.json.description || '');\n  combinedTexts.push(item.json.content || '');\n});\n\nconst text = combinedTexts.join('\\n\\n');\nreturn [{ json: { text } }];"
+      },
+      "name": "Combine Text for NLP",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "model": "text-davinci-003",
+        "prompt": "Analyze the following text from quantum computing research publications and news to identify emerging topics and general sentiment. Return a JSON object with 'topics' (list of strings) and 'sentiment' (string: 'positive', 'negative', or 'neutral').\\n\\nText:\\n{{ $json[\"text\"] }}",
+        "temperature": 0.5,
+        "maxTokens": 500,
+        "topP": 1,
+        "frequencyPenalty": 0,
+        "presencePenalty": 0
+      },
+      "name": "NLP Emerging Topics & Sentiment",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        900,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const analysis = JSON.parse(items[0].json.choices[0].message || items[0].json.choices?.[0]?.text || '{}');\nreturn [{ json: analysis }];"
+      },
+      "name": "Parse NLP Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "email",
+        "operation": "send",
+        "toEmail": "={{$json[\"recipientEmail\"] || $credentials.defaultEmail}}",
+        "subject": "Quantum Computing Research Trends - {{ (new Date()).toLocaleDateString() }}",
+        "text": "Emerging Topics:\n\n{{$json.topics.join('\\n- ')}}\n\nSentiment: {{$json.sentiment}}\n\nFor detailed info, check attached summary.",
+        "html": "<h3>Emerging Topics</h3><ul>{{ $json.topics.map(topic => `<li>${topic}</li>`).join('') }}</ul><p><strong>Sentiment:</strong> {{$json.sentiment}}</p>"
+      },
+      "name": "Send Email Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.filter(item => {\n  const subfieldFilters = $json[\"subfields\"] || [];\n  if (subfieldFilters.length === 0) {\n    return true;\n  }\n\n  const title = item.json.title.toLowerCase();\n  return subfieldFilters.some(filter => title.includes(filter.toLowerCase()));\n});"
+      },
+      "name": "Filter By Subfields",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        550,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "interval": 3600,
+        "units": "seconds"
+      },
+      "name": "Trigger",
+      "type": "n8n-nodes-base.interval",
+      "typeVersion": 1,
+      "position": [
+        50,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "subfields",
+              "value": "[\"quantum algorithms\", \"quantum hardware\", \"quantum error correction\"]"
+            },
+            {
+              "name": "recipientEmail",
+              "value": "research.team@example.com"
+            }
+          ]
+        }
+      },
+      "name": "Set Workflow Options",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        150,
+        200
+      ]
+    }
+  ],
+  "connections": {
+    "Trigger": {
+      "main": [
+        [
+          {
+            "node": "Set Workflow Options",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Workflow Options": {
+      "main": [
+        [
+          {
+            "node": "Fetch Publications - CrossRef",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch News - NewsAPI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Publications - CrossRef": {
+      "main": [
+        [
+          {
+            "node": "Parse Publications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Publications": {
+      "main": [
+        [
+          {
+            "node": "Filter By Subfields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter By Subfields": {
+      "main": [
+        [
+          {
+            "node": "Combine Text for NLP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch News - NewsAPI": {
+      "main": [
+        [
+          {
+            "node": "Parse News Articles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse News Articles": {
+      "main": [
+        [
+          {
+            "node": "Combine Text for NLP",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Combine Text for NLP": {
+      "main": [
+        [
+          {
+            "node": "NLP Emerging Topics & Sentiment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NLP Emerging Topics & Sentiment": {
+      "main": [
+        [
+          {
+            "node": "Parse NLP Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse NLP Response": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
