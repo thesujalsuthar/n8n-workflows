@@ -1,0 +1,213 @@
+{
+  "name": "AI-Driven Personalized Study Planner & Motivation Tracker",
+  "nodes": [
+    {
+      "parameters": {
+        "functionCode": "return {\n  userId: $json.userId || 'defaultUser',\n  preferences: $json.preferences || {\n    subjects: ['Math', 'Physics', 'Chemistry'],\n    dailyStudyHours: 3,\n    studyStartTime: '18:00',\n    motivationTime: '08:00'\n  },\n  performanceData: $json.performanceData || []\n};"
+      },
+      "name": "Initialize User Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "{\n  \"model\": \"gpt-4\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are an AI study planner helping to create optimized daily study schedules and motivation messages based on user preferences and performance.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Create a personalized study schedule for the next 7 days based on these user preferences and past performance data. Adjust session lengths and subjects accordingly. Output as JSON with dates, subjects, and duration in minutes.\\nUser Preferences: {{ $json[\"preferences\"] }}\\nUser Performance Data: {{ $json[\"performanceData\"] }}\"\n    }\n  ],\n  \"temperature\": 0.7\n}"
+      },
+      "name": "AI - Generate Study Schedule",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        550,
+        200
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "1",
+          "name": "OpenAI API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const schedule = JSON.parse(items[0].json.choices[0].message.content);\nreturn schedule.map(session => ({ json: session }));"
+      },
+      "name": "Parse Schedule JSON",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        760,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "{\n  \"model\": \"gpt-4\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a motivational coach sending daily motivational messages to users based on their study habits and preferences.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Generate a motivational message for today to encourage productive study based on these preferences: {{ $json[\"preferences\"] }}\"\n    }\n  ],\n  \"temperature\": 0.8\n}"
+      },
+      "name": "AI - Generate Motivation Message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        550,
+        400
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "1",
+          "name": "OpenAI API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: { message: items[0].json.choices[0].message.content } }];"
+      },
+      "name": "Extract Motivation Message",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        760,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.calendar.com/v1/events",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "itemToSend"
+      },
+      "name": "Create Calendar Events",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        200
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "2",
+          "name": "Calendar API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const eventItems = items.map(item => {\n  const startDateTime = new Date(item.json.date + 'T' + $json.preferences.studyStartTime + ':00');\n  const endDateTime = new Date(startDateTime.getTime() + item.json.duration * 60000);\n\n  return {\n    json: {\n      summary: `Study Session: ${item.json.subject}`,\n      description: `Study session for ${item.json.subject} planned by AI-driven study planner.`,\n      start: { dateTime: startDateTime.toISOString() },\n      end: { dateTime: endDateTime.toISOString() }\n    }\n  };\n});\nreturn eventItems;"
+      },
+      "name": "Format Calendar Events",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "service": "twilio",
+        "operation": "sendMessage",
+        "to": "={{$json[\"userPhone\"] || '+1234567890'}}",
+        "message": "={{$json[\"message\"]}}"
+      },
+      "name": "Send Motivation SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        400
+      ],
+      "credentials": {
+        "twilioApi": {
+          "id": "3",
+          "name": "Twilio API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Initialize User Data": {
+      "main": [
+        [
+          {
+            "node": "AI - Generate Study Schedule",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "AI - Generate Motivation Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI - Generate Study Schedule": {
+      "main": [
+        [
+          {
+            "node": "Parse Schedule JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Schedule JSON": {
+      "main": [
+        [
+          {
+            "node": "Format Calendar Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Calendar Events": {
+      "main": [
+        [
+          {
+            "node": "Create Calendar Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI - Generate Motivation Message": {
+      "main": [
+        [
+          {
+            "node": "Extract Motivation Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Motivation Message": {
+      "main": [
+        [
+          {
+            "node": "Send Motivation SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
