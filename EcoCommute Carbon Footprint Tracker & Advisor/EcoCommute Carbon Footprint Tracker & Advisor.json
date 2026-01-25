@@ -1,0 +1,227 @@
+{
+  "name": "EcoFriendly Daily Commute Carbon Footprint Tracker and Optimization Advisor",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "basicAuth",
+        "url": "https://api.publictransit.example/getRoutes",
+        "responseFormat": "json",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "origin",
+              "value": "={{$json[\"origin\"]}}"
+            },
+            {
+              "name": "destination",
+              "value": "={{$json[\"destination\"]}}"
+            }
+          ]
+        }
+      },
+      "name": "Public Transit API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://maps.googleapis.com/maps/api/directions/json",
+        "options": {},
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "origin",
+              "value": "={{$json[\"origin\"]}}"
+            },
+            {
+              "name": "destination",
+              "value": "={{$json[\"destination\"]}}"
+            },
+            {
+              "name": "mode",
+              "value": "transit"
+            },
+            {
+              "name": "key",
+              "value": "={{$credentials.googleMapsApi.apiKey}}"
+            }
+          ]
+        }
+      },
+      "name": "Google Maps Directions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const transitData = $node[\"Public Transit API\"].json;\nconst directionsData = $node[\"Google Maps Directions\"].json;\n\n// Simplified parsing of directions and transit data\nconst routes = directionsData.routes || [];\n\nif (routes.length === 0) {\n  return [{ json: { error: \"No routes found\" } }];\n}\n\n// Calculate CO2 footprint based on mode and distance\n// This uses typical emission factors (g CO2 per km):\n// car: 192, public_transit: 80, bike/walk: 0\n\nconst emissionFactors = {\n  car: 192,\n  bus: 80,\n  train: 60,\n  walking: 0,\n  bicycle: 0\n};\n\nlet totalDistanceKm = 0;\nlet totalEmissions = 0;\n\n// Extract total distance (meters) from Google Directions first route\nconst legs = routes[0].legs || [];\nlegs.forEach(leg => {\n  totalDistanceKm += leg.distance.value / 1000;\n});\n\n// Assume car commute if no transit steps\n// else calculate transit footprint\nconst steps = legs[0].steps || [];\n\nsteps.forEach(step => {\n  const mode = step.travel_mode.toLowerCase();\n  const distKm = step.distance.value / 1000;\n  if (mode === 'walking') {\n    totalEmissions += emissionFactors.walking * distKm;\n  } else if (mode === 'transit') {\n    const vehicle = step.transit_line ? step.transit_line.vehicle.type.toLowerCase() : 'bus';\n    const emisFactor = emissionFactors[vehicle] || emissionFactors.bus;\n    totalEmissions += emisFactor * distKm;\n  } else if (mode === 'driving') {\n    totalEmissions += emissionFactors.car * distKm;\n  }\n});\n\n// Prepare recommendations\nconst recommendations = [];\nif (totalEmissions > 0) {\n  recommendations.push(\"Consider using more public transit or biking to reduce your carbon footprint.\");\n}\nif (totalDistanceKm < 3) {\n  recommendations.push(\"For short distances, walking or bicycling is highly recommended.\");\n}\n\nreturn [{\n  json: {\n    origin: $json.origin,\n    destination: $json.destination,\n    totalDistanceKm: totalDistanceKm.toFixed(2),\n    carbonFootprintGrams: totalEmissions.toFixed(2),\n    carbonFootprintKg: (totalEmissions / 1000).toFixed(3),\n    recommendations: recommendations\n  }\n}];"
+      },
+      "name": "Calculate Footprint and Advise",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        225
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const userCommute = {\n  origin: $input.item.json.origin || '40.748817,-73.985428',\n  destination: $input.item.json.destination || '40.730610,-73.935242'\n};\nreturn [{ json: userCommute }];"
+      },
+      "name": "Start - User Input",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        50,
+        225
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "send",
+        "toEmail": "={{$json[\"userEmail\"] || \"user@example.com\"}}",
+        "subject": "Your Daily Commute Carbon Footprint Summary",
+        "text": "Hi,\n\nYour commute from {{$json.origin}} to {{$json.destination}} covers {{$json.totalDistanceKm}} km.\nEstimated carbon footprint: {{$json.carbonFootprintKg}} kg CO2.\n\nRecommendations:\n- {{$json.recommendations.join('\\n- ')}}\n\nThank you for choosing eco-friendly travel!\n",
+        "options": {}
+      },
+      "name": "Send Email Summary",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        750,
+        225
+      ],
+      "credentials": {
+        "smtp": "your_smtp_credential"
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.environmentaldata.example/airQuality",
+        "responseFormat": "json",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "lat",
+              "value": "={{$json[\"origin\"].split(\",\")[0]}}"
+            },
+            {
+              "name": "lon",
+              "value": "={{$json[\"origin\"].split(\",\")[1]}}"
+            }
+          ]
+        }
+      },
+      "name": "Environmental Data API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const envData = $node[\"Environmental Data API\"].json;\nconst commuteData = $node[\"Calculate Footprint and Advise\"].json;\n\n// Add environmental quality insights\nconst airQualityIndex = envData.aqi || \"Unknown\";\n\ncommuteData.airQualityIndex = airQualityIndex;\n\nif (airQualityIndex !== \"Unknown\" && airQualityIndex > 100) {\n  commuteData.recommendations.push(\"Air quality is poor today; consider telecommuting if possible or use transport modes that reduce emissions.\");\n}\n\nreturn [{ json: commuteData }];"
+      },
+      "name": "Merge Environmental Insights",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        375
+      ]
+    }
+  ],
+  "connections": {
+    "Start - User Input": {
+      "main": [
+        [
+          {
+            "node": "Google Maps Directions",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Public Transit API",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Environmental Data API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Maps Directions": {
+      "main": [
+        [
+          {
+            "node": "Calculate Footprint and Advise",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Public Transit API": {
+      "main": [
+        [
+          {
+            "node": "Calculate Footprint and Advise",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Environmental Data API": {
+      "main": [
+        [
+          {
+            "node": "Merge Environmental Insights",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Footprint and Advise": {
+      "main": [
+        [
+          {
+            "node": "Merge Environmental Insights",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Environmental Insights": {
+      "main": [
+        [
+          {
+            "node": "Send Email Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
