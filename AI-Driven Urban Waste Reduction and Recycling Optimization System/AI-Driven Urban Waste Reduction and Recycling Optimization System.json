@@ -1,0 +1,400 @@
+{
+  "name": "AI-Powered Sustainable Urban Waste Reduction and Recycling Coordination System",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 0,
+              "minute": 0
+            },
+            {
+              "hour": 6,
+              "minute": 0
+            },
+            {
+              "hour": 12,
+              "minute": 0
+            },
+            {
+              "hour": 18,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Scheduled Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        150,
+        250
+      ],
+      "notes": "Triggers the workflow 4 times daily to keep data fresh"
+    },
+    {
+      "parameters": {
+        "url": "https://api.openweathermap.org/data/2.5/air_pollution?lat={{$json.latitude}}&lon={{$json.longitude}}&appid=YOUR_OPENWEATHERMAP_API_KEY",
+        "options": {},
+        "responseFormat": "json",
+        "jsonParameters": false
+      },
+      "name": "Fetch Environmental Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        420,
+        250
+      ],
+      "notes": "Obtain current environmental data relevant to waste decomposition and pollution"
+    },
+    {
+      "parameters": {
+        "url": "https://api.smartbins.example.com/v1/data?city=Metropolis&apikey=YOUR_SMART_BINS_API_KEY",
+        "options": {},
+        "responseFormat": "json",
+        "jsonParameters": false
+      },
+      "name": "Get Smart Bin Fill Levels",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        420,
+        100
+      ],
+      "notes": "Fetch real-time fill level data from smart waste bins in the city"
+    },
+    {
+      "parameters": {
+        "url": "https://api.citytraffic.example.com/v1/traffic?city=Metropolis&apikey=YOUR_TRAFFIC_API_KEY",
+        "options": {},
+        "responseFormat": "json",
+        "jsonParameters": false
+      },
+      "name": "Fetch Traffic and Route Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        420,
+        400
+      ],
+      "notes": "Retrieve traffic data to optimize waste collection routing"
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nAI-Driven Waste Analytics\n- Inputs: Smart bin data, environmental data, traffic data\n- Outputs: Optimized collection schedule & routes, recycling suggestions\n*/\nconst smartBins = items.find(item => item.json.source === 'smartBins');\nconst environment = items.find(item => item.json.source === 'environment');\nconst traffic = items.find(item => item.json.source === 'traffic');\n\n// Simple example of analytics logic\nlet collectionSchedule = [];\nlet recyclingRecommendations = [];\n\nif (!smartBins || !environment || !traffic) {\n  throw new Error('Missing input data');\n}\n\nconst bins = smartBins.json.bins || [];\n\n// Prioritize bins that are > 75% full\ncollectionSchedule = bins.filter(bin => bin.fillLevel >= 75).map(bin => ({\n  binId: bin.id,\n  priority: 'high',\n  location: bin.location\n}));\n\n// Adjust schedule based on traffic: avoid peak hours\nconst trafficLevel = traffic.json.currentTrafficLevel || 'moderate';\nif (trafficLevel === 'high') {\n  collectionSchedule = collectionSchedule.map(item => ({ ...item, avoidPeak: true }));\n}\n\n// Recommend recycling based on environmental pollution levels\nconst pollutionIndex = environment.json.list[0].main.aqi || 1;\nif (pollutionIndex >= 3) {\n  recyclingRecommendations.push('Increase public awareness campaigns for recycling');\n  recyclingRecommendations.push('Deploy additional recycling containers in high pollution areas');\n} else {\n  recyclingRecommendations.push('Maintain current recycling operations');\n}\n\nreturn [{\n  json: {\n    collectionSchedule,\n    recyclingRecommendations\n  }\n}];"
+      },
+      "name": "AI Analytics Node",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        680,
+        250
+      ],
+      "notes": "Processes input data and outputs optimized scheduling and recycling recommendations"
+    },
+    {
+      "parameters": {
+        "mode": "passThrough",
+        "output": "firstListItem",
+        "propertyName": "collectionSchedule"
+      },
+      "name": "Prepare Collection Schedule Message",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        900,
+        180
+      ],
+      "notes": "Format message for collection crews"
+    },
+    {
+      "parameters": {
+        "mode": "passThrough",
+        "output": "firstListItem",
+        "propertyName": "recyclingRecommendations"
+      },
+      "name": "Prepare Recycling Recommendations Message",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        900,
+        320
+      ],
+      "notes": "Format message for city recycling management"
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "options": {},
+        "url": "https://api.wastemanagement.example.com/v1/post-schedule",
+        "method": "POST",
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_WASTE_MGMT_API_TOKEN"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "schedule",
+              "value": "={{JSON.stringify($json.collectionSchedule)}}"
+            }
+          ]
+        },
+        "responseFormat": "json"
+      },
+      "name": "Send Collection Schedule",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        180
+      ],
+      "notes": "Send the optimized collection schedule to waste management API"
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "options": {},
+        "url": "https://api.cityrecycling.example.com/v1/update-recommendations",
+        "method": "POST",
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_RECYCLING_API_TOKEN"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "recommendations",
+              "value": "={{JSON.stringify($json.recyclingRecommendations)}}"
+            }
+          ]
+        },
+        "responseFormat": "json"
+      },
+      "name": "Send Recycling Recommendations",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        320
+      ],
+      "notes": "Post recycling recommendations to the city recycling department"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "latitude",
+              "value": "40.7128"
+            },
+            {
+              "name": "longitude",
+              "value": "-74.006"
+            },
+            {
+              "name": "source",
+              "value": "environment"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set Environment Coordinates",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        300,
+        250
+      ],
+      "notes": "Set static lat/lon for air pollution data (e.g., city center)"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "source",
+              "value": "smartBins"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Mark Smart Bins Source",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        600,
+        100
+      ],
+      "notes": "Tag smart bin data source for analytics"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "source",
+              "value": "traffic"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Mark Traffic Source",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        600,
+        400
+      ],
+      "notes": "Tag traffic data source for analytics"
+    }
+  ],
+  "connections": {
+    "Scheduled Trigger": {
+      "main": [
+        [
+          {
+            "node": "Set Environment Coordinates",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Smart Bin Fill Levels",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Traffic and Route Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Environment Coordinates": {
+      "main": [
+        [
+          {
+            "node": "Fetch Environmental Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Smart Bin Fill Levels": {
+      "main": [
+        [
+          {
+            "node": "Mark Smart Bins Source",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Traffic and Route Data": {
+      "main": [
+        [
+          {
+            "node": "Mark Traffic Source",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Environmental Data": {
+      "main": [
+        [
+          {
+            "node": "AI Analytics Node",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Smart Bins Source": {
+      "main": [
+        [
+          {
+            "node": "AI Analytics Node",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Mark Traffic Source": {
+      "main": [
+        [
+          {
+            "node": "AI Analytics Node",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "AI Analytics Node": {
+      "main": [
+        [
+          {
+            "node": "Prepare Collection Schedule Message",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Recycling Recommendations Message",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Prepare Collection Schedule Message": {
+      "main": [
+        [
+          {
+            "node": "Send Collection Schedule",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Recycling Recommendations Message": {
+      "main": [
+        [
+          {
+            "node": "Send Recycling Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
