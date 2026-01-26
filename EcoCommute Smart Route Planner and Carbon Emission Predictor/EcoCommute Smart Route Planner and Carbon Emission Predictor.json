@@ -1,0 +1,192 @@
+{
+  "name": "EcoCommute Smart Route Planner and Carbon Emission Predictor",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "={{`https://api.trafficservice.com/traffic?origin=${$json.origin}&destination=${$json.destination}`}}",
+        "options": {},
+        "responseFormat": "json",
+        "jsonParameters": true,
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_TRAFFIC_API_KEY"
+            }
+          ]
+        }
+      },
+      "name": "Fetch Traffic Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{`https://api.publictransit.com/routes?origin=${$json.origin}&destination=${$json.destination}&datetime=${$json.datetime}`}}",
+        "options": {},
+        "responseFormat": "json",
+        "jsonParameters": true,
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_PUBLIC_TRANSIT_API_KEY"
+            }
+          ]
+        }
+      },
+      "name": "Fetch Transit Schedules",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const trafficRoutes = $items()[0].json.routes || [];\nconst transitRoutes = $items()[1].json.routes || [];\n\nfunction carbonEmission(mode, distance) {\n  // Emission in kg CO2 per km\n  const emissionFactors = {\n    car: 0.192,      // average petrol car\n    bus: 0.105,      // average bus per passenger\n    train: 0.041,    // average train per passenger\n    bike: 0,\n    walk: 0\n  };\n  return (emissionFactors[mode] || 0) * distance;\n}\n\n// Combine and calculate emissions\nconst suggestRoutes = [];\n\ntrafficRoutes.forEach(route => {\n  const dist = route.distance_km || 0;\n  suggestRoutes.push({\n    mode: 'car',\n    distance: dist,\n    duration: route.duration_min,\n    carbonEmissionKg: carbonEmission('car', dist),\n    routeDetails: route\n  });\n});\n\ntransitRoutes.forEach(route => {\n  route.legs.forEach(leg => {\n    const mode = leg.mode.toLowerCase();\n    const dist = leg.distance_km || 0;\n    suggestRoutes.push({\n      mode: mode,\n      distance: dist,\n      duration: leg.duration_min,\n      carbonEmissionKg: carbonEmission(mode, dist),\n      routeDetails: leg\n    });\n  });\n});\n\n// Sort by lowest carbon emissions\nsuggestRoutes.sort((a, b) => a.carbonEmissionKg - b.carbonEmissionKg);\n\nreturn [{ json: { suggestedRoutes: suggestRoutes.slice(0, 3) } }];"
+      },
+      "name": "Calculate and Sort Emissions",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ],
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "fromEmail": "n8n@example.com",
+        "toEmail": "={{$json.userEmail}}",
+        "subject": "Your Eco-Friendly Commute Route Suggestions",
+        "text": "Hello,\n\nBased on your origin and destination, here are the top 3 most eco-friendly commuting routes we found for you:\n\n{{$json.suggestedRoutes.map((route, i) => `${i + 1}. Mode: ${route.mode.toUpperCase()}\n   Distance: ${route.distance.toFixed(2)} km\n   Duration: ${route.duration} minutes\n   Estimated Carbon Emission: ${route.carbonEmissionKg.toFixed(3)} kg CO2\n`).join('\\n')}}\n\nThank you for choosing sustainable commuting!\n\nBest regards,\nEcoCommute Smart Route Planner"
+      },
+      "name": "Send Email with Suggestions",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "sendMessage",
+        "resource": "message",
+        "credentials": {
+          "slackApi": {
+            "id": "1",
+            "name": "Slack Account"
+          }
+        },
+        "channel": "={{$json.userSlackChannel}}",
+        "text": "EcoCommute Smart Route Suggestions:\n{{$json.suggestedRoutes.map((route, i) => `*${i + 1}.* Mode: *${route.mode.toUpperCase()}*\n   Distance: ${route.distance.toFixed(2)} km\n   Duration: ${route.duration} minutes\n   Carbon Emission: ${route.carbonEmissionKg.toFixed(3)} kg CO2\n`).join('\\n')}}"
+      },
+      "name": "Send Slack Message",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        750,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "origin",
+              "value": "40.7128,-74.0060"
+            },
+            {
+              "name": "destination",
+              "value": "40.785091,-73.968285"
+            },
+            {
+              "name": "datetime",
+              "value": "2024-06-01T08:00:00Z"
+            },
+            {
+              "name": "userEmail",
+              "value": "user@example.com"
+            },
+            {
+              "name": "userSlackChannel",
+              "value": "#eco-commute"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set Input Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        50,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Set Input Data": {
+      "main": [
+        [
+          {
+            "node": "Fetch Traffic Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Transit Schedules",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Traffic Data": {
+      "main": [
+        [
+          {
+            "node": "Calculate and Sort Emissions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Transit Schedules": {
+      "main": [
+        [
+          {
+            "node": "Calculate and Sort Emissions",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Calculate and Sort Emissions": {
+      "main": [
+        [
+          {
+            "node": "Send Email with Suggestions",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Slack Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
