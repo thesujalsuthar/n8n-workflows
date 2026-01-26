@@ -1,0 +1,267 @@
+{
+  "name": "AI-Driven Community SkillSwap Automation System",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 9,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "apiKey",
+        "resource": "document",
+        "operation": "search",
+        "query": "skillswap profile",
+        "options": {
+          "limit": 50
+        }
+      },
+      "name": "Fetch Community Members",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ],
+      "credentials": {
+        "httpApi": {
+          "id": "1",
+          "name": "CommunityAPIKey"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const profiles = items[0].json.members;\n// Simplified matching logic: group members by skill offered and skill wanted\nconst skillOfferMap = {};\nconst skillWantMap = {};\n\nprofiles.forEach(profile => {\n  const offers = profile.skillsOffered || [];\n  const wants = profile.skillsWanted || [];\n  offers.forEach(skill => {\n    if (!skillOfferMap[skill]) {\n      skillOfferMap[skill] = [];\n    }\n    skillOfferMap[skill].push(profile);\n  });\n  wants.forEach(skill => {\n    if (!skillWantMap[skill]) {\n      skillWantMap[skill] = [];\n    }\n    skillWantMap[skill].push(profile);\n  });\n});\n\nconst matches = [];\n\nfor (const skill in skillOfferMap) {\n  if(skillWantMap[skill]) {\n    skillOfferMap[skill].forEach(offerer => {\n      skillWantMap[skill].forEach(wanter => {\n        if(offerer.id !== wanter.id && offerer.location === wanter.location) {\n          matches.push({\n            skill: skill,\n            offerer: offerer,\n            wanter: wanter\n          });\n        }\n      });\n    });\n  }\n}\n\nreturn matches.map(match => {\n  return {\n    json: match\n  };\n});"
+      },
+      "name": "Match Members",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "calendarId": "primary",
+        "operation": "create",
+        "summary": "SkillSwap Session: {{$json[\"skill\"]}} with {{$json[\"offerer\"].name}} & {{$json[\"wanter\"].name}}",
+        "start": "={{new Date().toISOString()}}",
+        "end": "={{new Date(Date.now() + 3600000).toISOString()}}",
+        "attendees": [
+          {
+            "email": "={{$json[\"offerer\"].email}}"
+          },
+          {
+            "email": "={{$json[\"wanter\"].email}}"
+          }
+        ],
+        "description": "Automated scheduling of SkillSwap session.\nOfferer: {{$json[\"offerer\"].name}}\nWanter: {{$json[\"wanter\"].name}}\nSkill: {{$json[\"skill\"]}}"
+      },
+      "name": "Schedule Event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "2",
+          "name": "Google Calendar OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "community@skillswap.org",
+        "toEmail": "={{[$json[\"offerer\"].email, $json[\"wanter\"].email]}}",
+        "subject": "Your SkillSwap session is scheduled!",
+        "text": "Hello {{$json[\"offerer\"].name}} and {{$json[\"wanter\"].name}},\n\nYour SkillSwap session for the skill \"{{$json[\"skill\"]}}\" has been successfully scheduled.\n\nPlease check your calendar for the event details.\n\nThank you for participating in the community SkillSwap program!"
+      },
+      "name": "Send Confirmation Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        300
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "3",
+          "name": "Community SMTP"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 18,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Daily Follow-Up Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "apiKey",
+        "resource": "event",
+        "operation": "list",
+        "query": {
+          "timeMin": "={{new Date(Date.now() - 86400000).toISOString()}}",
+          "timeMax": "={{new Date().toISOString()}}"
+        }
+      },
+      "name": "Fetch Yesterday Events",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        500,
+        600
+      ],
+      "credentials": {
+        "httpApi": {
+          "id": "1",
+          "name": "CommunityAPIKey"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return items[0].json.events\n  .filter(event => event.summary.includes('SkillSwap Session'))\n  .map(event => {\n    return {\n      json: {\n        eventId: event.id,\n        skill: event.summary.match(/SkillSwap Session: (.*?) with/)[1],\n        attendees: event.attendees\n      }\n    };\n  });"
+      },
+      "name": "Parse Yesterday Events",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "community@skillswap.org",
+        "toEmail": "={{ $json[\"attendees\"].map(a => a.email) }}",
+        "subject": "Thanks for participating in your SkillSwap session!",
+        "text": "Hello,\n\nThank you for participating in your SkillSwap session for the skill: {{$json[\"skill\"]}} yesterday.\n\nWe hope you had a great experience. Please consider giving feedback or joining another session!"
+      },
+      "name": "Send Follow-Up Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        600
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "3",
+          "name": "Community SMTP"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Community Members",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Community Members": {
+      "main": [
+        [
+          {
+            "node": "Match Members",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Match Members": {
+      "main": [
+        [
+          {
+            "node": "Schedule Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Event": {
+      "main": [
+        [
+          {
+            "node": "Send Confirmation Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Follow-Up Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Yesterday Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Yesterday Events": {
+      "main": [
+        [
+          {
+            "node": "Parse Yesterday Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Yesterday Events": {
+      "main": [
+        [
+          {
+            "node": "Send Follow-Up Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
