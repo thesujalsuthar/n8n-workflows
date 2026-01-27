@@ -1,0 +1,229 @@
+{
+  "name": "Quantum Computing Research Collaboration and Innovation Tracker",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.crossref.org/works?query=quantum+computing&rows=20&sort=published&order=desc",
+        "options": {}
+      },
+      "name": "Fetch Research Papers",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.conferencealerts.com/api/v1/events?query=quantum computing&limit=20",
+        "headers": {
+          "Authorization": "Bearer YOUR_CONFERENCE_API_KEY"
+        },
+        "options": {}
+      },
+      "name": "Fetch Conference Feeds",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.github.com/search/repositories?q=quantum+computing+in:description+created:>2023-01-01&sort=stars&order=desc",
+        "options": {},
+        "headers": {
+          "Authorization": "token YOUR_GITHUB_TOKEN"
+        }
+      },
+      "name": "Fetch Collaboration Platforms (GitHub)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "mergeByKey",
+        "key": "id",
+        "joinData": "append",
+        "propertyName": "allData"
+      },
+      "name": "Merge Data",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 1,
+      "position": [
+        550,
+        450
+      ],
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "functionCode": "const papers = $items(\"Fetch Research Papers\")[0].json.message.items;\nconst conferences = $items(\"Fetch Conference Feeds\")[0].json.events || [];\nconst repos = $items(\"Fetch Collaboration Platforms (GitHub)\")[0].json.items || [];\n\n// Extract keyword frequency from titles and descriptions\nconst keywordCount = {};\n\nfunction countKeywords(text) {\n  const keywords = ['quantum computing', 'qubit', 'quantum algorithm', 'quantum hardware', 'quantum error correction'];\n  const lowerText = text.toLowerCase();\n  keywords.forEach(keyword => {\n    if (lowerText.includes(keyword)) {\n      keywordCount[keyword] = (keywordCount[keyword] || 0) + 1;\n    }\n  });\n}\n\npapers.forEach(paper => {\n  countKeywords(paper.title || '');\n  countKeywords(paper.abstract || '');\n});\n\nconferences.forEach(conf => {\n  countKeywords(conf.title || '');\n  countKeywords(conf.description || '');\n});\n\nrepos.forEach(repo => {\n  countKeywords(repo.description || '');\n  countKeywords(repo.name || '');\n});\n\nreturn [{\n  json: {\n    papersCount: papers.length,\n    conferencesCount: conferences.length,\n    repositoriesCount: repos.length,\n    keywordFrequency: keywordCount\n  }\n}];"
+      },
+      "name": "Analyze Trends and Keywords",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "email",
+        "operation": "send",
+        "toEmail": "={{$json[\"userEmail\"] || \"user@example.com\"}}",
+        "subject": "Quantum Computing Research Update",
+        "text": "={{\n  `Latest Quantum Computing Research Data:\n\n` +\n  `Papers fetched: ${$json[\"papersCount\"]}\n` +\n  `Upcoming conferences: ${$json[\"conferencesCount\"]}\n` +\n  `Active repositories: ${$json[\"repositoriesCount\"]}\n\n` +\n  `Keyword frequency highlights:\n` +\n  Object.entries($json[\"keywordFrequency\"]).map(([key, val]) => `- ${key}: ${val}`).join('\\n')\n}}"
+      },
+      "name": "Send Personalized Notifications",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.map(item => {\n  const summaryLines = [];\n  summaryLines.push(`Summary for Quantum Computing Research Collaboration and Innovation Tracker:`);\n  summaryLines.push(`- Total new papers: ${item.json.papersCount}`);\n  summaryLines.push(`- Upcoming conferences: ${item.json.conferencesCount}`);\n  summaryLines.push(`- New collaborations (Repositories): ${item.json.repositoriesCount}`);\n  summaryLines.push(`- Key terms frequency:`);\n  for (const [term, freq] of Object.entries(item.json.keywordFrequency || {})) {\n    summaryLines.push(`  * ${term}: ${freq}`);\n  }\n\n  item.json.summary = summaryLines.join('\\n');\n  return item;\n});"
+      },
+      "name": "Generate Summary",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "slack",
+        "operation": "postMessage",
+        "channel": "YOUR_SLACK_CHANNEL_ID",
+        "text": "={{$json[\"summary\"]}}",
+        "additionalFields": {}
+      },
+      "name": "Post Summary To Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        600
+      ]
+    },
+    {
+      "parameters": {},
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [
+        50,
+        450
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Fetch Research Papers",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Conference Feeds",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Collaboration Platforms (GitHub)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Research Papers": {
+      "main": [
+        [
+          {
+            "node": "Merge Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Conference Feeds": {
+      "main": [
+        [
+          {
+            "node": "Merge Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch Collaboration Platforms (GitHub)": {
+      "main": [
+        [
+          {
+            "node": "Merge Data",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Merge Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze Trends and Keywords",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Trends and Keywords": {
+      "main": [
+        [
+          {
+            "node": "Send Personalized Notifications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Summary": {
+      "main": [
+        [
+          {
+            "node": "Post Summary To Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
