@@ -1,0 +1,283 @@
+{
+  "name": "Quantum Computing Research Trend Analyzer and Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.crossref.org/works?query=quantum computing&filter=from-pub-date:{{ $moment().subtract(1, 'days').format('YYYY-MM-DD') }}&rows=20",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Fetch Crossref Papers",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "query": "quantum computing",
+        "limit": 20,
+        "apiKey": "<YOUR_ARXIV_API_KEY>",
+        "options": {}
+      },
+      "name": "Fetch arXiv Papers",
+      "type": "arxiv",
+      "typeVersion": 1,
+      "position": [
+        250,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "searchString": "quantum computing",
+        "maxResults": 20
+      },
+      "name": "Fetch IEEE Papers",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const crossrefData = items[0].json.message.items;\nconst arxivData = items[1].json.entries;\nconst ieeeData = items[2].json.articles || [];\n\n// Normalize the data to a common format\nconst combined = [];\n\nfunction mapCrossref(item) {\n  return {\n    id: item.DOI || item.id || '',\n    title: item.title ? item.title[0] : '',\n    authors: item.author ? item.author.map(a => a.given + ' ' + a.family).join(', ') : '',\n    abstract: item.abstract ? item.abstract.replace(/<[^>]+>/g, '') : '',\n    publishedDate: item['published-print'] ? item['published-print']['date-parts'][0].join('-') : (item['published-online'] ? item['published-online']['date-parts'][0].join('-') : ''),\n    source: 'Crossref',\n    url: item.URL || ''\n  };\n}\n\nfunction mapArxiv(item) {\n  return {\n    id: item.id || '',\n    title: item.title || '',\n    authors: item.authors ? item.authors.map(a => a.name).join(', ') : '',\n    abstract: item.summary || '',\n    publishedDate: item.published || '',\n    source: 'arXiv',\n    url: item.id || ''\n  };\n}\n\nfunction mapIEEE(item) {\n  return {\n    id: item.doi || '',\n    title: item.title || '',\n    authors: item.authors ? item.authors.map(a => a.full_name).join(', ') : '',\n    abstract: item.abstract || '',\n    publishedDate: item.publication_date || '',\n    source: 'IEEE',\n    url: item.pdf_url || ''\n  };\n}\n\nfor (const item of crossrefData) combined.push(mapCrossref(item));\nfor (const item of arxivData) combined.push(mapArxiv(item));\nfor (const item of ieeeData) combined.push(mapIEEE(item));\n\nreturn combined.map(d => ({ json: d }));"
+      },
+      "name": "Normalize and Combine Data",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": "gpt-4",
+        "temperature": 0.3,
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an expert AI assistant analyzing research papers to detect emerging trends in quantum computing."
+          },
+          {
+            "role": "user",
+            "content": "Analyze the following research paper abstracts for emerging trends, keywords, and significant developments in quantum computing. Provide a summary highlighting key trends and potential research opportunities.\n\n{{ $json.abstracts }}"
+          }
+        ]
+      },
+      "name": "AI Trend Analysis",
+      "type": "openaiChat",
+      "typeVersion": 1,
+      "position": [
+        750,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const filter = $json.filters || {};\nconst combinedItems = $items(\"Normalize and Combine Data\");\n\nfunction matchesFilter(item, filter) {\n  if (filter.subtopic) {\n    const subtopic = filter.subtopic.toLowerCase();\n    return item.json.title.toLowerCase().includes(subtopic) || item.json.abstract.toLowerCase().includes(subtopic);\n  }\n  return true;\n}\n\nconst filtered = combinedItems.filter(item => matchesFilter(item, filter));\n\nreturn filtered;"
+      },
+      "name": "Apply Custom Filters",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "<YOUR_SENDER_EMAIL>",
+        "toEmail": "={{$json.userEmail}}",
+        "subject": "Quantum Computing Research Update: Emerging Trends and Opportunities",
+        "text": "Dear Researcher,\n\nHere are the latest trends and research opportunities in quantum computing based on recent papers:\n\n{{$json.trendSummary}}\n\nFiltered Papers of Interest:\n\n{{$json.filteredPapers.map(p => `- ${p.title} by ${p.authors} (${p.publishedDate})\nURL: ${p.url}`).join('\\n\\n')}}\n\nBest regards,\nQuantum Computing Research Alert System"
+      },
+      "name": "Send Email Alerts",
+      "type": "emailSend",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "triggerTimes": [
+          {
+            "hour": 9,
+            "minute": 0
+          }
+        ],
+        "triggerDays": [
+          "Monday",
+          "Wednesday",
+          "Friday"
+        ]
+      },
+      "name": "Periodic Trigger",
+      "type": "cron",
+      "typeVersion": 1,
+      "position": [
+        100,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const abstracts = items[0].map(item => item.json.abstract).filter(a => a && a.trim() !== '').join('\\n\\n');\nconst trendSummary = items[1].json.choices ? items[1].json.choices[0].message.content : '';\nconst filteredPapers = items[2].map(item => item.json);\nconst userEmail = items[3].json.email || '';\n\nreturn [{ json: {\n  abstracts: abstracts,\n  trendSummary: trendSummary,\n  filteredPapers: filteredPapers,\n  userEmail: userEmail\n}}];"
+      },
+      "name": "Prepare Notification Content",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "email",
+              "value": ""
+            },
+            {
+              "name": "filters",
+              "value": "{\"subtopic\":\"\"}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "User Subscription Data",
+      "type": "set",
+      "typeVersion": 1,
+      "position": [
+        700,
+        700
+      ]
+    }
+  ],
+  "connections": {
+    "Periodic Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Crossref Papers",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch arXiv Papers",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch IEEE Papers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Crossref Papers": {
+      "main": [
+        [
+          {
+            "node": "Normalize and Combine Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch arXiv Papers": {
+      "main": [
+        [
+          {
+            "node": "Normalize and Combine Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch IEEE Papers": {
+      "main": [
+        [
+          {
+            "node": "Normalize and Combine Data",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Normalize and Combine Data": {
+      "main": [
+        [
+          {
+            "node": "AI Trend Analysis",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Apply Custom Filters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Trend Analysis": {
+      "main": [
+        [
+          {
+            "node": "Prepare Notification Content",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Apply Custom Filters": {
+      "main": [
+        [
+          {
+            "node": "Prepare Notification Content",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "User Subscription Data": {
+      "main": [
+        [
+          {
+            "node": "Prepare Notification Content",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Prepare Notification Content": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
