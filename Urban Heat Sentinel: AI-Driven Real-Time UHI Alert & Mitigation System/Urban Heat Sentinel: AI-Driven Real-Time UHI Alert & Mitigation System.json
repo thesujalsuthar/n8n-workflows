@@ -1,0 +1,181 @@
+{
+  "name": "AI-Powered Real-Time Urban Heat Island Mitigation Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.environmentalsensors.example.com/realtime-data",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Get Environmental Sensor Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.openweathermap.org/data/2.5/weather",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "q",
+              "value": "CityName"
+            },
+            {
+              "name": "appid",
+              "value": "={{$credentials.openWeatherMapApi.apiKey}}"
+            },
+            {
+              "name": "units",
+              "value": "metric"
+            }
+          ]
+        },
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Get Weather Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        450
+      ],
+      "credentials": {
+        "openWeatherMapApi": {
+          "id": "1",
+          "name": "OpenWeatherMap API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nCalculate Urban Heat Island (UHI) Index and interpret conditions for mitigation\nInputs:\n- Environmental sensors data: temperature readings from various urban locations\n- Weather data: ambient temperature, humidity, wind speed\nOutputs:\n- UHI index\n- Alert level\n- Recommendations\n*/\n\nconst sensorData = items[0].json;\nconst weatherData = items[1].json;\n\n// Example logic for UHI index calculation\nconst urbanTemperatures = sensorData.locations.map(loc => loc.temperature);\nconst avgUrbanTemp = urbanTemperatures.reduce((a,b) => a + b, 0) / urbanTemperatures.length;\nconst ambientTemp = weatherData.main.temp;\n\nconst uhiIndex = avgUrbanTemp - ambientTemp;\n\nlet alertLevel = '';\nlet recommendations = [];\n\nif (uhiIndex >= 7) {\n  alertLevel = 'Critical';\n  recommendations.push('Activate emergency cooling centers');\n  recommendations.push('Deploy water misting systems in public spaces');\n  recommendations.push('Issue heat warnings to residents and vulnerable groups');\n} else if (uhiIndex >= 4) {\n  alertLevel = 'High';\n  recommendations.push('Increase green cover in urban hotspots');\n  recommendations.push('Promote use of reflective and cool roofing materials');\n  recommendations.push('Advise residents to stay hydrated and limit outdoor activity');\n} else if (uhiIndex >= 2) {\n  alertLevel = 'Moderate';\n  recommendations.push('Monitor temperature trends closely');\n  recommendations.push('Encourage vegetation planting in neighborhoods');\n} else {\n  alertLevel = 'Normal';\n  recommendations.push('Maintain usual precautions');\n}\n\nreturn [{\n  json: {\n    uhiIndex,\n    alertLevel,\n    recommendations,\n    avgUrbanTemp,\n    ambientTemp\n  }\n}];"
+      },
+      "name": "Analyze UHI Index and Generate Recommendations",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        600,
+        375
+      ],
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "fromEmail": "alerts@citydomain.gov",
+        "toEmail": "city.planners@citydomain.gov,residents@citydomain.gov",
+        "subject": "Urban Heat Island Alert: {{$json[\"alertLevel\"]}} Level Detected",
+        "text": "Urban Heat Island Index: {{$json[\"uhiIndex\"]}}\nAlert Level: {{$json[\"alertLevel\"]}}\n\nRecommendations:\n{{$json[\"recommendations\"].join('\\n- ')}}",
+        "html": "<h3>Urban Heat Island Alert: {{$json[\"alertLevel\"]}} Level Detected</h3><p><strong>UHI Index:</strong> {{$json[\"uhiIndex\"]}}</p><p><strong>Average Urban Temperature:</strong> {{$json[\"avgUrbanTemp\"]}} °C</p><p><strong>Ambient Temperature:</strong> {{$json[\"ambientTemp\"]}} °C</p><h4>Recommendations:</h4><ul>{{ $json[\"recommendations\"].map(r => `<li>${r}</li>`).join('') }}</ul>",
+        "attachmentsUi": {
+          "attachData": []
+        }
+      },
+      "name": "Send Email Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "2",
+          "name": "City SMTP Server"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "message": "Urban Heat Island Alert: {{$json[\"alertLevel\"]}} level detected.\nIndex: {{$json[\"uhiIndex\"]}}\nRecommendations:\n{{$json[\"recommendations\"].join('\\n- ')}}",
+        "phoneNumber": "={{$json[\"alertLevel\"] === 'Critical' ? '+15550000001' : '+15550000002'}}"
+      },
+      "name": "Send SMS Alert",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        900,
+        450
+      ],
+      "credentials": {
+        "twilioApi": {
+          "id": "3",
+          "name": "Twilio Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "urban-heat-alerts",
+        "text": "*Urban Heat Island Alert: {{$json[\"alertLevel\"]}} Level*\nUHI Index: {{$json[\"uhiIndex\"]}}\nRecommendations:\n{{$json[\"recommendations\"].map(r => `- ${r}`).join('\\n')}}"
+      },
+      "name": "Send Slack Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        900,
+        600
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "4",
+          "name": "Slack Workspace"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Get Environmental Sensor Data": {
+      "main": [
+        [
+          {
+            "node": "Get Weather Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Weather Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze UHI Index and Generate Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze UHI Index and Generate Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send SMS Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Slack Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
