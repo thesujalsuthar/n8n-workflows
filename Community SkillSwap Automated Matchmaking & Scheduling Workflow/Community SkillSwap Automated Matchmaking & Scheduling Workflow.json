@@ -1,0 +1,197 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "repository",
+        "operation": "list",
+        "owner": "YourGitHubUsername",
+        "repository": "YourRepoName",
+        "query": "AI-Driven Community SkillSwap Scheduler & Automated Matchmaking System"
+      },
+      "name": "Check GitHub Repo Topics",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const topic = 'AI-Driven Community SkillSwap Scheduler & Automated Matchmaking System';\nconst repoTopics = items[0].json.topics || [];\nif (repoTopics.includes(topic)) {\n  return [{ json: { topicExists: true } }];\n} else {\n  return [{ json: { topicExists: false } }];\n}"
+      },
+      "name": "Check Topic Existence",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "if (items[0].json.topicExists) {\n  throw new Error('Topic already exists in the repository. Workflow halted.');\n}\nreturn items;"
+      },
+      "name": "Stop if Topic Exists",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {},
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [
+        50,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "httpMethod": "POST",
+        "url": "https://api.example.com/skillswap/registerUser",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "{\n  \"name\": \"={{$json[\\\"name\\\"]}}\",\n  \"email\": \"={{$json[\\\"email\\\"]}}\",\n  \"skillsOffered\": \"={{$json[\\\"skillsOffered\\\"]}}\",\n  \"skillsToLearn\": \"={{$json[\\\"skillsToLearn\\\"]}}\",\n  \"location\": \"={{$json[\\\"location\\\"]}}\"\n}"
+      },
+      "name": "Register User Skills",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        950,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const users = items.map(item => item.json);\n\n// Simple matchmaking logic based on matching skillsOffered and skillsToLearn and location proximity\nconst matches = [];\n\nfor (let i = 0; i < users.length; i++) {\n  for (let j = i + 1; j < users.length; j++) {\n    const userA = users[i];\n    const userB = users[j];\n    \n    const skillsAOffers = userA.skillsOffered || [];\n    const skillsAToLearn = userA.skillsToLearn || [];\n    const skillsBOffers = userB.skillsOffered || [];\n    const skillsBToLearn = userB.skillsToLearn || [];\n\n    const locationA = userA.location || '';\n    const locationB = userB.location || '';\n\n    // Basic location match check (could be improved with geo proximity)\n    if (locationA !== locationB) continue;\n\n    // Check if User A offers skills User B wants to learn and vice versa\n    const aCanTeachB = skillsAOffers.some(skill => skillsBToLearn.includes(skill));\n    const bCanTeachA = skillsBOffers.some(skill => skillsAToLearn.includes(skill));\n\n    if (aCanTeachB && bCanTeachA) {\n      matches.push({\n        userA: userA.name,\n        userB: userB.name,\n        location: locationA,\n        matchedSkills: {\n          aToB: skillsAOffers.filter(skill => skillsBToLearn.includes(skill)),\n          bToA: skillsBOffers.filter(skill => skillsAToLearn.includes(skill))\n        }\n      });\n    }\n  }\n}\n\nreturn matches.map(match => ({ json: match }));"
+      },
+      "name": "Match Users",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "httpMethod": "POST",
+        "url": "https://api.example.com/skillswap/scheduleSession",
+        "jsonParameters": true,
+        "bodyParametersJson": "{\n  \"userA\": \"={{$json.userA}}\",\n  \"userB\": \"={{$json.userB}}\",\n  \"location\": \"={{$json.location}}\",\n  \"skills\": \"={{$json.matchedSkills}}\",\n  \"preferredTime\": \"={{$node[\\\"Date & Time\\\"].json.preferredTime || 'Any'}}\"\n}"
+      },
+      "name": "Schedule SkillSwap Session",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "set",
+        "saveData": true,
+        "expression": "={{ new Date().toISOString() }}",
+        "key": "preferredTime"
+      },
+      "name": "Date & Time",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        200
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Check GitHub Repo Topics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check GitHub Repo Topics": {
+      "main": [
+        [
+          {
+            "node": "Check Topic Existence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Topic Existence": {
+      "main": [
+        [
+          {
+            "node": "Stop if Topic Exists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stop if Topic Exists": {
+      "main": [
+        [
+          {
+            "node": "Register User Skills",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Register User Skills": {
+      "main": [
+        [
+          {
+            "node": "Match Users",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Match Users": {
+      "main": [
+        [
+          {
+            "node": "Date & Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Date & Time": {
+      "main": [
+        [
+          {
+            "node": "Schedule SkillSwap Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
