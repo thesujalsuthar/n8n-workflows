@@ -1,0 +1,274 @@
+{
+  "name": "Adaptive AI-Powered Personalized Study Planner with Real-Time Learning Analytics and Motivation Booster",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.example.com/user-profile",
+        "options": {}
+      },
+      "name": "Fetch User Profile",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const userProfile = items[0].json;\nreturn [{ json: { learningPace: userProfile.learningPace, preferences: userProfile.preferences, goals: userProfile.goals } }];"
+      },
+      "name": "Parse User Profile",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "text",
+        "operation": "chatCompletion",
+        "model": "gpt-4",
+        "temperature": 0.7,
+        "max_tokens": 1000,
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an advanced study planner AI. Create a personalized daily study schedule based on the user’s pace, preferences, and goals. Incorporate session durations, subject focus, and breaks."
+          },
+          {
+            "role": "user",
+            "content": "Learning Pace: {{$json[\"learningPace\"]}}\nPreferences: {{$json[\"preferences\"]}}\nGoals: {{$json[\"goals\"]}}"
+          }
+        ]
+      },
+      "name": "Generate Personalized Study Plan",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "text",
+        "operation": "chatCompletion",
+        "model": "gpt-4",
+        "temperature": 0.6,
+        "max_tokens": 500,
+        "messages": [
+          {
+            "role": "system",
+            "content": "Analyze the user's real-time learning analytics data and provide adaptive recommendations to optimize their study plan."
+          },
+          {
+            "role": "user",
+            "content": "Study Analytics: {{$json[\"analytics\"]}}\nCurrent Plan: {{$json[\"studyPlan\"]}}"
+          }
+        ]
+      },
+      "name": "Analyze Learning Analytics and Adapt Plan",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.example.com/learning-analytics?userId={{$json[\"userId\"]}}",
+        "options": {}
+      },
+      "name": "Fetch Real-Time Learning Analytics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        900,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: { studyPlan: $items(\"Generate Personalized Study Plan\")[0].json.choices[0].message.content } }];"
+      },
+      "name": "Extract Initial Study Plan",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: { userId: $items(\"Fetch User Profile\")[0].json.id, analytics: $items(\"Fetch Real-Time Learning Analytics\")[0].json, studyPlan: $items(\"Extract Initial Study Plan\")[0].json.studyPlan } }];"
+      },
+      "name": "Prepare Analytics & Plan Input",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const motivationMessages = [\n  'Keep pushing forward! Every bit counts.',\n  'You are doing great, stay consistent!',\n  'Remember your goals - you can achieve them!',\n  'Take a short break, then come back stronger.',\n  'Believe in yourself, progress is progress!'\n];\n\nconst index = Math.floor(Math.random() * motivationMessages.length);\nreturn [{ json: { message: motivationMessages[index] } }];"
+      },
+      "name": "Generate Motivational Message",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "channel": "{{$json[\"preferences\"].communicationChannel || 'email'}}",
+        "message": "{{$json[\"message\"]}}",
+        "to": "={{$json[\"preferences\"].contact || $json[\"email\"]}}"
+      },
+      "name": "Send Motivation Message",
+      "type": "n8n-nodes-base.messaging",
+      "typeVersion": 1,
+      "position": [
+        1550,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "url": "https://api.example.com/save-study-plan",
+        "options": {},
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "userId",
+              "value": "={{$json[\"userId\"]}}"
+            },
+            {
+              "name": "studyPlan",
+              "value": "={{$json[\"choices\"][0].message.content}}"
+            }
+          ]
+        },
+        "responseFormat": "json"
+      },
+      "name": "Save Updated Study Plan",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Fetch User Profile": {
+      "main": [
+        [
+          {
+            "node": "Parse User Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse User Profile": {
+      "main": [
+        [
+          {
+            "node": "Generate Personalized Study Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Personalized Study Plan": {
+      "main": [
+        [
+          {
+            "node": "Extract Initial Study Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Initial Study Plan": {
+      "main": [
+        [
+          {
+            "node": "Prepare Analytics & Plan Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Real-Time Learning Analytics": {
+      "main": [
+        [
+          {
+            "node": "Prepare Analytics & Plan Input",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Prepare Analytics & Plan Input": {
+      "main": [
+        [
+          {
+            "node": "Analyze Learning Analytics and Adapt Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Learning Analytics and Adapt Plan": {
+      "main": [
+        [
+          {
+            "node": "Save Updated Study Plan",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate Motivational Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Motivational Message": {
+      "main": [
+        [
+          {
+            "node": "Send Motivation Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
