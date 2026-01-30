@@ -1,0 +1,203 @@
+{
+  "name": "AI-Enhanced Community Waste Sorting and Recycling Optimization",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "url": "https://api.sensors.citydata.io/waste-sensors",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Waste Sensors Data Ingestion",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "url": "https://api.communityreports.citydata.io/waste-reports",
+        "responseFormat": "json"
+      },
+      "name": "Community Reports Ingestion",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nCombine sensor data and community reports into a single structured dataset for AI analysis.\n*/\n\nconst sensorsData = items[0].json.data;\nconst reportsData = items[1].json.data;\n\nreturn [{\n  json: {\n    combinedWasteData: {\n      sensors: sensorsData,\n      communityReports: reportsData\n    }\n  }\n}];"
+      },
+      "name": "Combine Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        375
+      ],
+      "notes": "Aggregates sensor and community report data for AI processing."
+    },
+    {
+      "parameters": {
+        "resource": "text",
+        "operation": "chatCompletion",
+        "model": "gpt-4",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an AI assistant specialized in waste management optimization."
+          },
+          {
+            "role": "user",
+            "content": "Analyze the combined waste data to generate optimization recommendations for community waste sorting improvements, recycling route efficiency, and engagement tips. Return a JSON with keys: \"sortingTips\", \"routeAdjustments\", \"communityAlerts\"."
+          },
+          {
+            "role": "assistant",
+            "content": ""
+          },
+          {
+            "role": "user",
+            "content": "Data: {{$json[\"combinedWasteData\"]}}"
+          }
+        ],
+        "options": {}
+      },
+      "name": "AI Analysis for Optimization",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        750,
+        375
+      ],
+      "credentials": {
+        "openAiApi": "OPENAI_API_KEY"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nParse AI JSON response and prepare outputs to update routes and prepare alerts.\n*/\n\nconst aiResponseText = $json[\"choices\"][0][\"message\"][\"content\"];\nlet parsed = {};\ntry {\n  parsed = JSON.parse(aiResponseText);\n} catch (e) {\n  throw new Error('AI response is not valid JSON');\n}\n\nreturn [{\n  json: parsed\n}];"
+      },
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        375
+      ],
+      "notes": "Ensures the AI output is valid JSON and extracts key optimization results."
+    },
+    {
+      "parameters": {
+        "url": "https://api.routing.wastemanagement.io/updateRoutes",
+        "options": {
+          "bodyContentType": "json"
+        },
+        "method": "POST",
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "routeAdjustments",
+              "value": "={{JSON.stringify($json[\"routeAdjustments\"])} }",
+              "type": "string"
+            }
+          ]
+        },
+        "responseFormat": "json"
+      },
+      "name": "Update Recycling Routes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "channel": "sms",
+        "text": "Community Alert: {{$json[\"communityAlerts\"].message}}. Tips: {{$json[\"sortingTips\"].join('; ')}}",
+        "to": "={{$json[\"communityAlerts\"].recipients.join(',')}}"
+      },
+      "name": "Send Community Alerts",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        450
+      ],
+      "credentials": {
+        "twilioApi": "TWILIO_API_KEY"
+      }
+    }
+  ],
+  "connections": {
+    "Waste Sensors Data Ingestion": {
+      "main": [
+        [
+          {
+            "node": "Combine Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Community Reports Ingestion": {
+      "main": [
+        [
+          {
+            "node": "Combine Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Combine Data": {
+      "main": [
+        [
+          {
+            "node": "AI Analysis for Optimization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Analysis for Optimization": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Update Recycling Routes",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Community Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {}
+}
