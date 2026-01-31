@@ -1,0 +1,324 @@
+{
+  "name": "Sustainable AI Urban Commute Optimizer",
+  "nodes": [
+    {
+      "parameters": {
+        "schedule": "0 6 * * *",
+        "options": {}
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.user-location.com/getCurrentLocation",
+        "responseFormat": "json"
+      },
+      "name": "Get User Location",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        450,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const locations = items[0].json;\n// Extract user's latitude and longitude\nreturn [{ json: { lat: locations.latitude, lon: locations.longitude } }];"
+      },
+      "name": "Extract Coordinates",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.public-transport.example.com/v1/routes",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $credentials.publicTransportApi.apiKey }}"
+            }
+          ]
+        },
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "originLat",
+              "value": "={{$json.lat}}"
+            },
+            {
+              "name": "originLon",
+              "value": "={{$json.lon}}"
+            },
+            {
+              "name": "destinationLat",
+              "value": "={{$json.destLat}}"
+            },
+            {
+              "name": "destinationLon",
+              "value": "={{$json.destLon}}"
+            }
+          ]
+        },
+        "responseFormat": "json"
+      },
+      "credentials": {
+        "publicTransportApi": {
+          "id": "1",
+          "name": "Public Transport API Credentials"
+        }
+      },
+      "name": "Fetch Public Transport Routes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        850,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.rideshare.example.com/v1/options",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $credentials.rideShareApi.apiKey }}"
+            }
+          ]
+        },
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "start_lat",
+              "value": "={{$json.lat}}"
+            },
+            {
+              "name": "start_lon",
+              "value": "={{$json.lon}}"
+            },
+            {
+              "name": "end_lat",
+              "value": "={{$json.destLat}}"
+            },
+            {
+              "name": "end_lon",
+              "value": "={{$json.destLon}}"
+            }
+          ]
+        },
+        "responseFormat": "json"
+      },
+      "credentials": {
+        "rideShareApi": {
+          "id": "2",
+          "name": "Ride Share API Credentials"
+        }
+      },
+      "name": "Fetch Ride-Sharing Options",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        850,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.traffic.example.com/v1/updates",
+        "options": {},
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "lat",
+              "value": "={{$json.lat}}"
+            },
+            {
+              "name": "lon",
+              "value": "={{$json.lon}}"
+            }
+          ]
+        },
+        "responseFormat": "json"
+      },
+      "name": "Fetch Real-Time Traffic",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        850,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Optimize routes based on data retrieved:\n  - public transport options\n  - ride-sharing options\n  - real-time traffic\n  Use simple scoring logic prioritizing lowest carbon footprint.\n*/\n\nconst publicRoutes = $items(\"Fetch Public Transport Routes\")[0].json.routes || [];\nconst rideOptions = $items(\"Fetch Ride-Sharing Options\")[0].json.options || [];\nconst traffic = $items(\"Fetch Real-Time Traffic\")[0].json;\n\nfunction estimateCarbon(route) {\n  // Basic carbon estimate: public transport < ride-share, traffic adds penalty\n  let base = 100;\n  if(route.type === 'public') {\n    base = 30;\n  } else if(route.type === 'ride') {\n    base = 70;\n  }\n  if(traffic.status === 'heavy') base += 50;\n  return base;\n}\n\nlet candidates = [];\n\nfor(const r of publicRoutes) {\n  r.type = 'public';\n  r.carbonScore = estimateCarbon(r);\n  candidates.push(r);\n}\n\nfor(const r of rideOptions) {\n  r.type = 'ride';\n  r.carbonScore = estimateCarbon(r);\n  candidates.push(r);\n}\n\ncandidates.sort((a,b) => a.carbonScore - b.carbonScore);\n\nreturn [{ json: { bestRoute: candidates[0], allOptions: candidates } }];"
+      },
+      "name": "Optimize Commute Route",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "chat": {
+          "model": "gpt-4",
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are an eco-friendly urban commuter assistant."
+            },
+            {
+              "role": "user",
+              "content": "Based on the best route data, create a user-friendly summary highlighting the eco-friendly commute plan, including public transit or ride-share options, estimated carbon footprint, and alerts for traffic conditions."
+            },
+            {
+              "role": "assistant",
+              "content": "=Optimize Commute Route.json.bestRoute"
+            }
+          ]
+        }
+      },
+      "name": "Generate Summary with AI",
+      "type": "n8n-nodes-base.chatGPT",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "recipient": "={{$json.userEmail}}",
+        "subject": "Your Eco-Friendly Commute Plan for Today",
+        "text": "={{$node[\"Generate Summary with AI\"].json.choices[0].message.content}}"
+      },
+      "name": "Send Commute Plan Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get User Location",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get User Location": {
+      "main": [
+        [
+          {
+            "node": "Extract Coordinates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Coordinates": {
+      "main": [
+        [
+          {
+            "node": "Fetch Public Transport Routes",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Ride-Sharing Options",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Real-Time Traffic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Public Transport Routes": {
+      "main": [
+        [
+          {
+            "node": "Optimize Commute Route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Ride-Sharing Options": {
+      "main": [
+        [
+          {
+            "node": "Optimize Commute Route",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch Real-Time Traffic": {
+      "main": [
+        [
+          {
+            "node": "Optimize Commute Route",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Optimize Commute Route": {
+      "main": [
+        [
+          {
+            "node": "Generate Summary with AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Summary with AI": {
+      "main": [
+        [
+          {
+            "node": "Send Commute Plan Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "triggerCount": 0,
+  "versionId": "1"
+}
