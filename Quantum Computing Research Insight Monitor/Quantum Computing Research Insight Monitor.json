@@ -1,0 +1,213 @@
+{
+  "name": "Quantum Computing Research Collaboration and Innovation Sentinel",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.crossref.org/works?filter=subject:quantum%20computing&sort=published&order=desc&rows=20",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Fetch Scientific Publications",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://newsapi.org/v2/everything?q=quantum%20computing&sortBy=publishedAt&apiKey={{$credentials.newsApi.apiKey}}",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Fetch News Articles",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "endpoint": "tweets/search/recent",
+        "query": "quantum computing OR #QuantumComputing",
+        "maxResults": 50,
+        "returnFull": true
+      },
+      "name": "Fetch Tweets",
+      "type": "n8n-nodes-base.twitter",
+      "typeVersion": 1,
+      "position": [
+        250,
+        500
+      ],
+      "credentials": {
+        "twitterApi": {
+          "id": "1",
+          "name": "Twitter API Credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "mergeByKey",
+        "keys": [
+          "id"
+        ],
+        "options": {}
+      },
+      "name": "Merge Data",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 1,
+      "position": [
+        550,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "language": "en",
+        "text": "={{ $node[\"Merge Data\"].json.data.map(item => item.title || item.text || item.abstract).join('. ') }}"
+      },
+      "name": "Sentiment Analysis",
+      "type": "n8n-nodes-base.textSentiment",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "keywords",
+        "text": "={{ $node[\"Merge Data\"].json.data.map(item => item.title || item.text || item.abstract).join('. ') }}",
+        "language": "en"
+      },
+      "name": "Trend Analysis",
+      "type": "n8n-nodes-base.textKeywords",
+      "typeVersion": 1,
+      "position": [
+        950,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "mail",
+        "operation": "send",
+        "fromEmail": "n8n@yourdomain.com",
+        "toEmail": "research-team@yourdomain.com",
+        "subject": "Real-Time Quantum Computing Research Update",
+        "text": "Sentiment Score: {{$node[\"Sentiment Analysis\"].json.sentimentScore}}\nTop Trends: {{$node[\"Trend Analysis\"].json.keywords.join(\", \")}}\n\nLatest Updates:\n{{$node[\"Merge Data\"].json.data.map(item => (item.title || item.text || item.abstract)).join(\"\\n\\n\")}}"
+      },
+      "name": "Send Email Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "filter": "={{ $node[\"Sentiment Analysis\"].json.sentimentScore >= 0.7 || $node[\"Trend Analysis\"].json.keywords.includes('breakthrough') }}"
+      },
+      "name": "Filter Important Updates",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Fetch News Articles": {
+      "main": [
+        [
+          {
+            "node": "Merge Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Scientific Publications": {
+      "main": [
+        [
+          {
+            "node": "Merge Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch Tweets": {
+      "main": [
+        [
+          {
+            "node": "Merge Data",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Merge Data": {
+      "main": [
+        [
+          {
+            "node": "Sentiment Analysis",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Trend Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sentiment Analysis": {
+      "main": [
+        [
+          {
+            "node": "Filter Important Updates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trend Analysis": {
+      "main": [
+        [
+          {
+            "node": "Filter Important Updates",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Filter Important Updates": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
