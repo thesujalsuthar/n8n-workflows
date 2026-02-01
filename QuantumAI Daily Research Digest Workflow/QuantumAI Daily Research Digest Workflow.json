@@ -1,0 +1,213 @@
+{
+  "name": "QuantumAI Research Digest Aggregator",
+  "nodes": [
+    {
+      "parameters": {
+        "urls": [
+          "https://arxiv.org/rss/cs.AI",
+          "https://arxiv.org/rss/quant-ph",
+          "https://www.nature.com/subjects/quantum-computing.rss",
+          "https://www.quantamagazine.org/feed/"
+        ]
+      },
+      "name": "Fetch RSS Feeds",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ],
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "mode": "extract",
+        "value": "items",
+        "options": {}
+      },
+      "name": "Parse RSS XML",
+      "type": "n8n-nodes-base.xmlNode",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json[\"title\"] + \" \" + $json[\"description\"] + \" \" + $json[\"content:encoded\"]}}",
+              "operation": "contains",
+              "value2": "quantum ai quantum artificial intelligence quantum computing quantum machine learning"
+            }
+          ]
+        }
+      },
+      "name": "Filter Relevant Content",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fetchAll": false,
+        "options": {}
+      },
+      "name": "Get Metadata & Published Date",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "filter",
+        "filters": {
+          "rules": [
+            {
+              "field": "published",
+              "operation": "isAfter",
+              "value": "={{new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()}}"
+            }
+          ],
+          "logicalOperator": "and"
+        }
+      },
+      "name": "Filter Recent Articles",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const combinedText = items.map(item => item.json.title + '. ' + (item.json.description || '')).join('\\n\\n');\nreturn [{ json: { combinedText } }];"
+      },
+      "name": "Combine Text for Summary",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "resource": "completion",
+        "prompt": "Summarize the following content into a concise daily digest focused on new developments in Quantum Artificial Intelligence, highlighting key insights and trends:\n\n{{$json[\"combinedText\"]}}\n\nSummary:"
+      },
+      "name": "Summarize Digest (OpenAI)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "toEmail": "your.email@example.com",
+        "subject": "Daily QuantumAI Research Digest",
+        "text": "={{$node[\"Summarize Digest (OpenAI)\"].json.choices[0].message.content}}"
+      },
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1700,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Fetch RSS Feeds": {
+      "main": [
+        [
+          {
+            "node": "Parse RSS XML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse RSS XML": {
+      "main": [
+        [
+          {
+            "node": "Filter Relevant Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Relevant Content": {
+      "main": [
+        [
+          {
+            "node": "Get Metadata & Published Date",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Metadata & Published Date": {
+      "main": [
+        [
+          {
+            "node": "Filter Recent Articles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Recent Articles": {
+      "main": [
+        [
+          {
+            "node": "Combine Text for Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine Text for Summary": {
+      "main": [
+        [
+          {
+            "node": "Summarize Digest (OpenAI)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize Digest (OpenAI)": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {}
+}
