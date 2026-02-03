@@ -1,0 +1,307 @@
+{
+  "name": "Quantum Computing Research Digest Aggregator",
+  "nodes": [
+    {
+      "parameters": {
+        "cronExpression": "0 8 * * *",
+        "options": {}
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        250,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://export.arxiv.org/api/query?search_query=all:quantum+computing&start=0&max_results=10&sortBy=submittedDate&sortOrder=descending",
+        "responseFormat": "string",
+        "options": {}
+      },
+      "name": "Fetch arXiv Quantum Papers",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        500,
+        50
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://ieeexploreapi.ieee.org/api/v1/search/articles",
+        "method": "GET",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "querytext",
+              "value": "quantum computing"
+            },
+            {
+              "name": "max_records",
+              "value": "10"
+            },
+            {
+              "name": "format",
+              "value": "json"
+            },
+            {
+              "name": "apikey",
+              "value": "={{$credentials.IEEE_API.key}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Fetch IEEE Quantum Papers",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        500,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const parseXml = require('fast-xml-parser');\nconst xmlData = items[0].json.body;\nconst jsonData = parseXml.parse(xmlData, {\n  ignoreAttributes: false,\n  attributeNamePrefix: '@_'\n});\n\nconst entries = jsonData.feed.entry;\n\nreturn entries.map(entry => {\n  return {\n    json: {\n      title: entry.title,\n      id: entry.id,\n      summary: entry.summary,\n      authors: entry.author.map(a => a.name),\n      published: entry.published\n    }\n  };\n});"
+      },
+      "name": "Parse arXiv XML",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        50
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const articles = items[0].json.articles || items[0].json.records || items[0].json.documents || [];\n\nreturn articles.map(article => {\n  return {\n    json: {\n      title: article.title || article.articleTitle || 'No Title',\n      id: article.articleNumber || article.documentId || '',\n      summary: article.abstract || article.abstractText || '',\n      authors: article.authors ? article.authors.map(a => a.full_name) : [],\n      published: article.pub_date || article.publishedDate || ''\n    }\n  };\n});"
+      },
+      "name": "Parse IEEE JSON",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "multiple",
+        "prompts": [
+          {
+            "text": "Summarize the following quantum computing research abstract in 2-3 concise sentences highlighting key findings:\\n\n{{ $json.summary }}",
+            "type": "text"
+          }
+        ]
+      },
+      "credentials": {
+        "openAIApi": {
+          "id": "OpenAI API"
+        }
+      },
+      "name": "Summarize Abstract with AI",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const text = items[0].json.answer || items[0].json.choices?.[0]?.message?.content || items[0].json.choices?.[0]?.text || '';\n\nconst topics = [];\n\nconst topicKeywords = {\n  \"Quantum Algorithms\": [\"algorithm\", \"grover\", \"shor\", \"variational\", \"optimization\"],\n  \"Quantum Hardware\": [\"hardware\", \"qubit\", \"superconducting\", \"ion trap\", \"topological\"],\n  \"Quantum Error Correction\": [\"error correction\", \"fault tolerance\", \"decoherence\", \"noise\"],\n  \"Quantum Cryptography\": [\"cryptography\", \"quantum key distribution\", \"qkd\", \"encryption\"],\n  \"Quantum Simulation\": [\"simulation\", \"model\", \"emulation\", \"many-body\", \"lattice\"],\n  \"Quantum Communications\": [\"communication\", \"teleportation\", \"entanglement\", \"networks\"]\n};\n\nconst lowerText = text.toLowerCase();\n\nfor (const [topic, keywords] of Object.entries(topicKeywords)) {\n  for (const keyword of keywords) {\n    if (lowerText.includes(keyword)) {\n      topics.push(topic);\n      break;\n    }\n  }\n}\n\nreturn [{ json: { summary: text, topics } }];"
+      },
+      "name": "Categorize by Topic",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const grouped = {};\n\nfor (const item of items) {\n  const topics = item.json.topics.length > 0 ? item.json.topics : [\"Uncategorized\"];\n  for (const topic of topics) {\n    if (!grouped[topic]) {\n      grouped[topic] = [];\n    }\n    grouped[topic].push({\n      title: item.json.title,\n      summary: item.json.summary,\n      authors: item.json.authors.join(\", \"),\n      published: item.json.published\n    });\n  }\n}\n\nreturn [{ json: { grouped } }];"
+      },
+      "name": "Group Summaries by Topic",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const grouped = items[0].json.grouped || {};\n\nlet html = `<h1>Quantum Computing Research Digest - ${new Date().toLocaleDateString()}</h1>`;\n\nfor (const [topic, articles] of Object.entries(grouped)) {\n  html += `<h2>${topic}</h2><ul>`;\n  for (const a of articles) {\n    html += `<li><strong>${a.title}</strong> (${new Date(a.published).toLocaleDateString()})<br>Authors: ${a.authors}<br>${a.summary}</li><br>`;\n  }\n  html += '</ul>';\n}\n\nreturn [{ json: { html } }];"
+      },
+      "name": "Format Digest Email",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1750,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "research-digest@quantumhub.org",
+        "toEmail": "={{$json[\"subscribers\"]?.join(\",\") || $credentials.EMAIL_TO}}",
+        "subject": "Daily Quantum Computing Research Digest",
+        "text": "Please view the HTML version of this email for the latest quantum computing research summaries.",
+        "html": "={{$json.html}}"
+      },
+      "credentials": {
+        "smtp": {
+          "id": "SMTP Email"
+        }
+      },
+      "name": "Send Digest Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        2000,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: { subscribers: [\"alice@research.org\", \"bob@quantummail.com\"] } }];"
+      },
+      "name": "Get Subscribers",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1750,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch arXiv Quantum Papers",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch IEEE Quantum Papers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch arXiv Quantum Papers": {
+      "main": [
+        [
+          {
+            "node": "Parse arXiv XML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch IEEE Quantum Papers": {
+      "main": [
+        [
+          {
+            "node": "Parse IEEE JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse arXiv XML": {
+      "main": [
+        [
+          {
+            "node": "Summarize Abstract with AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse IEEE JSON": {
+      "main": [
+        [
+          {
+            "node": "Summarize Abstract with AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize Abstract with AI": {
+      "main": [
+        [
+          {
+            "node": "Categorize by Topic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Categorize by Topic": {
+      "main": [
+        [
+          {
+            "node": "Group Summaries by Topic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Group Summaries by Topic": {
+      "main": [
+        [
+          {
+            "node": "Format Digest Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Subscribers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Subscribers": {
+      "main": [
+        [
+          {
+            "node": "Send Digest Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Digest Email": {
+      "main": [
+        [
+          {
+            "node": "Send Digest Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
