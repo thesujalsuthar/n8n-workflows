@@ -1,0 +1,214 @@
+{
+  "name": "AI-Driven Carbon Footprint Tracker and Sustainable Lifestyle Coach",
+  "nodes": [
+    {
+      "parameters": {
+        "source": "userInputs",
+        "properties": [
+          {
+            "name": "personalActivity",
+            "type": "json",
+            "value": "{}"
+          },
+          {
+            "name": "transportationData",
+            "type": "json",
+            "value": "{}"
+          },
+          {
+            "name": "consumptionPatterns",
+            "type": "json",
+            "value": "{}"
+          }
+        ]
+      },
+      "name": "Collect User Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.carbonfootprintapi.com/calculate",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={\n  \"activity\": $json.personalActivity,\n  \"transportation\": $json.transportationData,\n  \"consumption\": $json.consumptionPatterns\n}"
+      },
+      "name": "Calculate Carbon Footprint",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.environmentalimpact.io/v1/real-time-data",
+        "method": "GET",
+        "jsonParameters": false,
+        "options": {}
+      },
+      "name": "Fetch Real-Time Environmental Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const footprint = items[0].json;\nconst realTimeData = items[1].json;\n\n// Combine data to prepare prompt\nconst prompt = `I have calculated a user's carbon footprint as follows:\\n${JSON.stringify(footprint, null, 2)}\\n\nReal-time environmental impact data today: ${JSON.stringify(realTimeData, null, 2)}\\n\nProvide personalized actionable sustainability advice and goals to reduce this footprint.`;\n\nreturn [{ json: { prompt }}];"
+      },
+      "name": "Prepare AI Prompt",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "temperature": 0.7,
+        "top_p": 1,
+        "frequency_penalty": 0,
+        "presence_penalty": 0,
+        "stop": [
+          "\n"
+        ],
+        "prompt": "={{ $json.prompt }}",
+        "max_tokens": 500
+      },
+      "name": "Generate Sustainability Advice",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "collection": "userGoals",
+        "idField": "userId",
+        "fields": {
+          "userId": "={{ $json.userId || 'defaultUser' }}",
+          "carbonFootprint": "={{ $items('Calculate Carbon Footprint')[0].json }}",
+          "sustainabilityAdvice": "={{ $json.choices[0].message?.content || $json.choices[0].text || '' }}",
+          "lastUpdated": "={{ new Date().toISOString() }}"
+        }
+      },
+      "name": "Store User Goals and Advice",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "post",
+        "operation": "create",
+        "content": "={{\n  'text': `🌿 Just updated my carbon footprint tracker! My footprint is ${$items('Calculate Carbon Footprint')[0].json.totalCarbonFootprint} kg CO2e. Here's some AI-generated advice to be more sustainable: ${$json.choices[0].message?.content || $json.choices[0].text || ''} #Sustainability #CarbonFootprint #EcoFriendly`\n}}"
+      },
+      "name": "Post Update to Social Platform",
+      "type": "n8n-nodes-base.twitter",
+      "typeVersion": 1,
+      "position": [
+        1750,
+        300
+      ],
+      "credentials": {
+        "twitterOAuth2Api": "Twitter OAuth2 API"
+      }
+    },
+    {
+      "parameters": {},
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [
+        50,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Collect User Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect User Data": {
+      "main": [
+        [
+          {
+            "node": "Calculate Carbon Footprint",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Real-Time Environmental Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Carbon Footprint": {
+      "main": [
+        []
+      ]
+    },
+    "Fetch Real-Time Environmental Data": {
+      "main": [
+        []
+      ]
+    },
+    "Prepare AI Prompt": {
+      "main": [
+        [
+          {
+            "node": "Generate Sustainability Advice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Sustainability Advice": {
+      "main": [
+        [
+          {
+            "node": "Store User Goals and Advice",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Post Update to Social Platform",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
