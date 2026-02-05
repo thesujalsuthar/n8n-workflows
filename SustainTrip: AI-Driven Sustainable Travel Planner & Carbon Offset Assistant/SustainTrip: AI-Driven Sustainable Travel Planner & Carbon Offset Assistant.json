@@ -1,0 +1,295 @@
+{
+  "name": "Personalized AI-Powered Sustainable Travel Planner and Carbon Offset Advisor",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "plan-itinerary",
+        "options": {}
+      },
+      "name": "Trigger HTTP Request",
+      "type": "n8n-nodes-base.httpTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nInput data format:\n{\n  destination: string,\n  origin: string,\n  departureDate: string (ISO),\n  returnDate: string (ISO),\n  preferences: { ecoFriendlyTransportOnly: boolean, maxTravelTimeHours: number }\n}\n*/\n\nconst input = items[0].json;\nreturn [\n  {\n    json: {\n      origin: input.origin,\n      destination: input.destination,\n      departureDate: input.departureDate,\n      returnDate: input.returnDate,\n      preferences: input.preferences,\n    }\n  }\n];"
+      },
+      "name": "Parse User Input",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "authentication": "headerAuth",
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$credentials.openAIApiKey.apiKey}}"
+            }
+          ]
+        },
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "model",
+              "value": "gpt-4"
+            },
+            {
+              "name": "messages",
+              "value": "[\n  {\"role\":\"system\",\"content\":\"You are an AI assistant specialized in sustainable travel planning and carbon footprint optimization.\"},\n  {\"role\":\"user\",\"content\":\"Create an optimized travel route including multi-modal eco-friendly transport options between {{$json.origin}} and {{$json.destination}}, departing {{$json.departureDate}}, returning {{$json.returnDate}}. Consider preferences: {{$json.preferences}}. Provide estimated carbon footprints for each leg of the trip.\"}\n]"
+            },
+            {
+              "name": "temperature",
+              "value": 0.7
+            }
+          ]
+        },
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "AI Route Optimization",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        650,
+        250
+      ],
+      "credentials": {
+        "openAIApiKey": {
+          "id": "1",
+          "name": "OpenAI API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nParse and structure AI response for easier downstream processing.\nExpected response json format:\n{\n  itinerary: [\n    {segment: string, transportMode: string, durationHours: number, carbonEmissionKg: number}\n  ],\n  totalCarbonEmissionKg: number\n}\n*/\nconst aiResponse = JSON.parse(items[0].json.body).choices[0].message.content;\nlet parsed = {};\ntry {\n  parsed = JSON.parse(aiResponse);\n} catch (e) {\n  // fallback: return raw content\n  parsed = { rawContent: aiResponse };\n}\nreturn [{ json: parsed }];"
+      },
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.carbonoffsetservice.example.com/purchase",
+        "method": "POST",
+        "authentication": "headerAuth",
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$credentials.carbonOffsetApiKey.apiKey}}"
+            }
+          ]
+        },
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "offsetAmountKg",
+              "value": "={{$json.totalCarbonEmissionKg || 0}}"
+            },
+            {
+              "name": "userEmail",
+              "value": "={{$json.userEmail || ''}}"
+            }
+          ]
+        },
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Purchase Carbon Offset",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        1050,
+        250
+      ],
+      "credentials": {
+        "carbonOffsetApiKey": {
+          "id": "2",
+          "name": "Carbon Offset API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: {\n  message: `Your sustainable travel itinerary has been planned.\nTotal estimated carbon emissions: ${items[0].json.totalCarbonEmissionKg} kg CO2.\nCarbon offset has been successfully purchased.\nHave a green journey!`,\n  itinerary: items[0].json.itinerary\n}}];"
+      },
+      "name": "Create User Notification",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "toEmail": "={{$json.userEmail}}",
+        "subject": "Sustainable Travel Itinerary & Carbon Offset Confirmation",
+        "html": "={{`<h3>Travel Planner Notification</h3><p>${$json.message}</p><pre>${JSON.stringify($json.itinerary, null, 2)}</pre>`}}"
+      },
+      "name": "Send Email Confirmation",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        250
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "3",
+          "name": "SMTP Email"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const prefs = items[0].json.preferences || {};\nconst alerts = [];\n\nif(!prefs.ecoFriendlyTransportOnly) {\n  alerts.push('Consider opting for eco-friendly transport options to reduce your footprint.');\n}\n\nif(prefs.maxTravelTimeHours && prefs.maxTravelTimeHours > 10) {\n  alerts.push('Long travel times can increase emissions. Try to minimize travel duration where possible.');\n}\n\nreturn [{ json: { alerts } }];"
+      },
+      "name": "Generate Eco-Friendly Alerts",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const main = items[0].json;\nconst alerts = items[1].json.alerts;\n\nmain.alerts = alerts;\nreturn [{ json: main }];"
+      },
+      "name": "Merge Itinerary with Alerts",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        350
+      ],
+      "mode": "mergeByIndex",
+      "input": [
+        "main",
+        "additional"
+      ]
+    }
+  ],
+  "connections": {
+    "Trigger HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Parse User Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse User Input": {
+      "main": [
+        [
+          {
+            "node": "AI Route Optimization",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate Eco-Friendly Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Route Optimization": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Merge Itinerary with Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Eco-Friendly Alerts": {
+      "main": [
+        [
+          {
+            "node": "Merge Itinerary with Alerts",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Itinerary with Alerts": {
+      "main": [
+        [
+          {
+            "node": "Purchase Carbon Offset",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Purchase Carbon Offset": {
+      "main": [
+        [
+          {
+            "node": "Create User Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create User Notification": {
+      "main": [
+        [
+          {
+            "node": "Send Email Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
