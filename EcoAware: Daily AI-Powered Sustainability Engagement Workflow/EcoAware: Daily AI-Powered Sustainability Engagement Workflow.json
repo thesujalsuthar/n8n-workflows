@@ -1,0 +1,122 @@
+{
+  "name": "EcoAware: AI-Driven Personalized Sustainability Tips & Habit Motivation",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 8,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const users = [\n  {\n    id: 1,\n    name: 'Alice',\n    email: 'alice@example.com',\n    phone: '+1234567890',\n    preferences: {\n      interestedIn: ['energy', 'water', 'waste'],\n      habits: ['reduce-energy-usage', 'water-saving']\n    }\n  },\n  {\n    id: 2,\n    name: 'Bob',\n    email: 'bob@example.com',\n    phone: '+1987654321',\n    preferences: {\n      interestedIn: ['transport', 'plastic'],\n      habits: ['bike-to-work', 'plastic-reduction']\n    }\n  }\n];\n\nreturn users.map(user => ({ json: user }));"
+      },
+      "name": "Get Users",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const tipsDatabase = {\n  energy: [\n    'Turn off lights when not in use.',\n    'Use energy-efficient LED bulbs.',\n    'Unplug devices when fully charged.'\n  ],\n  water: [\n    'Take shorter showers.',\n    'Fix leaking taps promptly.',\n    'Collect rainwater for garden use.'\n  ],\n  waste: [\n    'Recycle properly.',\n    'Compost organic waste.',\n    'Avoid single-use plastics.'\n  ],\n  transport: [\n    'Use public transport when possible.',\n    'Bike or walk for short trips.',\n    'Carpool with colleagues.'\n  ],\n  plastic: [\n    'Bring a reusable bag to shop.',\n    'Use a refillable water bottle.',\n    'Avoid plastic straws.'\n  ]\n};\n\nconst habitMotivation = {\n  'reduce-energy-usage': 'Try turning off all non-essential electronics before leaving home today.',\n  'water-saving': 'Remember to turn off the tap while brushing your teeth.',\n  'bike-to-work': 'Plan your week to include biking to work at least twice.',\n  'plastic-reduction': 'Bring your reusable bags to the grocery store today.'\n};\n\nconst user = items[0].json;\n\n// Pick one tip randomly from user's interested categories\nfunction pickRandom(arr) {\n  return arr[Math.floor(Math.random() * arr.length)];\n}\n\nlet selectedTips = [];\nuser.preferences.interestedIn.forEach(category => {\n  if (tipsDatabase[category]) {\n    selectedTips.push(pickRandom(tipsDatabase[category]));\n  }\n});\n\n// Pick motivational habit messages\nlet selectedHabits = user.preferences.habits.map(habit => habitMotivation[habit]).filter(Boolean);\n\nreturn [{\n  json: {\n    userId: user.id,\n    name: user.name,\n    email: user.email,\n    phone: user.phone,\n    tips: selectedTips,\n    habits: selectedHabits\n  }\n}];"
+      },
+      "name": "Generate Tips & Motivation",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "toEmail": "={{$json[\"email\"]}}",
+        "fromEmail": "ecoaaware@yourdomain.com",
+        "subject": "Your Daily EcoAware Sustainability Tips & Motivation",
+        "text": "Hello {{$json[\"name\"]}},\n\nHere are your personalized sustainability tips for today:\n\n{{$json[\"tips\"].map((tip, i) => `${i + 1}. ${tip}`).join('\\n')}}\n\nHabit motivation:\n{{$json[\"habits\"].map((habit, i) => `${i + 1}. ${habit}`).join('\\n')}}\n\nLet's make the world greener, one habit at a time!\n\n- EcoAware Team"
+      },
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        850,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "to": "={{$json[\"phone\"]}}",
+        "text": "Hello {{$json[\"name\"]}}! Your sustainability tip for today: {{$json[\"tips\"].join('; ')}} Habit motivation: {{$json[\"habits\"].join('; ')}} - EcoAware"
+      },
+      "name": "Send SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ],
+      "credentials": {
+        "twilioApi": "Twilio Account"
+      }
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Users",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Users": {
+      "main": [
+        [
+          {
+            "node": "Generate Tips & Motivation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Tips & Motivation": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
