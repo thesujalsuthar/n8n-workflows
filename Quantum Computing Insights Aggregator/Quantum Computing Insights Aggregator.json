@@ -1,0 +1,199 @@
+{
+  "name": "Quantum Computing Collaboration and Innovation Tracker",
+  "nodes": [
+    {
+      "parameters": {
+        "rssFeedUrl": "https://www.nature.com/subjects/quantum-computing/rss",
+        "limit": 10
+      },
+      "name": "Academic Journals RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.conferencealerts.com/v1/events?subject=quantum+computing",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Conference Announcements API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.twitter.com/2/tweets/search/recent?query=quantum%20computing%20OR%20quantumcomputing&max_results=10&tweet.fields=created_at,author_id,text",
+        "headers": {
+          "Authorization": "Bearer YOUR_TWITTER_BEARER_TOKEN"
+        },
+        "responseFormat": "json"
+      },
+      "name": "Twitter Recent Tweets",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const papers = [];\nitems.forEach(item => {\n  if (item.json.items) {\n    item.json.items.forEach(paper => {\n      papers.push({\n        title: paper.title || paper.title[0],\n        authors: paper.author ? paper.author.map(a => a.name).join(\", \") : \"\",\n        summary: paper.summary || paper.description || \"\",\n        link: paper.link || paper.id || \"\"\n      });\n    });\n  } else if (item.json.data) {\n    // Twitter\n    item.json.data.forEach(tweet => {\n      papers.push({\n        title: tweet.text.substring(0, 50) + \"...\",\n        authors: tweet.author_id,\n        summary: tweet.text,\n        link: `https://twitter.com/i/web/status/${tweet.id}`\n      });\n    });\n  } else if (item.json.events) {\n    // Conference alerts\n    item.json.events.forEach(event => {\n      papers.push({\n        title: event.title,\n        authors: event.organizer,\n        summary: event.description || \"\",\n        link: event.url\n      });\n    });\n  }\n});\nreturn papers.map(paper => ({ json: paper }));"
+      },
+      "name": "Aggregate and Normalize Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        450
+      ],
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "model": "gpt-3.5-turbo",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an assistant that summarizes research papers, conference announcements, or tweet data in concise, clear, and professional language."
+          },
+          {
+            "role": "user",
+            "content": "Summarize the following content briefly and highlight key points:\n\n{{$node[\"Aggregate and Normalize Data\"].json[\"summary\"]}}"
+          }
+        ],
+        "temperature": 0.5,
+        "max_tokens": 300
+      },
+      "name": "Summarize Content",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        750,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "email": "user@example.com",
+        "subject": "Quantum Computing Updates - New Research & Opportunities",
+        "message": "Summary of recent quantum computing research, conferences, and social media insights:\n\n{{$node[\"Summarize Content\"].json[\"choices\"][0][\"message\"][\"content\"]}}\n\nStay updated and explore collaboration opportunities!"
+      },
+      "name": "Send Email Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "path": "data/quantum_tracker",
+        "dataPropertyName": "data",
+        "options": {}
+      },
+      "name": "Store Aggregated Data",
+      "type": "n8n-nodes-base.writeBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "mode": "mergeByKey",
+        "mergeBy": "userId",
+        "additionalFields": {},
+        "options": {}
+      },
+      "name": "Personalized Recommendations",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 1,
+      "position": [
+        750,
+        600
+      ],
+      "disabled": true
+    }
+  ],
+  "connections": {
+    "Academic Journals RSS": {
+      "main": [
+        [
+          {
+            "node": "Aggregate and Normalize Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conference Announcements API": {
+      "main": [
+        [
+          {
+            "node": "Aggregate and Normalize Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Twitter Recent Tweets": {
+      "main": [
+        [
+          {
+            "node": "Aggregate and Normalize Data",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Aggregate and Normalize Data": {
+      "main": [
+        [
+          {
+            "node": "Summarize Content",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Store Aggregated Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Personalized Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize Content": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  ],
+  "active": true,
+  "settings": {}
+}
