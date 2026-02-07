@@ -1,0 +1,354 @@
+{
+  "name": "Quantum Computing Research Trend Analyzer and Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.arxiv.org/query?search_query=all:quantum+computing&sortBy=submittedDate&sortOrder=descending&max_results=10",
+        "responseFormat": "string"
+      },
+      "name": "Fetch Arxiv Papers",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://newsapi.org/v2/everything?q=quantum%20computing&sortBy=publishedAt&apiKey={{ $credentials.newsApi.apiKey }}",
+        "responseFormat": "json"
+      },
+      "name": "Fetch News Articles",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        450
+      ],
+      "credentials": {
+        "newsApi": {
+          "id": "1",
+          "name": "NewsApi Credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://api.patentsview.org/patents/query?q={\"_text_any\":{\"patent_abstract\":\"quantum computing\"}}&f=[\"patent_number\",\"patent_title\",\"patent_date\",\"patent_abstract\"]&o={\"per_page\":10,\"sort\":\"patent_date desc\"}",
+        "responseFormat": "json"
+      },
+      "name": "Fetch Patents",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const parseArxivXML = items => {\n  const parser = new DOMParser();\n  return items.map(item => {\n    const xmlDoc = parser.parseFromString(item.json.body, 'text/xml');\n    const entries = Array.from(xmlDoc.getElementsByTagName('entry'));\n    return entries.map(entry => ({\n      title: entry.getElementsByTagName('title')[0].textContent.trim(),\n      summary: entry.getElementsByTagName('summary')[0].textContent.trim(),\n      published: entry.getElementsByTagName('published')[0].textContent,\n      authors: Array.from(entry.getElementsByTagName('author')).map(a => a.getElementsByTagName('name')[0].textContent)\n    }));\n  }).flat();\n};\n\nitems = parseArxivXML(items).map(paper => ({ json: paper }));\nreturn items;"
+      },
+      "name": "Parse Arxiv Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "items = items.map(item => {\n  const articles = item.json.articles || [];\n  return articles.map(article => ({ json: {\n    title: article.title,\n    description: article.description,\n    publishedAt: article.publishedAt,\n    source: article.source.name,\n    url: article.url\n  }}));\n}).flat();\nreturn items;"
+      },
+      "name": "Parse News Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "items = items.map(item => {\n  const patents = item.json.patents || [];\n  return patents.map(patent => ({ json: {\n    patent_number: patent.patent_number,\n    title: patent.patent_title,\n    date: patent.patent_date,\n    abstract: patent.patent_abstract\n  }}));\n}).flat();\nreturn items;"
+      },
+      "name": "Parse Patents Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const combined = [];\n\nitems.forEach(item => {\n  if (item.json.title && item.json.summary) {\n    combined.push({ type: 'paper', ...item.json });\n  } else if (item.json.description) {\n    combined.push({ type: 'news', ...item.json });\n  } else if (item.json.abstract) {\n    combined.push({ type: 'patent', ...item.json });\n  }\n});\n\nreturn combined.map(entry => ({ json: entry }));"
+      },
+      "name": "Combine and Normalize Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        700,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "temperature": 0.3,
+        "maxTokens": 500,
+        "topP": 1,
+        "frequencyPenalty": 0,
+        "presencePenalty": 0,
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an AI assistant that performs sentiment and trend analysis on quantum computing research data."
+          },
+          {
+            "role": "user",
+            "content": "Analyze the following data for sentiment, emerging trends, and summarize the main insights:\n\n{{ $json }}"
+          }
+        ]
+      },
+      "name": "AI Sentiment and Trend Analysis",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        950,
+        450
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "1",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const summary = items[0].json.choices[0].message.content;\nreturn [{ json: { summary } }];"
+      },
+      "name": "Extract Summary",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "alerts@quantumresearch.io",
+        "toEmail": "={{ $json[\"email\"] }}",
+        "subject": "Quantum Computing Research Trend Update",
+        "text": "={{ $json.summary }}",
+        "html": "<p>{{$json.summary}}</p>"
+      },
+      "name": "Send Email Alerts",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        350
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "1",
+          "name": "SMTP Credentials"
+        }
+      },
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "functionCode": "return [\n  { json: { email: 'user1@example.com' } },\n  { json: { email: 'user2@example.com' } }\n];"
+      },
+      "name": "Get Subscribed Users",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "sendMessage",
+        "resource": "chat.postMessage",
+        "channel": "={{ $json[\"chatChannel\"] || 'C1234567890' }}",
+        "text": "={{ $json.summary }}"
+      },
+      "name": "Slack Send Alerts",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        550
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "1",
+          "name": "Slack API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const users = [\n  { email: 'user1@example.com', chatChannel: 'C1234567890' },\n  { email: 'user2@example.com', chatChannel: 'C0987654321' }\n];\n\nreturn users.map(u => ({ json: u }));"
+      },
+      "name": "Get Users with Channels",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        450
+      ]
+    },
+    {
+      "parameters": {},
+      "name": "Split Users for Alerts",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        450
+      ],
+      "continueOnFail": false,
+      "notesInFlow": false
+    }
+  ],
+  "connections": {
+    "Fetch Arxiv Papers": {
+      "main": [
+        [
+          {
+            "node": "Parse Arxiv Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch News Articles": {
+      "main": [
+        [
+          {
+            "node": "Parse News Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Patents": {
+      "main": [
+        [
+          {
+            "node": "Parse Patents Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Arxiv Data": {
+      "main": [
+        [
+          {
+            "node": "Combine and Normalize Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse News Data": {
+      "main": [
+        [
+          {
+            "node": "Combine and Normalize Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Patents Data": {
+      "main": [
+        [
+          {
+            "node": "Combine and Normalize Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine and Normalize Data": {
+      "main": [
+        [
+          {
+            "node": "AI Sentiment and Trend Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Sentiment and Trend Analysis": {
+      "main": [
+        [
+          {
+            "node": "Extract Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Summary": {
+      "main": [
+        [
+          {
+            "node": "Get Users with Channels",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Users with Channels": {
+      "main": [
+        [
+          {
+            "node": "Split Users for Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Users for Alerts": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alerts",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Slack Send Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
