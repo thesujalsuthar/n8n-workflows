@@ -1,0 +1,440 @@
+{
+  "name": "Quantum Computing Research Collaboration and Innovation Tracker",
+  "nodes": [
+    {
+      "parameters": {
+        "urls": [
+          "https://arxiv.org/rss/quant-ph"
+        ]
+      },
+      "name": "Fetch ArXiv Quantum Physics RSS Feed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "value": "=$node[\"Fetch ArXiv Quantum Physics RSS Feed\"].json[\"content\"]"
+      },
+      "name": "Parse RSS XML",
+      "type": "n8n-nodes-base.xmlParse",
+      "typeVersion": 1,
+      "position": [
+        450,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "set",
+        "values": {
+          "string": [
+            {
+              "name": "latestPaperTitle",
+              "value": "={{ $json.channel.item[0].title }}"
+            },
+            {
+              "name": "latestPaperLink",
+              "value": "={{ $json.channel.item[0].link }}"
+            },
+            {
+              "name": "latestPaperSummary",
+              "value": "={{ $json.channel.item[0].description }}"
+            },
+            {
+              "name": "latestPaperPubDate",
+              "value": "={{ $json.channel.item[0].pubDate }}"
+            },
+            {
+              "name": "latestPaperAuthors",
+              "value": "={{ $json.channel.item[0].author || 'Unknown' }}"
+            }
+          ]
+        }
+      },
+      "name": "Extract Latest Paper Details",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        650,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "item",
+        "operation": "getAll",
+        "additionalFields": {},
+        "filters": {}
+      },
+      "name": "Load Known Papers",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [
+        250,
+        450
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": "Google Sheets OAuth2"
+      }
+    },
+    {
+      "parameters": {
+        "mode": "passThrough",
+        "options": {}
+      },
+      "name": "Check If Paper Already Recorded",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        450
+      ],
+      "notesInFlow": true,
+      "notes": "Compare latest paper title or link with already stored entries to determine newness",
+      "functionCode": "const latestTitle = $items(\"Extract Latest Paper Details\")[0].json.latestPaperTitle;\nconst latestLink = $items(\"Extract Latest Paper Details\")[0].json.latestPaperLink;\n\nconst knownPapers = items;\n\nlet alreadyExists = false;\n\nfor (let paper of knownPapers) {\n  if (paper.json.title === latestTitle || paper.json.link === latestLink) {\n    alreadyExists = true;\n    break;\n  }\n}\n\nreturn [{ json: { alreadyExists } }];"
+    },
+    {
+      "parameters": {
+        "fromEmail": "no-reply@quantumtracker.com",
+        "toEmail": "team@quantumresearch.org",
+        "subject": "New Quantum Computing Paper Alert: {{$node[\"Extract Latest Paper Details\"].json.latestPaperTitle}}",
+        "message": "A new paper has been published:\n\nTitle: {{$node[\"Extract Latest Paper Details\"].json.latestPaperTitle}}\nAuthors: {{$node[\"Extract Latest Paper Details\"].json.latestPaperAuthors}}\nPublished: {{$node[\"Extract Latest Paper Details\"].json.latestPaperPubDate}}\n\nSummary:\n{{$node[\"Extract Latest Paper Details\"].json.latestPaperSummary}}\n\nLink: {{$node[\"Extract Latest Paper Details\"].json.latestPaperLink}}"
+      },
+      "name": "Send New Paper Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        850,
+        450
+      ],
+      "credentials": {
+        "smtp": "SMTP Email"
+      }
+    },
+    {
+      "parameters": {
+        "resource": "item",
+        "operation": "create",
+        "fields": {
+          "title": "={{$node[\"Extract Latest Paper Details\"].json.latestPaperTitle}}",
+          "link": "={{$node[\"Extract Latest Paper Details\"].json.latestPaperLink}}",
+          "authors": "={{$node[\"Extract Latest Paper Details\"].json.latestPaperAuthors}}",
+          "pubDate": "={{$node[\"Extract Latest Paper Details\"].json.latestPaperPubDate}}",
+          "summary": "={{$node[\"Extract Latest Paper Details\"].json.latestPaperSummary}}"
+        }
+      },
+      "name": "Store New Paper in Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        450
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": "Google Sheets OAuth2"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "if ($items(\"Check If Paper Already Recorded\")[0].json.alreadyExists) {\n  return [];\n}\nreturn items;"
+      },
+      "name": "Filter Only New Papers",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        700,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "list",
+        "resource": "messages",
+        "additionalFields": {
+          "query": "label:collaborations"
+        },
+        "limit": 50
+      },
+      "name": "Fetch Collaboration Emails",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 1,
+      "position": [
+        250,
+        650
+      ],
+      "credentials": {
+        "gmailOAuth2Api": "Gmail OAuth2"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const emails = [];\nfor (const item of items) {\n  const msg = item.json;\n  emails.push({\n    subject: msg.payload.headers.find(h => h.name === 'Subject').value,\n    from: msg.payload.headers.find(h => h.name === 'From').value,\n    date: new Date(msg.internalDate * 1).toISOString(),\n    snippet: msg.snippet\n  });\n}\nreturn emails.map(email => ({json: email}));"
+      },
+      "name": "Extract Collaboration Email Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        650
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "append",
+        "options": {},
+        "sheetId": "YOUR_COLLABORATION_SHEET_ID",
+        "range": "Collaborations!A:D",
+        "valueInputMode": "USER_ENTERED",
+        "values": "={{[$json[\"date\"], $json[\"from\"], $json[\"subject\"], $json[\"snippet\"]]}}"
+      },
+      "name": "Store Collaboration Emails in Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [
+        650,
+        650
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": "Google Sheets OAuth2"
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "accessToken",
+        "resource": "messages",
+        "operation": "send",
+        "message": {
+          "to": "team@quantumresearch.org",
+          "subject": "Team Update: New Papers & Collaborations Summary",
+          "text": "Please see the updated list of recent papers and collaboration notes in the shared Google Sheets document. Stay aligned and innovate together!"
+        }
+      },
+      "name": "Send Team Update Notification",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 1,
+      "position": [
+        850,
+        650
+      ],
+      "credentials": {
+        "gmailOAuth2Api": "Gmail OAuth2"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const papers = $items(\"Load Known Papers\");\n\n// Aggregate titles for trend analysis\nconst titleTexts = papers.map(p => p.json.title).join(' ').toLowerCase();\n\nconst keywords = [\"quantum\", \"algorithm\", \"error\", \"qubit\", \"entanglement\", \"superposition\", \"decoherence\", \"noise\", \"quantum computing\", \"optimization\"];\n\nconst trends = keywords.map(keyword => {\n  const count = (titleTexts.match(new RegExp(keyword, 'g')) || []).length;\n  return { keyword, count };\n});\n\nreturn trends.map(t => ({ json: t }));"
+      },
+      "name": "Analyze Research Topic Trends",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        250,
+        850
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "update",
+        "sheetId": "YOUR_TRENDS_SHEET_ID",
+        "range": "Trends!A:B",
+        "valueInputMode": "USER_ENTERED",
+        "values": "={{$items(\"Analyze Research Topic Trends\").map(i => [i.json.keyword, i.json.count])}}"
+      },
+      "name": "Update Trend Analysis Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [
+        450,
+        850
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": "Google Sheets OAuth2"
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "sheetId": "YOUR_PROJECTS_SHEET_ID",
+        "range": "Projects!A:E",
+        "valueInputMode": "USER_ENTERED",
+        "values": [
+          [
+            "={{ $now.toISOString() }}",
+            "={{ $json.projectName || \"New Project\" }}",
+            "={{ $json.lead || \"Unassigned\" }}",
+            "={{ $json.status || \"Planning\" }}",
+            "={{ $json.notes || \"\" }}"
+          ]
+        ]
+      },
+      "name": "Store New Collaborative Project",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [
+        650,
+        850
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": "Google Sheets OAuth2"
+      }
+    }
+  ],
+  "connections": {
+    "Fetch ArXiv Quantum Physics RSS Feed": {
+      "main": [
+        [
+          {
+            "node": "Parse RSS XML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse RSS XML": {
+      "main": [
+        [
+          {
+            "node": "Extract Latest Paper Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Latest Paper Details": {
+      "main": [
+        [
+          {
+            "node": "Load Known Papers",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Filter Only New Papers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Known Papers": {
+      "main": [
+        [
+          {
+            "node": "Check If Paper Already Recorded",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Analyze Research Topic Trends",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If Paper Already Recorded": {
+      "main": [
+        [
+          {
+            "node": "Filter Only New Papers",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Filter Only New Papers": {
+      "main": [
+        [
+          {
+            "node": "Send New Paper Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Store New Paper in Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send New Paper Alert": {
+      "main": [
+        [
+          {
+            "node": "Send Team Update Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store New Paper in Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Send Team Update Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Collaboration Emails": {
+      "main": [
+        [
+          {
+            "node": "Extract Collaboration Email Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Collaboration Email Data": {
+      "main": [
+        [
+          {
+            "node": "Store Collaboration Emails in Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Collaboration Emails in Sheet": {
+      "main": [
+        [
+          {
+            "node": "Send Team Update Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Research Topic Trends": {
+      "main": [
+        [
+          {
+            "node": "Update Trend Analysis Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "id": "1"
+}
