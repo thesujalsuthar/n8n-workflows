@@ -1,0 +1,151 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "start-travel-planning",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const data = items[0].json;\n\n// Extract user preferences and travel data\nconst { preferences, travelDetails } = data;\n\nreturn [{ json: { preferences, travelDetails } }];"
+      },
+      "name": "Extract Preferences & Travel Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Simulate calculation of travel carbon footprint based on user travelDetails and preferences\n  This could be replaced by an API call to a third party carbon footprint service\n*/\n\nconst travelDetails = items[0].json.travelDetails;\nconst preferences = items[0].json.preferences;\n\n// Example dummy calculation logic\nfunction calculateCarbonFootprint(details) {\n  let footprint = 0;\n  if(details.mode === 'flight') {\n    footprint = details.distance * 0.21; // approx kg CO2 per km flight\n  } else if(details.mode === 'train') {\n    footprint = details.distance * 0.05; // kg CO2 per km train\n  } else if(details.mode === 'car') {\n    footprint = details.distance * 0.12; // kg CO2 per km car\n  } else {\n    footprint = details.distance * 0.1; // default\n  }\n  // Adjust footprint by traveler preferences e.g. low carbon mode preference\n  if(preferences.lowCarbonMode === true && details.mode === 'car') {\n    footprint *= 1.1; // penalize car slightly\n  }\n  return footprint;\n}\n\nconst carbonFootprint = calculateCarbonFootprint(travelDetails);\n\nreturn [{ json: { carbonFootprint, travelDetails, preferences } }];"
+      },
+      "name": "Calculate Carbon Footprint",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.opentree.eco/v1/environmental-data",
+        "method": "GET",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "location",
+              "value": "={{$json[\"travelDetails\"].destination}}"
+            }
+          ]
+        },
+        "options": {
+          "headers": {
+            "x-api-key": "={{$env.OPENTREE_API_KEY}}"
+          }
+        }
+      },
+      "name": "Fetch Environmental Impact Metrics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Build personalized sustainable travel plan and offset recommendations based on preferences and fetched metrics\n*/\n\nconst { carbonFootprint, preferences } = items[0].json;\nconst envMetrics = items[1].json;\n\n// Simple logic for offset recommendations\nconst offsetOptions = [\n  {\n    name: 'Reforestation Projects',\n    url: 'https://www.ecosia.org/donate',\n    costPerKg: 0.02\n  },\n  {\n    name: 'Renewable Energy Investment',\n    url: 'https://www.tropi.co',\n    costPerKg: 0.03\n  },\n  {\n    name: 'Clean Cookstoves',\n    url: 'https://offset.climateneutralnow.org',\n    costPerKg: 0.015\n  }\n];\n\n// Filter offset options based on user preferences\nlet filteredOffsets = offsetOptions;\nif(preferences.preferredOffsetTypes && preferences.preferredOffsetTypes.length > 0) {\n  filteredOffsets = offsetOptions.filter(o => preferences.preferredOffsetTypes.includes(o.name));\n}\n\n// Compose recommendation details\nconst recommendations = filteredOffsets.map(option => {\n  const cost = (carbonFootprint * option.costPerKg).toFixed(2);\n  return {\n    offsetName: option.name,\n    offsetUrl: option.url,\n    estimatedCostUSD: cost\n  };\n});\n\nconst travelPlan = {\n  carbonFootprintKg: carbonFootprint.toFixed(2),\n  destination: items[0].json.travelDetails.destination,\n  preferredMode: items[0].json.travelDetails.mode,\n  environmentalMetrics: envMetrics,\n  offsetRecommendations: recommendations\n};\n\nreturn [{ json: travelPlan }];"
+      },
+      "name": "Generate Travel Plan & Offsets",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "expression": "={{ $json }}",
+        "binaryPropertyName": ""
+      },
+      "name": "Respond to User",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Extract Preferences & Travel Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Preferences & Travel Data": {
+      "main": [
+        [
+          {
+            "node": "Calculate Carbon Footprint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Carbon Footprint": {
+      "main": [
+        [
+          {
+            "node": "Fetch Environmental Impact Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Environmental Impact Metrics": {
+      "main": [
+        [
+          {
+            "node": "Generate Travel Plan & Offsets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Travel Plan & Offsets": {
+      "main": [
+        [
+          {
+            "node": "Respond to User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
