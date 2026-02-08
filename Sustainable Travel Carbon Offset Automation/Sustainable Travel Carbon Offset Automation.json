@@ -1,0 +1,152 @@
+{
+  "name": "AI-Powered Sustainable Travel Carbon Offset Tracker and Optimizer",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.carbonfootprint.com/travel/emissions",
+        "method": "POST",
+        "responseFormat": "json",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={\n  \"travelMode\": $json[\"mode\"],\n  \"distanceKm\": $json[\"distance\"],\n  \"travelDate\": $json[\"date\"]\n}"
+      },
+      "name": "Calculate Carbon Footprint",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        300,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return {\n  recommendations: [\n    {\n      providerName: 'Green Offset Co',\n      offsetAmount: $json.emissions_kg,\n      priceUSD: ($json.emissions_kg * 0.02).toFixed(2),\n      verification: 'Verified Carbon Standard',\n      purchaseUrl: 'https://greenoffsetco.com/checkout?amount=' + ($json.emissions_kg * 0.02).toFixed(2)\n    },\n    {\n      providerName: 'EcoTrees',\n      offsetAmount: $json.emissions_kg,\n      priceUSD: ($json.emissions_kg * 0.018).toFixed(2),\n      verification: 'Gold Standard',\n      purchaseUrl: 'https://ecotrees.org/pay?amount=' + ($json.emissions_kg * 0.018).toFixed(2)\n    }\n  ]\n};"
+      },
+      "name": "Generate Offset Recommendations",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        550,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "paymentMethod": "creditCard",
+        "paymentDetails": {
+          "number": "={{$json.cardNumber}}",
+          "expiryMonth": "={{$json.expMonth}}",
+          "expiryYear": "={{$json.expYear}}",
+          "cvc": "={{$json.cvc}}"
+        },
+        "amount": "={{$json.priceUSD}}",
+        "currency": "USD",
+        "description": "Carbon Offset Purchase for travel emissions"
+      },
+      "name": "Process Payment",
+      "type": "stripe",
+      "typeVersion": 1,
+      "position": [
+        800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "no-reply@sustainabletravel.app",
+        "toEmail": "={{$json.userEmail}}",
+        "subject": "Your Carbon Offset Purchase Confirmation",
+        "text": "Thank you for offsetting your travel carbon footprint!\\n\\nYou purchased offsets from {{$json.providerName}} for {{$json.offsetAmount}} kg CO2.\\nAmount charged: ${{$json.priceUSD}} USD.\\n\\nVerification: {{$json.verification}}\\n\\nTogether, we reduce environmental impact.\\n\\n- Sustainable Travel Team"
+      },
+      "name": "Send Email Notification",
+      "type": "emailSend",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "service": "telegram",
+        "chatId": "={{$json.userTelegramChatId}}",
+        "text": "={{\n  `Carbon offset purchase confirmed! You have offset ${$json.offsetAmount} kg CO2 with ${$json.providerName}. Amount charged: $${$json.priceUSD} USD.`\n}}"
+      },
+      "name": "Send Telegram Notification",
+      "type": "telegram",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "triggerOn": "webhook",
+        "httpMethod": "POST",
+        "path": "offset-travel"
+      },
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        50,
+        300
+      ],
+      "webhookId": "ai-powered-sustainable-travel-offset"
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Calculate Carbon Footprint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Carbon Footprint": {
+      "main": [
+        [
+          {
+            "node": "Generate Offset Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Offset Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Process Payment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Payment": {
+      "main": [
+        [
+          {
+            "node": "Send Email Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Telegram Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {}
+}
