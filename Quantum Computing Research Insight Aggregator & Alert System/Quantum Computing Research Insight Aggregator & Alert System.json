@@ -1,0 +1,235 @@
+{
+  "name": "Quantum Computing Research Trend Insight Aggregator and Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.crossref.org/works?query=quantum+computing&filter=from-pub-date:{{ $today.minusDays(7).toISOString().slice(0,10) }}&rows=20",
+        "responseFormat": "json"
+      },
+      "name": "Fetch Latest Journal Articles",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.biorxiv.org/details/quant-ph/{{ $today.minusDays(7).toISOString().slice(0,10).replace(/-/g, '') }}/{{ $today.toISOString().slice(0,10).replace(/-/g, '') }}",
+        "responseFormat": "json"
+      },
+      "name": "Fetch Latest Preprints",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://newsapi.org/v2/everything",
+        "method": "GET",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "q",
+              "value": "quantum computing"
+            },
+            {
+              "name": "from",
+              "value": "={{$today.minusDays(7).toISOString().slice(0,10)}}"
+            },
+            {
+              "name": "sortBy",
+              "value": "relevance"
+            },
+            {
+              "name": "apiKey",
+              "value": "YOUR_NEWSAPI_KEY"
+            }
+          ]
+        },
+        "responseFormat": "json"
+      },
+      "name": "Fetch News Articles",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const journalItems = $items(\"Fetch Latest Journal Articles\")[0].json.message.items;\nconst preprintItems = $items(\"Fetch Latest Preprints\")[0].json.collection;\nconst newsItems = $items(\"Fetch News Articles\")[0].json.articles;\n\n// Aggregate all titles and abstracts/summaries for NLP processing\nconst combinedTexts = [];\n\njournalItems.forEach(item => {\n  combinedTexts.push(item.title + \". \" + (item.abstract || \"\"));\n});\n\npreprintItems.forEach(item => {\n  combinedTexts.push(item.title + \". \" + (item.abstract || \"\"));\n});\n\nnewsItems.forEach(article => {\n  combinedTexts.push(article.title + \". \" + (article.description || \"\"));\n});\n\nreturn [{ json: { combinedTexts }}];"
+      },
+      "name": "Aggregate Texts",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-3.5-turbo",
+        "temperature": 0.5,
+        "max_tokens": 500,
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an expert AI assistant specializing in summarizing scientific research trends."
+          },
+          {
+            "role": "user",
+            "content": "Analyze the following collection of text excerpts from research articles, preprints, and news about quantum computing from the last week. Provide a concise summary of the emerging research trends, notable breakthroughs, and significant changes or focus shifts in this field."
+          },
+          {
+            "role": "user",
+            "content": "={{ $json.combinedTexts.join('\\n---\\n') }}"
+          }
+        ]
+      },
+      "name": "Summarize Trends Using ChatGPT",
+      "type": "n8n-nodes-base.openaiChat",
+      "typeVersion": 1,
+      "position": [
+        750,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n Sample logic to detect significant keywords or breakthrough mentions in the summary.\n*/\nconst summary = $json[\"choices\"][0][\"message\"][\"content\"].toLowerCase();\n\nconst keywords = [\"breakthrough\", \"novel\", \"significant\", \"first\", \"new\", \"improvement\", \"milestone\", \"demonstration\", \"advancement\"];\n\nconst alerts = keywords.filter(keyword => summary.includes(keyword));\n\nif(alerts.length > 0){\n  return [{ json: { summary, alerts, alertTriggered: true } }];\n}\n\nreturn [{ json: { summary, alerts: [], alertTriggered: false } }];"
+      },
+      "name": "Detect Significant Trend Changes",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "alerts@quantumresearchupdates.com",
+        "toEmail": "user@example.com",
+        "subject": "Quantum Computing Research Update",
+        "text": "={{$json.summary}}\n\nAlerts: {{$json.alerts.join(\", \")}}",
+        "options": {}
+      },
+      "name": "Send Real-Time Alert Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        450
+      ],
+      "disabled": false
+    },
+    {
+      "parameters": {},
+      "name": "Cron Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        50,
+        450
+      ]
+    }
+  ],
+  "connections": {
+    "Cron Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Latest Journal Articles",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Latest Preprints",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch News Articles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Latest Journal Articles": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Texts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Latest Preprints": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Texts",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch News Articles": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Texts",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Aggregate Texts": {
+      "main": [
+        [
+          {
+            "node": "Summarize Trends Using ChatGPT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize Trends Using ChatGPT": {
+      "main": [
+        [
+          {
+            "node": "Detect Significant Trend Changes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect Significant Trend Changes": {
+      "main": [
+        [
+          {
+            "node": "Send Real-Time Alert Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
