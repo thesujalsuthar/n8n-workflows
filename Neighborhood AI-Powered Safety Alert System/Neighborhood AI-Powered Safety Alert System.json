@@ -1,0 +1,175 @@
+{
+  "name": "Neighborhood AI-Powered Community Safety and Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "urls": [
+          "https://api.localcrime.com/v1/incidents",
+          "https://api.publicsafetydata.org/v2/reports",
+          "https://api.weatheralerts.gov/v1/alerts"
+        ],
+        "options": {}
+      },
+      "name": "Fetch Crime Data",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/* Aggregate multiple data sources into a single unified dataset */\nconst crimeData = [];\nconst safetyReports = [];\nconst weatherAlerts = [];\n\nfor (const item of items) {\n  if (item.json.incidents) {\n    crimeData.push(...item.json.incidents);\n  }\n  if (item.json.reports) {\n    safetyReports.push(...item.json.reports);\n  }\n  if (item.json.alerts) {\n    weatherAlerts.push(...item.json.alerts);\n  }\n}\n\nreturn [{ json: { crimeData, safetyReports, weatherAlerts } }];"
+      },
+      "name": "Aggregate Data",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "options": {
+          "temperature": 0.3,
+          "max_tokens": 1000
+        },
+        "prompt": "You are an AI assistant specializing in public safety analysis.\n\nGiven the aggregated data below containing local crime incidents, safety reports, and weather-related alerts, analyze and classify neighborhood risk levels into: Low, Moderate, High, or Critical.\n\nProvide unique actionable insights, considering crime trends, hotspots, time of day, and current alerts.\n\nData:\n{{ $json }}\n\nReturn a JSON object with fields:\n- riskLevel (one of Low, Moderate, High, Critical)\n- insights (array of strings)\n- hotspotAreas (array of location names or coordinates)\n- recommendedActions (array of strings targeting residents and local authorities)"
+      },
+      "name": "AI Risk Assessment & Insights",
+      "type": "openai",
+      "typeVersion": 1,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {},
+      "name": "Split Residents and Authorities",
+      "type": "splitInBatches",
+      "typeVersion": 1,
+      "position": [
+        950,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/* Prepare tailored notifications based on role */\nconst input = items[0].json;\nconst recipients = $input.all()[0].recipients;\nconst role = recipients[0].role || 'resident';\n\nlet message = '';\n\nif (role === 'resident') {\n  message = `Neighborhood Risk Level: ${input.riskLevel}\\nRecommendations for Residents:\\n- ${input.recommendedActions.filter(a => a.includes('resident')).join('\\n- ')}\\nSafety Hotspots: ${input.hotspotAreas.join(', ')}`;\n} else if (role === 'authority' || role === 'local_authority') {\n  message = `Neighborhood Risk Level: ${input.riskLevel}\\nRecommended Actions for Authorities:\\n- ${input.recommendedActions.filter(a => a.includes('authority')).join('\\n- ')}\\nHotspot Areas to Deploy Resources: ${input.hotspotAreas.join(', ')}`;\n} else {\n  message = `Neighborhood Update: Risk Level ${input.riskLevel}\\nInsights:\\n- ${input.insights.join('\\n- ')}`;\n}\n\nreturn [{ json: { recipient: recipients[0].contact, role, message } }];"
+      },
+      "name": "Tailor Notifications",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "resource": "message",
+        "service": "twilio",
+        "phoneNumber": "={{ $json.recipient }}",
+        "text": "={{ $json.message }}"
+      },
+      "name": "Send SMS Notifications",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        250
+      ],
+      "credentials": {
+        "twilioApi": "twilio_account"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "/* Filter recipients into residents and authorities for tailored alerts */\nconst allRecipients = [\n  { contact: '+12345550001', role: 'resident' },\n  { contact: '+12345550002', role: 'resident' },\n  { contact: '+18005550003', role: 'local_authority' },\n  { contact: '+18005550004', role: 'local_authority' }\n];\n\nconst role = $json.role || 'resident';\n\nconst filtered = allRecipients.filter(r => r.role === role);\n\nreturn filtered.map(r => ({ json: { contact: r.contact, role: r.role } }));"
+      },
+      "name": "Filter Recipients By Role",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        250
+      ]
+    }
+  ],
+  "connections": {
+    "Fetch Crime Data": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Data": {
+      "main": [
+        [
+          {
+            "node": "AI Risk Assessment & Insights",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Risk Assessment & Insights": {
+      "main": [
+        [
+          {
+            "node": "Filter Recipients By Role",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Recipients By Role": {
+      "main": [
+        [
+          {
+            "node": "Split Residents and Authorities",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Residents and Authorities": {
+      "main": [
+        [
+          {
+            "node": "Tailor Notifications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tailor Notifications": {
+      "main": [
+        [
+          {
+            "node": "Send SMS Notifications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
