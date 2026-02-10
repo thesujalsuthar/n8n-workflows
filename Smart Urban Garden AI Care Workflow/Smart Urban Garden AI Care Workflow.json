@@ -1,0 +1,292 @@
+{
+  "name": "Smart Urban Garden AI Assistant",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.environmentalsensors.local/data",
+        "options": {},
+        "responseFormat": "json",
+        "jsonParameters": true
+      },
+      "name": "Fetch Environmental Sensor Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.plantcare.local/status",
+        "options": {},
+        "responseFormat": "json",
+        "jsonParameters": true
+      },
+      "name": "Fetch Plant Status Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const envData = items[0].json;\nconst plantData = items[1].json;\n\n// Combine environmental and plant status data\nconst combinedData = {\n  environment: envData,\n  plantStatus: plantData\n};\n\nreturn [{ json: combinedData }];"
+      },
+      "name": "Combine Sensor and Plant Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        375
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "openAi",
+        "operation": "chatCompletion",
+        "model": "gpt-4",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are a smart garden assistant who analyzes environmental sensor data and plant health data to detect issues such as pests, diseases, and suboptimal conditions, and then provide eco-friendly care recommendations including watering schedules, pest treatment, and sunlight optimization."
+          },
+          {
+            "role": "user",
+            "content": "Analyze the following data and provide:\n- Alerts for any detected pest infestations or diseases.\n- Recommendations for watering, pest control, and sunlight optimization.\n- Suggested eco-friendly treatment schedules.\n\nData:\n{{JSON.stringify($json)}}"
+          }
+        ],
+        "options": {}
+      },
+      "name": "AI Analysis and Recommendations",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        750,
+        375
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const analysis = items[0].json.choices[0].message.content;\n\n// Extract structured data if possible (assuming AI returned JSON string after text)\nlet recommendations = {};\ntry {\n  const jsonStart = analysis.indexOf('{');\n  const jsonEnd = analysis.lastIndexOf('}') + 1;\n  if(jsonStart !== -1 && jsonEnd !== -1){\n    recommendations = JSON.parse(analysis.substring(jsonStart, jsonEnd));\n  } else {\n    recommendations.rawText = analysis;\n  }\n} catch (error) {\n  recommendations.rawText = analysis;\n}\n\nreturn [{ json: { analysisText: analysis, recommendations } }];"
+      },
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        375
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "email",
+        "operation": "send",
+        "toEmail": "user@example.com",
+        "subject": "Daily Smart Urban Garden Report",
+        "text": "Here is your daily Smart Urban Garden summary and care recommendations:\n\n{{$json.analysisText}}"
+      },
+      "name": "Send Daily Summary Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "channel": "garden-alerts",
+        "text": "Alert: {{$json.recommendations.alerts}}",
+        "options": {}
+      },
+      "name": "Send Real-Time Alerts",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [\n  { json: { schedule: 'watering', cronTime: '0 7 * * *', timezone: 'America/New_York' } },\n  { json: { schedule: 'pestControl', cronTime: '0 8 * * 1,4', timezone: 'America/New_York' } },\n  { json: { schedule: 'sunlightOptimization', cronTime: '0 9 * * *', timezone: 'America/New_York' } }\n];"
+      },
+      "name": "Define Schedules",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        250,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "system",
+        "operation": "triggerCron",
+        "cronTime": "={{$json.cronTime}}",
+        "timezone": "={{$json.timezone}}",
+        "options": {}
+      },
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        500,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const scheduleType = $json.schedule;\n\nreturn [{ json: { \n  treatmentType: scheduleType,\n  command: `Execute scheduled task for ${scheduleType}`\n}}];"
+      },
+      "name": "Create Treatment Command",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.plantcare.local/execute-treatment",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={\"treatmentType\": $json.treatmentType, \"command\": $json.command}"
+      },
+      "name": "Execute Treatment Command",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "triggerTimes": 1,
+        "waitTime": 86400000
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.interval",
+      "typeVersion": 1,
+      "position": [
+        750,
+        600
+      ]
+    }
+  ],
+  "connections": {
+    "Define Schedules": {
+      "main": [
+        [
+          {
+            "node": "Schedule Trigger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Create Treatment Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Treatment Command": {
+      "main": [
+        [
+          {
+            "node": "Execute Treatment Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Environmental Sensor Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Environmental Sensor Data": {
+      "main": [
+        [
+          {
+            "node": "Fetch Plant Status Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Plant Status Data": {
+      "main": [
+        [
+          {
+            "node": "Combine Sensor and Plant Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine Sensor and Plant Data": {
+      "main": [
+        [
+          {
+            "node": "AI Analysis and Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Analysis and Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Send Daily Summary Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Real-Time Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "smart-urban-garden-ai-assistant"
+}
