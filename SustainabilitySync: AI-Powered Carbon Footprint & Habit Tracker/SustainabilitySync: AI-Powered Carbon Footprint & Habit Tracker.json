@@ -1,0 +1,252 @@
+{
+  "workflow": {
+    "name": "AI-Driven Carbon Footprint and Sustainability Habit Tracker",
+    "description": "Tracks individual carbon footprint and sustainability habits with personalized tips, progress visualization, and real-time community impact updates.",
+    "components": {
+      "userProfile": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "description": "Unique identifier for the user"
+          },
+          "name": {
+            "type": "string",
+            "description": "User's full name"
+          },
+          "location": {
+            "type": "string",
+            "description": "User's geographic location for localized tips and impact"
+          },
+          "preferences": {
+            "type": "object",
+            "properties": {
+              "preferredUnits": {
+                "type": "string",
+                "enum": ["kgCO2", "lbsCO2"],
+                "description": "Preferred unit for carbon footprint display"
+              },
+              "notificationSettings": {
+                "type": "object",
+                "properties": {
+                  "tipFrequency": {
+                    "type": "string",
+                    "enum": ["daily", "weekly", "monthly"]
+                  },
+                  "progressUpdates": {
+                    "type": "boolean"
+                  },
+                  "communityUpdates": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["tipFrequency", "progressUpdates", "communityUpdates"]
+              }
+            },
+            "required": ["preferredUnits", "notificationSettings"]
+          }
+        },
+        "required": ["userId", "name", "location", "preferences"]
+      },
+      "habitTracker": {
+        "type": "object",
+        "description": "Tracks sustainability-related habits with dates, types and impact",
+        "properties": {
+          "habits": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "habitId": {
+                  "type": "string",
+                  "description": "Unique identifier for the habit"
+                },
+                "habitName": {
+                  "type": "string",
+                  "description": "Name of the habit (e.g., 'Use public transportation')"
+                },
+                "category": {
+                  "type": "string",
+                  "description": "Category of sustainability action (e.g., Energy, Transportation)"
+                },
+                "impactValue": {
+                  "type": "number",
+                  "description": "Estimated carbon saved per completion (in preferred units)"
+                },
+                "frequency": {
+                  "type": "string",
+                  "enum": ["daily", "weekly", "monthly", "as_needed"]
+                }
+              },
+              "required": ["habitId", "habitName", "category", "impactValue", "frequency"]
+            }
+          },
+          "habitLogs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "habitId": {
+                  "type": "string"
+                },
+                "date": {
+                  "type": "string",
+                  "format": "date"
+                },
+                "completed": {
+                  "type": "boolean"
+                },
+                "notes": {
+                  "type": "string",
+                  "description": "Optional notes about the habit completion"
+                }
+              },
+              "required": ["habitId", "date", "completed"]
+            }
+          }
+        },
+        "required": ["habits", "habitLogs"]
+      },
+      "personalizedTips": {
+        "type": "object",
+        "description": "AI-generated personalized sustainability tips",
+        "properties": {
+          "generateTips": {
+            "type": "function",
+            "description": "Generates tips based on habit completion and user profile",
+            "inputs": ["userProfile", "habitLogs"],
+            "outputs": ["tips"]
+          },
+          "tips": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "tipId": {
+                  "type": "string"
+                },
+                "tipText": {
+                  "type": "string"
+                },
+                "relatedHabitId": {
+                  "type": "string",
+                  "description": "Habit this tip is related to"
+                },
+                "priority": {
+                  "type": "string",
+                  "enum": ["high", "medium", "low"]
+                }
+              },
+              "required": ["tipId", "tipText", "priority"]
+            }
+          }
+        },
+        "required": ["generateTips", "tips"]
+      },
+      "progressVisualization": {
+        "type": "object",
+        "description": "Visual representations of tracked progress",
+        "properties": {
+          "generateGraphs": {
+            "type": "function",
+            "description": "Creates graphs and charts from habit data",
+            "inputs": ["habitLogs", "habits"],
+            "outputs": ["carbonSavingsGraph", "habitCompletionChart"]
+          },
+          "carbonSavingsGraph": {
+            "type": "object",
+            "description": "Data for carbon savings over time",
+            "properties": {
+              "timeSeries": {
+                "type": "array",
+                "items": {
+                  "date": "string",
+                  "carbonSaved": "number"
+                }
+              }
+            },
+            "required": ["timeSeries"]
+          },
+          "habitCompletionChart": {
+            "type": "object",
+            "description": "Data representing habit completion rates",
+            "properties": {
+              "habitCompletionPercentages": {
+                "type": "array",
+                "items": {
+                  "habitId": "string",
+                  "completionRate": "number"
+                }
+              }
+            },
+            "required": ["habitCompletionPercentages"]
+          }
+        },
+        "required": ["generateGraphs", "carbonSavingsGraph", "habitCompletionChart"]
+      },
+      "communityImpactUpdates": {
+        "type": "object",
+        "description": "Real-time updates summarizing community sustainability impact",
+        "properties": {
+          "fetchCommunityData": {
+            "type": "function",
+            "description": "Retrieves aggregated community data",
+            "outputs": ["communityCarbonSaved", "communityHabitStats"]
+          },
+          "communityCarbonSaved": {
+            "type": "object",
+            "properties": {
+              "totalCarbonSaved": {
+                "type": "number",
+                "description": "Total carbon saved by community (in preferred units)"
+              },
+              "timeframe": {
+                "type": "string",
+                "enum": ["daily", "weekly", "monthly", "all_time"]
+              }
+            },
+            "required": ["totalCarbonSaved", "timeframe"]
+          },
+          "communityHabitStats": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "habitId": {
+                  "type": "string"
+                },
+                "participants": {
+                  "type": "integer",
+                  "description": "Number of community members performing this habit"
+                },
+                "averageCompletionRate": {
+                  "type": "number",
+                  "description": "Average completion rate among participants"
+                }
+              },
+              "required": ["habitId", "participants", "averageCompletionRate"]
+            }
+          }
+        },
+        "required": ["fetchCommunityData", "communityCarbonSaved", "communityHabitStats"]
+      }
+    },
+    "workflowSequence": [
+      "Initialize user profile",
+      "Load user habits and habit logs",
+      "Generate personalized tips based on recent habit activity",
+      "Visualize user progress with graphs and charts",
+      "Fetch and update real-time community impact statistics",
+      "Notify user with personalized tips, progress updates, and community impact"
+    ],
+    "notifications": {
+      "enabled": true,
+      "channels": ["email", "push", "in_app"],
+      "contentTemplates": {
+        "tipNotification": "Here's a personalized tip to help you reduce your carbon footprint today: {{tipText}}",
+        "progressUpdate": "Great progress! You've saved {{carbonSaved}} {{unit}} this week through your sustainable habits.",
+        "communityUpdate": "Your community has collectively saved {{communityCarbonSaved}} {{unit}} this {{timeframe}}. Keep up the great work!"
+      }
+    }
+  }
+}
