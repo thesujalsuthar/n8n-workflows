@@ -1,0 +1,167 @@
+{
+  "name": "EcoAware AI: Personalized Daily Sustainability Habit Tracker & Motivator",
+  "nodes": [
+    {
+      "parameters": {
+        "functionCode": "const userId = $json[\"user_id\"];\nconst today = new Date().toISOString().split('T')[0];\nreturn [{ json: { userId, date: today } }];"
+      },
+      "name": "Set Date and User",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const habits = [\n  \"Reducing plastic use\",\n  \"Using public transport\",\n  \"Saving water\",\n  \"Recycling regularly\",\n  \"Eating plant-based meals\",\n  \"Energy saving at home\",\n  \"Composting organic waste\"\n];\n\nconst randomHabit = habits[Math.floor(Math.random() * habits.length)];\n\nconst tips = {\n  \"Reducing plastic use\": \"Carry a reusable water bottle and shopping bag to minimize plastic waste.\",\n  \"Using public transport\": \"Try carpooling or using public transit to reduce your carbon footprint.\",\n  \"Saving water\": \"Turn off the tap while brushing your teeth to save gallons of water daily.\",\n  \"Recycling regularly\": \"Sort your waste properly to ensure recyclable materials don't end up in landfills.\",\n  \"Eating plant-based meals\": \"Incorporate more plant-based meals into your diet to reduce environmental impact.\",\n  \"Energy saving at home\": \"Turn off lights and unplug devices when not in use to save energy.\",\n  \"Composting organic waste\": \"Start composting kitchen scraps to reduce landfill and enrich your soil.\"\n};\n\nreturn [{ json: { habit: randomHabit, tip: tips[randomHabit], date: $json.date, userId: $json.userId } }];"
+      },
+      "name": "Select Daily Tip",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "type": "POST",
+        "url": "https://formservice.example.com/submit",
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "userId",
+              "value": "={{$json[\"userId\"]}}"
+            },
+            {
+              "name": "date",
+              "value": "={{$json[\"date\"]}}"
+            },
+            {
+              "name": "habit",
+              "value": "={{$json[\"habit\"]}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Generate Habit Tracking Form URL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "ecoaware@yourdomain.com",
+        "toEmail": "={{$json[\"email\"]}}",
+        "subject": "Your Daily Sustainability Tip & Habit Tracker",
+        "text": "Hello,\n\nToday's sustainability tip:\n{{ $json[\"tip\"] }}\n\nPlease update your progress for the habit: {{ $json[\"habit\"] }} by submitting your input here:\n\n[Track your progress](https://formservice.example.com/track?user={{ $json[\"userId\"] }}&date={{ $json[\"date\"] }})\n\nKeep up the great work!\n\nEcoAware AI Team"
+      },
+      "name": "Send Daily Tip Email",
+      "type": "n8n-nodes-base.sendEmail",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "webhookUri": "/habit-input-webhook",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "responseData": "={{ { message: 'Thanks for submitting your habit input!' } }}"
+      },
+      "name": "Habit Input Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const { userId, date, habit, progress, mood } = $json;\n\n// Simple progress evaluation\nlet feedback = '';\nlet suggestions = '';\n\nif (progress >= 80) {\n  feedback = 'Awesome job! You are maintaining strong sustainability habits.';\n  suggestions = 'Keep challenging yourself by adding new habits or increasing your goals.';\n} else if (progress >= 50) {\n  feedback = 'Good effort, but there is room for improvement.';\n  suggestions = 'Try dedicating a bit more time or planning your habit routine better.';\n} else {\n  feedback = 'Don’t be discouraged, every step counts!';\n  suggestions = 'Focus on small, manageable changes to build consistent habits.';\n}\n\n// Add mood-based personalization\nif (mood === 'motivated') {\n  feedback += ' Your positive mindset will fuel your progress!';\n} else if (mood === 'tired' || mood === 'stressed') {\n  feedback += ' Remember to take care of yourself while working on sustainability.';\n}\n\nreturn [{ json: { userId, date, habit, progress, mood, feedback, suggestions } }];"
+      },
+      "name": "Generate Motivational Feedback",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "ecoaware@yourdomain.com",
+        "toEmail": "={{$json[\"email\"]}}",
+        "subject": "Your Sustainability Habit Feedback & Tips",
+        "text": "Hello,\n\nThank you for updating us on your progress with \"{{ $json[\"habit\"] }}\" on {{ $json[\"date\"] }}.\n\nHere's your personalized feedback:\n{{ $json[\"feedback\"] }}\n\nSuggestions for improvement:\n{{ $json[\"suggestions\"] }}\n\nKeep pushing forward towards a greener lifestyle!\n\nEcoAware AI Team"
+      },
+      "name": "Send Feedback Email",
+      "type": "n8n-nodes-base.sendEmail",
+      "typeVersion": 1,
+      "position": [
+        650,
+        600
+      ]
+    }
+  ],
+  "connections": {
+    "Set Date and User": {
+      "main": [
+        [
+          {
+            "node": "Select Daily Tip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select Daily Tip": {
+      "main": [
+        [
+          {
+            "node": "Generate Habit Tracking Form URL",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Daily Tip Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Habit Input Webhook": {
+      "main": [
+        [
+          {
+            "node": "Generate Motivational Feedback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Motivational Feedback": {
+      "main": [
+        [
+          {
+            "node": "Send Feedback Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
