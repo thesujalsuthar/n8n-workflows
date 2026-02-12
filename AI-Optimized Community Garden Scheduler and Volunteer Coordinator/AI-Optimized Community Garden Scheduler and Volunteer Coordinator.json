@@ -1,0 +1,314 @@
+{
+  "name": "AI-Powered Community Garden Resource Scheduler and Volunteer Coordination System",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "headerAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{ $credentials.openaiApiKey }}"
+        },
+        "options": {},
+        "prompt": "You are an AI assistant for managing a community garden. Optimize the scheduling of garden resources (tools, water, fertilizers) and volunteer tasks based on the following inputs:\n\n- Resource availability\n- Volunteer availability and skills\n- Garden task priority\n- Weather conditions\n\nReturn an optimized schedule for the week indicating which resources and volunteers to assign to each task and alert if any shortages or conflicts occur.",
+        "model": "gpt-4",
+        "temperature": 0.5,
+        "maxTokens": 1000
+      },
+      "name": "AI Optimize Schedule",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "path": "calendar/events",
+        "operation": "create",
+        "calendarId": "primary",
+        "startDateTime": "={{$json[\"scheduledStart\"]}}",
+        "endDateTime": "={{$json[\"scheduledEnd\"]}}",
+        "summary": "={{$json[\"taskName\"]}} - Volunteer: {{$json[\"volunteerName\"]}}",
+        "description": "Task Details:\nResources: {{$json[\"resources\"]}}\nNotes: {{$json[\"notes\"]}}",
+        "location": "Community Garden",
+        "attendeesUi": {
+          "attendees": [
+            {
+              "email": "={{$json[\"volunteerEmail\"]}}"
+            }
+          ]
+        }
+      },
+      "name": "Create Calendar Event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "1",
+          "name": "Google Calendar Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "={{$json[\"volunteerPhone\"]}}",
+        "message": "Reminder: Upcoming task \"{{$json[\"taskName\"]}}\" scheduled at {{$json[\"scheduledStart\"]}}. Resources allocated: {{$json[\"resources\"]}}. Please confirm your availability.",
+        "options": {}
+      },
+      "name": "Send Volunteer SMS Notification",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        900,
+        450
+      ],
+      "credentials": {
+        "twilioApi": {
+          "id": "1",
+          "name": "Twilio Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "={{$json[\"volunteerEmail\"]}}",
+        "subject": "Upcoming Community Garden Task: {{$json[\"taskName\"]}}",
+        "text": "Dear {{$json[\"volunteerName\"]}},\n\nYou are scheduled to perform the task \"{{$json[\"taskName\"]}}\" on {{$json[\"scheduledStart\"]}}.\nResources allocated: {{$json[\"resources\"]}}.\nPlease contact us if you have any questions or conflicts.\n\nThank you for your valuable help!\nCommunity Garden Team",
+        "options": {}
+      },
+      "name": "Send Volunteer Email Notification",
+      "type": "n8n-nodes-base.sendEmail",
+      "typeVersion": 1,
+      "position": [
+        900,
+        600
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "1",
+          "name": "SMTP Mail Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://api.weatherapi.com/v1/forecast.json",
+        "jsonParameters": true,
+        "options": {},
+        "queryParametersJson": "={\"key\": \"{{ $credentials.weatherApiKey }}\", \"q\": \"Community Garden Location\", \"days\": 7}"
+      },
+      "name": "Get Weather Forecast",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        300,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "returnAll": true,
+        "filters": {}
+      },
+      "name": "Get Volunteer Availability & Skills",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [
+        300,
+        250
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "2",
+          "name": "Google Sheets Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "returnAll": true,
+        "filters": {}
+      },
+      "name": "Get Garden Resource Inventory",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [
+        300,
+        400
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "2",
+          "name": "Google Sheets Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "returnAll": true,
+        "filters": {}
+      },
+      "name": "Get Garden Tasks & Priorities",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [
+        300,
+        550
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "2",
+          "name": "Google Sheets Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const volunteers = items[0].json;\nconst resources = items[1].json;\nconst tasks = items[2].json;\nconst weather = items[3].json.forecast.forecastday[0];\n\n// Prepare input for AI\nreturn [{json: {\n  volunteerData: volunteers,\n  resourceData: resources,\n  taskData: tasks,\n  weatherForecast: weather\n}}];"
+      },
+      "name": "Prepare AI Input",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const aiResponse = JSON.parse(items[0].json.choices[0].message.content);\n// Expected aiResponse to be an array of scheduled tasks\nreturn aiResponse.map(task => ({ json: task }));"
+      },
+      "name": "Parse AI Schedule",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "sendMessage",
+        "resource": "channel",
+        "channelId": "garden-volunteers",
+        "message": "Upcoming Tasks and Resource Needs:\n{{$json[\"taskName\"]}} scheduled at {{$json[\"scheduledStart\"]}}. Please be prepared. Resources needed: {{$json[\"resources\"]}}.",
+        "options": {}
+      },
+      "name": "Notify Team Messaging Channel",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "1",
+          "name": "Slack Account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Get Volunteer Availability & Skills": {
+      "main": [
+        [
+          {
+            "node": "Prepare AI Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Garden Resource Inventory": {
+      "main": [
+        [
+          {
+            "node": "Prepare AI Input",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Get Garden Tasks & Priorities": {
+      "main": [
+        [
+          {
+            "node": "Prepare AI Input",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Get Weather Forecast": {
+      "main": [
+        [
+          {
+            "node": "Prepare AI Input",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Prepare AI Input": {
+      "main": [
+        [
+          {
+            "node": "AI Optimize Schedule",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Optimize Schedule": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Schedule",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Schedule": {
+      "main": [
+        [
+          {
+            "node": "Create Calendar Event",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Volunteer SMS Notification",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "Send Volunteer Email Notification",
+            "type": "main",
+            "index": 2
+          },
+          {
+            "node": "Notify Team Messaging Channel",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
