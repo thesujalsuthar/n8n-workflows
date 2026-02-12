@@ -1,0 +1,164 @@
+{
+  "name": "AI-Powered Sustainable Packaging Inventory and Order Automation System",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.yourinventorysystem.com/inventory",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Get Inventory Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "prompt": "Given the following inventory data:\n{{JSON.stringify($json)}}\nPredict the inventory requirements for the next month with focus on sustainable packaging materials. Provide output in JSON format with fields: 'item', 'predicted_quantity'.",
+        "maxTokens": 500,
+        "temperature": 0.3
+      },
+      "name": "AI Predict Inventory",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        550,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const predictionData = JSON.parse(items[0].json.text);\nreturn predictionData.map(item => ({ json: { item: item.item, predicted_quantity: item.predicted_quantity }}));"
+      },
+      "name": "Parse AI Prediction",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const ecoFriendlySuppliers = {\n  \"Recycled Cardboard\": \"https://api.ecosupplier.com/order\",\n  \"Biodegradable Plastics\": \"https://api.ecosupplier.com/order\",\n  \"Plant-based Inks\": \"https://api.ecosupplier.com/order\"\n};\n\nreturn items.map(item => {\n  const supplierUrl = ecoFriendlySuppliers[item.json.item];\n  if (!supplierUrl) {\n    return null;\n  }\n  return {\n    json: {\n      supplierUrl,\n      orderPayload: {\n        item: item.json.item,\n        quantity: item.json.predicted_quantity\n      }\n    }\n  };\n}).filter(i => i !== null);"
+      },
+      "name": "Map to Supplier Orders",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        950,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "url": "={{$json[\"supplierUrl\"]}}",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={{JSON.stringify($json[\"orderPayload\"])}}"
+      },
+      "name": "Place Orders to Eco Suppliers",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const lowStockItems = items\n  .filter(item => item.json.predicted_quantity > 0 && item.json.predicted_quantity < 10)\n  .map(item => item.json.item);\n\nif(lowStockItems.length > 0) {\n  return [{ json: { message: `Low inventory alert for: ${lowStockItems.join(\", \")}` } }];\n}\nreturn [];"
+      },
+      "name": "Check Low Inventory",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        950,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "channel": "email",
+        "toEmail": "supplychain@company.com",
+        "subject": "Inventory Replenishment Notification",
+        "message": "={{$json[\"message\"]}}"
+      },
+      "name": "Send Notification",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        450
+      ]
+    }
+  ],
+  "connections": {
+    "Get Inventory Data": {
+      "main": [
+        [
+          {
+            "node": "AI Predict Inventory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Predict Inventory": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Prediction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Prediction": {
+      "main": [
+        [
+          {
+            "node": "Map to Supplier Orders",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Check Low Inventory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map to Supplier Orders": {
+      "main": [
+        [
+          {
+            "node": "Place Orders to Eco Suppliers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Low Inventory": {
+      "main": [
+        [
+          {
+            "node": "Send Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
