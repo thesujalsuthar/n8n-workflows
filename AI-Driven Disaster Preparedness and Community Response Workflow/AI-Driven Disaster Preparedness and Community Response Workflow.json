@@ -1,0 +1,251 @@
+{
+  "name": "AI-Powered Disaster Preparedness and Real-Time Community Support System",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.weather.com/v3/alerts/headlines",
+        "queryParameters": [
+          {
+            "name": "geocode",
+            "value": "={{$json[\"latitude\"] + ',' + $json[\"longitude\"]}}"
+          },
+          {
+            "name": "format",
+            "value": "json"
+          },
+          {
+            "name": "language",
+            "value": "en-US"
+          }
+        ],
+        "options": {}
+      },
+      "name": "Fetch Weather Alerts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "tweet",
+        "operation": "search",
+        "text": "disaster OR earthquake OR flood OR hurricane OR wildfire",
+        "since": "={{new Date(new Date().getTime() - 3600000).toISOString()}}",
+        "maxResults": 50
+      },
+      "name": "Fetch Social Media Data",
+      "type": "n8n-nodes-base.twitter",
+      "typeVersion": 1,
+      "position": [
+        250,
+        100
+      ],
+      "credentials": {
+        "twitterApi": "Twitter API Key"
+      }
+    },
+    {
+      "parameters": {
+        "resource": "database",
+        "operation": "find",
+        "collection": "community_resources",
+        "query": "{}"
+      },
+      "name": "Fetch Community Resources",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        250,
+        500
+      ],
+      "credentials": {
+        "mongoDb": "Community Resources DB"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const alerts = items[0].json.alerts || [];\nconst tweets = items[1].json.data || [];\nconst resources = items[2].json;\n\nreturn [{ json: { alerts, tweets, resources } }];"
+      },
+      "name": "Combine Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ],
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "mode": "text",
+        "text": "={{$json.tweets.map(tweet => tweet.text).join('\\n')}}"
+      },
+      "name": "Sentiment Analysis",
+      "type": "n8n-nodes-base.textAnalysis",
+      "typeVersion": 1,
+      "position": [
+        650,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const alerts = $items(\"Combine Data\")[0].json.alerts;\nconst sentiment = items[0].json;\nconst resources = $items(\"Combine Data\")[0].json.resources;\n\n// Generate personalized disaster preparedness tips based on alerts\nconst tips = [];\nalerts.forEach(alert => {\n  if (alert.eventDescription) {\n    if (alert.eventDescription.toLowerCase().includes('hurricane')) tips.push('Secure outdoor objects, create an evacuation plan, and stock emergency supplies.');\n    if (alert.eventDescription.toLowerCase().includes('flood')) tips.push('Move valuables to higher places, prepare sandbags, and avoid floodwaters.');\n    if (alert.eventDescription.toLowerCase().includes('wildfire')) tips.push('Clear flammable materials around your home and have an emergency evacuation kit.');\n    if (alert.eventDescription.toLowerCase().includes('earthquake')) tips.push('Brace yourself, drop to the ground, and secure heavy furniture.');\n  }\n});\n\n// Deduplicate tips\nconst uniqueTips = [...new Set(tips)];\n\n// Match resources based on alerts\nconst matchedResources = resources.filter(resource => {\n  if (!resource.type || !resource.location) return false;\n  return alerts.some(alert => alert.coverageArea && alert.coverageArea.includes(resource.location));\n});\n\nreturn [{ json: { tips: uniqueTips, sentiment, matchedResources, alerts } }];"
+      },
+      "name": "Generate Tips & Match Resources",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "community@example.org",
+        "toEmail": "={{$json.userEmail || 'community@example.org'}}",
+        "subject": "Real-Time Disaster Alert and Preparedness Tips",
+        "text": "Alerts:\n{{$json.alerts.map(a => a.eventDescription).join('\\n')}}\n\nPersonalized Preparedness Tips:\n{{$json.tips.join('\\n')}}\n\nAvailable Community Resources:\n{{$json.matchedResources.map(r => r.name + ' - ' + r.contact).join('\\n')}}\n\nStay safe and connected."
+      },
+      "name": "Send Notification Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ],
+      "credentials": {
+        "smtp": "SMTP Credentials"
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "url": "https://community-support.example.org/api/support-actions",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={\"alerts\": $json.alerts, \"resources\": $json.matchedResources}"
+      },
+      "name": "Trigger Community Support Actions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.map(item => ({ json: { userEmail: 'user@example.org', latitude: '40.7128', longitude: '-74.0060' } }));"
+      },
+      "name": "Initialize Location & User Info",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        50,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Initialize Location & User Info": {
+      "main": [
+        [
+          {
+            "node": "Fetch Weather Alerts",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Social Media Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Community Resources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Weather Alerts": {
+      "main": [
+        [
+          {
+            "node": "Combine Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Social Media Data": {
+      "main": [
+        [
+          {
+            "node": "Combine Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch Community Resources": {
+      "main": [
+        [
+          {
+            "node": "Combine Data",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Combine Data": {
+      "main": [
+        [
+          {
+            "node": "Sentiment Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sentiment Analysis": {
+      "main": [
+        [
+          {
+            "node": "Generate Tips & Match Resources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Tips & Match Resources": {
+      "main": [
+        [
+          {
+            "node": "Send Notification Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Trigger Community Support Actions",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
