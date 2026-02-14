@@ -1,0 +1,438 @@
+{
+  "name": "EcoAware AI: Personalized Sustainability Habit Engagement Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 8,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Daily Scheduler",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.sustainabilitytips.example.com/tips/daily",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "userId",
+              "value": "={{$json[\"userId\"]}}"
+            },
+            {
+              "name": "preferences",
+              "value": "={{JSON.stringify($json[\"preferences\"] || {})}}"
+            }
+          ]
+        },
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Get Sustainability Tip",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.userhabits.example.com/habits/log",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer {{$credentials.habitAPI.apiKey}}"
+        },
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "userId",
+              "value": "={{$json[\"userId\"]}}"
+            },
+            {
+              "name": "habitId",
+              "value": "={{$json[\"tip\"]?.habitRelatedId || \"general\"}}"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{new Date().toISOString()}}"
+            },
+            {
+              "name": "completed",
+              "value": "false"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Log Habit Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        900,
+        220
+      ],
+      "credentials": {
+        "habitAPI": {
+          "id": "1",
+          "name": "UserHabitsAPI Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.engagementanalytics.example.com/record",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer {{$credentials.engagementAPI.apiKey}}"
+        },
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "userId",
+              "value": "={{$json[\"userId\"]}}"
+            },
+            {
+              "name": "eventType",
+              "value": "TipDelivered"
+            },
+            {
+              "name": "tipId",
+              "value": "={{$json[\"tip\"]?.id}}"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{new Date().toISOString()}}"
+            },
+            {
+              "name": "channel",
+              "value": "={{$node[\"Determine Channels\"].json[\"channels\"].join(\",\")}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Record Engagement Analytics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        900,
+        380
+      ],
+      "credentials": {
+        "engagementAPI": {
+          "id": "2",
+          "name": "EngagementAnalytics API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {},
+        "functionCode": "const userPreferences = items[0].json.preferences || {};\nconst userId = items[0].json.userId;\n\n// Default channels\nlet channels = [\"email\"];\n\nif(userPreferences.channels){\n  channels = userPreferences.channels;\n}\n\nreturn [{json: {channels, userId}}];"
+      },
+      "name": "Determine Channels",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "service": "gmail",
+        "operation": "send",
+        "toEmail": "={{$json[\"userEmail\"]}}",
+        "subject": "Your Daily Sustainability Tip 🌿",
+        "text": "Hello {{$json[\"userName\"]}},\n\nHere's your sustainability tip for today:\n\n{{$json[\"tip\"]?.content}}\n\nLet's make the planet greener together!"
+      },
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "to": "={{$json[\"userPhone\"]}}",
+        "text": "Daily Eco Tip: {{$json[\"tip\"]?.content}}. Together we can make a difference!"
+      },
+      "name": "Send SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        320
+      ],
+      "credentials": {
+        "twilioApi": {
+          "id": "3",
+          "name": "Twilio API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "title": "Daily Sustainability Tip",
+        "text": "={{$json[\"tip\"]?.content}}",
+        "badge": 1,
+        "sound": "default",
+        "data": {
+          "tipId": "={{$json[\"tip\"]?.id}}"
+        }
+      },
+      "name": "Send Push Notification",
+      "type": "n8n-nodes-base.pushbullet",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        420
+      ],
+      "credentials": {
+        "pushbulletApi": {
+          "id": "4",
+          "name": "Pushbullet API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "waitTime": 3600,
+        "waitTill": "duration"
+      },
+      "name": "Wait for Feedback",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.userfeedback.example.com/feedback/collect",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer {{$credentials.feedbackAPI.apiKey}}"
+        },
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "userId",
+              "value": "={{$json[\"userId\"]}}"
+            },
+            {
+              "name": "tipId",
+              "value": "={{$json[\"tip\"]?.id}}"
+            },
+            {
+              "name": "rating",
+              "value": "={{$json[\"feedback\"]?.rating || null}}"
+            },
+            {
+              "name": "comments",
+              "value": "={{$json[\"feedback\"]?.comments || \"\"}}"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{new Date().toISOString()}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Collect User Feedback",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        1650,
+        320
+      ],
+      "credentials": {
+        "feedbackAPI": {
+          "id": "5",
+          "name": "User Feedback API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.contentoptimize.example.com/optimize",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer {{$credentials.optimizeAPI.apiKey}}"
+        },
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "userId",
+              "value": "={{$json[\"userId\"]}}"
+            },
+            {
+              "name": "feedbackId",
+              "value": "={{$json[\"feedback\"]?.id || \"\"}}"
+            },
+            {
+              "name": "preferences",
+              "value": "={{JSON.stringify($json[\"preferences\"] || {})}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Optimize Content Delivery",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        1900,
+        320
+      ],
+      "credentials": {
+        "optimizeAPI": {
+          "id": "6",
+          "name": "Content Optimization API Key"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily Scheduler": {
+      "main": [
+        [
+          {
+            "node": "Determine Channels",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Determine Channels": {
+      "main": [
+        [
+          {
+            "node": "Get Sustainability Tip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Sustainability Tip": {
+      "main": [
+        [
+          {
+            "node": "Log Habit Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send SMS",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Push Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Record Engagement Analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email": {
+      "main": [
+        [
+          {
+            "node": "Wait for Feedback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send SMS": {
+      "main": [
+        []
+      ]
+    },
+    "Send Push Notification": {
+      "main": [
+        []
+      ]
+    },
+    "Log Habit Data": {
+      "main": [
+        []
+      ]
+    },
+    "Record Engagement Analytics": {
+      "main": [
+        []
+      ]
+    },
+    "Wait for Feedback": {
+      "main": [
+        [
+          {
+            "node": "Collect User Feedback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect User Feedback": {
+      "main": [
+        [
+          {
+            "node": "Optimize Content Delivery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Optimize Content Delivery": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "id": "EcoAwareAI_PersonalizedSustainabilityHabitEngagementWorkflow"
+}
