@@ -1,0 +1,192 @@
+{
+  "name": "Quantum Computing Research Trend Analysis and Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "http://export.arxiv.org/api/query?search_query=cat:quant-ph&start=0&max_results=20&sortBy=submittedDate&sortOrder=descending",
+        "responseFormat": "string"
+      },
+      "name": "Fetch arXiv Quantum Papers",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const parseString = require('xml2js').parseStringPromise;\n\nconst xmlData = items[0].json.response;\n\nreturn parseString(xmlData).then(result => {\n  const entries = result.feed.entry || [];\n  return entries.map(entry => ({\n    title: entry.title[0].trim(),\n    summary: entry.summary[0].trim(),\n    published: entry.published[0],\n    authors: entry.author.map(a => a.name[0]),\n    link: entry.id[0]\n  }));\n});"
+      },
+      "name": "Parse arXiv XML",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "document",
+        "operation": "analyzeEntities",
+        "additionalFields": {},
+        "document": "={{ $json.summary + ' ' + $json.title }}",
+        "options": {}
+      },
+      "name": "Extract Entities with AI",
+      "type": "googleCloudNaturalLanguage",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const topics = [];\nconst entities = $items().map(item => item.json.entities || []);\nentities.flat().forEach(entity => {\n  if (entity.type === 'OTHER' || entity.type === 'CONSUMER_GOOD' || entity.type === 'ORGANIZATION' || entity.type === 'EVENT' || entity.type === 'WORK_OF_ART' || entity.type === 'CONSUMER_GOOD') {\n    topics.push(entity.name.toLowerCase());\n  }\n});\n\nconst topicCounts = topics.reduce((acc, topic) => {\n  acc[topic] = (acc[topic] || 0) + 1;\n  return acc;\n}, {});\n\nconst sortedTopics = Object.entries(topicCounts).sort((a, b) => b[1] - a[1]);\n\nreturn [{ json: { trendingTopics: sortedTopics.slice(0, 10) }}];"
+      },
+      "name": "Detect Trending Topics",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const userPreferences = {\n  alertTopics: [\"quantum computing\", \"quantum algorithms\", \"quantum error correction\"]\n};\n\nconst trending = items[0].json.trendingTopics.map(t => t[0]);\n\nconst matches = trending.filter(topic => userPreferences.alertTopics.some(pref => topic.includes(pref)));\n\nreturn [{ json: { alertTriggered: matches.length > 0, matchedTopics: matches } }];"
+      },
+      "name": "Check Alerts Based on Interests",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "if (items[0].json.alertTriggered) {\n  const summary = `Trending topics matched your interests: ${items[0].json.matchedTopics.join(\", \")}`;\n  return [{ json: { summary } }];\n}\nreturn [];"
+      },
+      "name": "Prepare Alert Summary",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "alertsystem@example.com",
+        "toEmail": "={{$node[\"User Settings\"].json.email}}",
+        "subject": "Quantum Computing Research Alert: Trending Topics Detected",
+        "text": "={{$json.summary}}",
+        "html": "<p>{{$json.summary}}</p>"
+      },
+      "name": "Send Email Alert",
+      "type": "emailSend",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: { email: 'user@example.com' } }];"
+      },
+      "name": "User Settings",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        50,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "User Settings": {
+      "main": [
+        [
+          {
+            "node": "Fetch arXiv Quantum Papers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch arXiv Quantum Papers": {
+      "main": [
+        [
+          {
+            "node": "Parse arXiv XML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse arXiv XML": {
+      "main": [
+        [
+          {
+            "node": "Extract Entities with AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Entities with AI": {
+      "main": [
+        [
+          {
+            "node": "Detect Trending Topics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect Trending Topics": {
+      "main": [
+        [
+          {
+            "node": "Check Alerts Based on Interests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Alerts Based on Interests": {
+      "main": [
+        [
+          {
+            "node": "Prepare Alert Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Alert Summary": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
