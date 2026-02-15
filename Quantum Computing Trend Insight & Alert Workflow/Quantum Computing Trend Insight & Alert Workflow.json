@@ -1,0 +1,398 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.crossref.org/works",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "query",
+              "value": "quantum computing"
+            },
+            {
+              "name": "filter",
+              "value": "from-pub-date:{{ $today.minus({ days: 7 }).toISOString().slice(0,10) }}"
+            },
+            {
+              "name": "rows",
+              "value": "20"
+            },
+            {
+              "name": "sort",
+              "value": "published"
+            },
+            {
+              "name": "order",
+              "value": "desc"
+            }
+          ]
+        },
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Fetch Crossref Publications",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.arxiv.org/query",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "search_query",
+              "value": "all:quantum+computing"
+            },
+            {
+              "name": "max_results",
+              "value": "20"
+            },
+            {
+              "name": "sortBy",
+              "value": "lastUpdatedDate"
+            },
+            {
+              "name": "sortOrder",
+              "value": "descending"
+            }
+          ]
+        },
+        "responseFormat": "text",
+        "options": {}
+      },
+      "name": "Fetch arXiv Publications",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        100,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://newsapi.org/v2/everything",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "q",
+              "value": "quantum computing"
+            },
+            {
+              "name": "from",
+              "value": "={{$today.minus({days:7}).toISOString().slice(0,10)}}"
+            },
+            {
+              "name": "language",
+              "value": "en"
+            },
+            {
+              "name": "sortBy",
+              "value": "publishedAt"
+            },
+            {
+              "name": "pageSize",
+              "value": "20"
+            }
+          ]
+        },
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_NEWSAPI_KEY"
+            }
+          ]
+        },
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Fetch News Articles",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        100,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const crossrefItems = $items(\"Fetch Crossref Publications\")[0].json.message.items || [];\n\nconst arxivXml = $items(\"Fetch arXiv Publications\")[0].json || $input.item.json;\n\n// arXiv returns XML - parse with external library via n8n Function\n\nconst xml2js = require('xml2js');\n\nlet arxivItems = [];\n\nxml2js.parseString(arxivXml, { explicitArray: false }, function(err, result) {\n  if (!err) {\n    if (result.feed && result.feed.entry) {\n      if (Array.isArray(result.feed.entry)) {\n        arxivItems = result.feed.entry;\n      } else {\n        arxivItems = [result.feed.entry];\n      }\n    }\n  }\n});\n\nreturn [{ json: { crossrefItems, arxivItems }}];"
+      },
+      "name": "Parse & Combine Publication Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        350,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const newsArticles = $items(\"Fetch News Articles\")[0].json.articles || [];\nreturn [{ json: { newsArticles }}];"
+      },
+      "name": "Extract News Articles",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        350,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n Combine all textual data: titles, abstracts, summaries, and content for NLP processing.\n*/\nconst crossrefItems = $items(\"Parse & Combine Publication Data\")[0].json.crossrefItems || [];\nconst arxivItems = $items(\"Parse & Combine Publication Data\")[0].json.arxivItems || [];\nconst newsArticles = $items(\"Extract News Articles\")[0].json.newsArticles || [];\n\nconst allTexts = [];\n\n// Crossref: title + abstract\nfor (const item of crossrefItems) {\n  const title = item.title ? item.title.join(' ') : '';\n  const abstract = item.abstract ? item.abstract : '';\n  allTexts.push(`${title} ${abstract}`);\n}\n\n// arXiv: title + summary\nfor (const item of arxivItems) {\n  const title = item.title || '';\n  const summary = item.summary || '';\n  allTexts.push(`${title} ${summary}`);\n}\n\n// News: title + description + content\nfor (const article of newsArticles) {\n  const title = article.title || '';\n  const description = article.description || '';\n  const content = article.content || '';\n  allTexts.push(`${title} ${description} ${content}`);\n}\n\nreturn [{ json: { combinedText: allTexts.join('\\n\\n') } }];"
+      },
+      "name": "Combine Text Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        550,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "model": "text-embedding-3-large",
+        "operation": "embedding",
+        "input": "={{$json[\"combinedText\"]}}"
+      },
+      "name": "Embed Text for NLP",
+      "type": "n8n-nodes-base.openAI",
+      "typeVersion": 1,
+      "position": [
+        750,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n Simple keyword frequency extraction for trend analysis.\n Ideally, advanced topic modeling would be done externally.\n*/\nconst text = $json.combinedText.toLowerCase();\nconst keywords = [\n  'quantum', 'qubit', 'entanglement', 'superposition', 'quantum algorithm', 'quantum supremacy',\n  'quantum annealing', 'quantum error correction', 'quantum machine learning', 'quantum cryptography',\n  'quantum hardware', 'quantum simulation', 'quantum circuit'\n];\n\nconst trends = {};\nfor (const keyword of keywords) {\n  const regex = new RegExp(keyword.replace(/ /g, '\\\\s+'), 'g');\n  const count = (text.match(regex) || []).length;\n  if (count > 0) trends[keyword] = count;\n}\n\nreturn [{ json: { trends } }];"
+      },
+      "name": "Analyze Trends by Keywords",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        950,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n Format summary report for email and messaging\n*/\nconst trends = $json.trends;\n\nconst sortedTrends = Object.entries(trends).sort((a, b) => b[1] - a[1]);\n\nlet report = 'Quantum Computing Research Trend Analysis \\n\\n';\nreport += 'Top Emerging Keywords and Frequencies:\\n';\nfor (const [keyword, count] of sortedTrends) {\n  report += `- ${keyword}: ${count}\\n`;\n}\n\nreport += '\\nStay updated with the latest research and news on quantum computing.';\n\nreturn [{ json: { report } }];"
+      },
+      "name": "Format Summary Report",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "your_email@example.com",
+        "toEmail": "={{$json[\"subscriber_email\"]}}",
+        "subject": "Quantum Computing Trend Alert",
+        "text": "={{$json[\"report\"]}}"
+      },
+      "name": "Send Email Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "chatApi",
+        "operation": "sendMessage",
+        "chatId": "={{$json[\"subscriber_chat_id\"]}}",
+        "text": "={{$json[\"report\"]}}"
+      },
+      "name": "Send Chat Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        550
+      ]
+    },
+    {
+      "parameters": {
+        "webhookPath": "subscriptions",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "name": "Subscription Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        100,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nIncoming subscription data format:\n{\n  subscriber_email: 'user@example.com',\n  subscriber_chat_id: '123456789'\n}\nStore or update subscription list in workflow persistent memory or external DB\n*/\nconst subscriptions = $getWorkflowStaticData('global').subscriptions || [];\n\nconst newSubscription = {\n  subscriber_email: $json.subscriber_email,\n  subscriber_chat_id: $json.subscriber_chat_id || null\n};\n\n// Prevent duplicates\nif (!subscriptions.find(sub => sub.subscriber_email === newSubscription.subscriber_email)) {\n  subscriptions.push(newSubscription);\n}\n\n$getWorkflowStaticData('global').subscriptions = subscriptions;\n\nreturn [{ json: { status: 'Subscribed', subscriptions } }];"
+      },
+      "name": "Store Subscription",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        350,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nFetch subscriptions and emit each subscriber with the report for notification\n*/\nconst subscriptions = $getWorkflowStaticData('global').subscriptions || [];\nconst report = $items(\"Format Summary Report\")[0].json.report;\n\nreturn subscriptions.map(subscriber => ({\n  json: {\n    subscriber_email: subscriber.subscriber_email,\n    subscriber_chat_id: subscriber.subscriber_chat_id,\n    report\n  }\n}));"
+      },
+      "name": "Prepare Notifications",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "Fetch Crossref Publications": {
+      "main": [
+        [
+          {
+            "node": "Parse & Combine Publication Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch arXiv Publications": {
+      "main": [
+        [
+          {
+            "node": "Parse & Combine Publication Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch News Articles": {
+      "main": [
+        [
+          {
+            "node": "Extract News Articles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse & Combine Publication Data": {
+      "main": [
+        [
+          {
+            "node": "Combine Text Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract News Articles": {
+      "main": [
+        [
+          {
+            "node": "Combine Text Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Combine Text Data": {
+      "main": [
+        [
+          {
+            "node": "Embed Text for NLP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embed Text for NLP": {
+      "main": [
+        [
+          {
+            "node": "Analyze Trends by Keywords",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Trends by Keywords": {
+      "main": [
+        [
+          {
+            "node": "Format Summary Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Summary Report": {
+      "main": [
+        [
+          {
+            "node": "Prepare Notifications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Notifications": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Chat Alert",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Subscription Webhook": {
+      "main": [
+        [
+          {
+            "node": "Store Subscription",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "Quantum_Computing_Research_Trend_Analyzer_Alert_System"
+}
