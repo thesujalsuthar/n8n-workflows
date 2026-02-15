@@ -1,0 +1,246 @@
+{
+  "name": "Quantum Computing Research Insights Trend Analyzer and Real-Time Notification System",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.arxiv.org/query?search_query=quantum+computing&start=0&max_results=50&sortBy=submittedDate&sortOrder=descending",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Fetch ArXiv Quantum Computing Papers",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.semanticscholar.org/graph/v1/paper/search?query=quantum%20computing&fields=title,abstract,year,authors,citationCount,topics&limit=50",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Fetch Semantic Scholar Research",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        100,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://pubmed.ncbi.nlm.nih.gov/api/query?term=quantum+computing&retmax=50&sort=date",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Fetch PubMed Quantum Computing Research",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        100,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const arxiv = items[0].json.entries || [];\nconst semanticScholar = items[1].json.data || [];\nconst pubmed = items[2].json.results || [];\n\n// Normalize and extract relevant data\nconst combined = [];\n\narxiv.forEach(paper => {\n  combined.push({\n    source: 'ArXiv',\n    title: paper.title,\n    abstract: paper.summary,\n    authors: paper.authors.map(a => a.name).join(', '),\n    publishedDate: paper.published,\n    link: paper.id\n  });\n});\n\nsemanticScholar.forEach(paper => {\n  combined.push({\n    source: 'SemanticScholar',\n    title: paper.title,\n    abstract: paper.abstract || '',\n    authors: (paper.authors || []).map(a => a.name).join(', '),\n    publishedDate: paper.year ? paper.year.toString() : '',\n    link: `https://semanticscholar.org/paper/${paper.paperId || ''}`\n  });\n});\n\npubmed.forEach(paper => {\n  combined.push({\n    source: 'PubMed',\n    title: paper.title,\n    abstract: paper.abstract || '',\n    authors: paper.authors ? paper.authors.join(', ') : '',\n    publishedDate: paper.pubdate || '',\n    link: paper.url || ''\n  });\n});\n\nreturn combined.map(data => ({ json: data }));"
+      },
+      "name": "Normalize and Combine Research Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        350,
+        500
+      ],
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "operation": "completion",
+        "prompt": "Analyze the following combined quantum computing research data to identify trending topics, emerging research areas, and key insights. Provide a summarized trend analysis with bullet points.\n\nResearch Data:\n\n{{ $json.array.map(item => `- Title: ${item.title}\\n  Abstract: ${item.abstract}`).join('\\n\\n') }}\n\nSummarize trends and emerging topics:",
+        "maxTokens": 500,
+        "temperature": 0.7
+      },
+      "name": "AI Trend Analysis",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 2,
+      "position": [
+        650,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const preferences = $input.item.json;\n\n// Sample input structure: { topics: ['error correction', 'quantum algorithms'], frequency: 'daily', contact: { email: 'user@example.com', slackWebhook: 'https://hooks.slack.com/services/...' } }\n\n// Filter trend analysis results by user topics\n// This node expects previous node output with trend analysis text\n\nconst trendText = $input.all()[0].json.choices[0].message.content.toLowerCase();\n\nconst matchesTopic = preferences.topics.some(topic => trendText.includes(topic.toLowerCase()));\n\nreturn matchesTopic ? $input.all() : [];"
+      },
+      "name": "Filter Trends by User Preferences",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        500
+      ],
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "fromEmail": "no-reply@quantum-insights.com",
+        "toEmail": "={{$json.contact.email}}",
+        "subject": "Quantum Computing Research Trends Update",
+        "text": "Hello,\n\nHere are the latest trends and insights in quantum computing research based on your preferences:\n\n{{$json.choices[0].message.content}}\n\nBest regards,\nQuantum Insights Team"
+      },
+      "name": "Send Email Notification",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "url": "={{$json.contact.slackWebhook}}",
+        "options": {},
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "payload",
+              "value": "={\"text\": \"Quantum Computing Trends Update:\\n{{$json.choices[0].message.content}}\"}"
+            }
+          ]
+        }
+      },
+      "name": "Send Slack Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        550
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Provide user preferences input placeholder\nreturn [\n  {\n    json: {\n      topics: [\"quantum algorithms\", \"error correction\", \"quantum communication\"],\n      frequency: \"daily\",\n      contact: {\n        email: \"user@example.com\",\n        slackWebhook: \"https://hooks.slack.com/services/XXXXX/YYYYY/ZZZZZ\"\n      }\n    }\n  }\n];"
+      },
+      "name": "User Preferences Input",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ],
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "name": "Cron Trigger Daily",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        50,
+        200
+      ]
+    }
+  ],
+  "connections": {
+    "Cron Trigger Daily": {
+      "main": [
+        [
+          {
+            "node": "Fetch ArXiv Quantum Computing Papers",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Semantic Scholar Research",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch PubMed Quantum Computing Research",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch ArXiv Quantum Computing Papers": {
+      "main": [
+        [
+          {
+            "node": "Normalize and Combine Research Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Semantic Scholar Research": {
+      "main": [
+        []
+      ]
+    },
+    "Fetch PubMed Quantum Computing Research": {
+      "main": [
+        []
+      ]
+    },
+    "Normalize and Combine Research Data": {
+      "main": [
+        [
+          {
+            "node": "AI Trend Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Trend Analysis": {
+      "main": [
+        [
+          {
+            "node": "User Preferences Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "User Preferences Input": {
+      "main": [
+        [
+          {
+            "node": "Filter Trends by User Preferences",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Trends by User Preferences": {
+      "main": [
+        [
+          {
+            "node": "Send Email Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Slack Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
