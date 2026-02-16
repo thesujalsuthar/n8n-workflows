@@ -1,0 +1,194 @@
+{
+  "name": "Quantum Computing Research Trend Visualizer & Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.crossref.org/works?filter=subject:quantum-computing,from-pub-date:{{new Date(new Date().setDate(new Date().getDate()-1)).toISOString().slice(0,10)}}&sort=published&order=desc",
+        "options": {},
+        "responseFormat": "json"
+      },
+      "name": "Fetch Latest Research Papers",
+      "type": "httpRequest",
+      "typeVersion": 2,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://newsapi.org/v2/everything?q=quantum computing&from={{new Date(new Date().setDate(new Date().getDate()-1)).toISOString().slice(0,10)}}&sortBy=publishedAt&language=en&apiKey={{$credentials.newsApi.apiKey}}",
+        "options": {},
+        "responseFormat": "json"
+      },
+      "name": "Fetch Latest News",
+      "type": "httpRequest",
+      "typeVersion": 2,
+      "position": [
+        250,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const papers = items[0].json.message.items || [];\nconst newsArticles = items[1].json.articles || [];\n\nconst combinedTexts = [];\n\nfor (const paper of papers) {\n  combinedTexts.push({\n    id: paper.DOI,\n    title: paper.title[0],\n    abstract: paper.abstract || '',\n    source: 'Research Paper',\n    publishedDate: paper.created['date-time'] || paper.published['date-time'] || ''\n  });\n}\n\nfor (const article of newsArticles) {\n  combinedTexts.push({\n    id: article.url,\n    title: article.title,\n    abstract: article.description || '',\n    source: 'News Article',\n    publishedDate: article.publishedAt\n  });\n}\n\nreturn combinedTexts.map(item => ({ json: item }));"
+      },
+      "name": "Combine and Format Data",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        450
+      ],
+      "notes": "Create unified dataset from papers and news articles"
+    },
+    {
+      "parameters": {
+        "operation": "detectEntities",
+        "text": "={{$json.title + '. ' + $json.abstract}}"
+      },
+      "name": "Extract Named Entities (NLP)",
+      "type": "awsComprehend",
+      "typeVersion": 1,
+      "position": [
+        750,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const trends = {};\n\nitems.forEach(item => {\n  if (!item.json.Entities) return;\n  item.json.Entities.forEach(entity => {\n    const entityText = entity.Text.toLowerCase();\n    if (trends[entityText]) {\n      trends[entityText].count += 1;\n      if (new Date(item.json.publishedDate) > new Date(trends[entityText].latestDate)) {\n        trends[entityText].latestDate = item.json.publishedDate;\n      }\n    } else {\n      trends[entityText] = {\n        text: entity.Text,\n        type: entity.Type,\n        count: 1,\n        latestDate: item.json.publishedDate\n      };\n    }\n  });\n});\n\nconst sortedTrends = Object.values(trends).sort((a,b) => b.count - a.count).slice(0, 20);\n\nreturn sortedTrends.map(trend => ({ json: trend }));"
+      },
+      "name": "Aggregate and Rank Trends",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        450
+      ],
+      "notes": "Identify top 20 emerging entities/topics"
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n * Generate simple JSON for visualization tools like QuickChart or external dashboard\n * The output includes labels and counts representing trend terms\n */\nconst labels = items.map(item => item.json.text);\nconst counts = items.map(item => item.json.count);\n\nreturn [{\n  json: {\n    chartData: {\n      type: 'bar',\n      data: {\n        labels: labels,\n        datasets: [{\n          label: 'Emerging Quantum Computing Trends',\n          data: counts,\n          backgroundColor: 'rgba(54, 162, 235, 0.7)'\n        }]\n      },\n      options: {\n        responsive: true,\n        plugins: {\n          legend: { display: true },\n          title: { display: true, text: 'Top Quantum Computing Trends' }\n        }\n      }\n    }\n  }\n}];"
+      },
+      "name": "Prepare Visualization Data",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n * Compose alert message if any trend count exceeds threshold or new significant breakthrough found\n */\nconst threshold = 5;\nlet alertItems = items.filter(item => item.json.count >= threshold);\n\nif (alertItems.length === 0) {\n  // No significant trends above threshold\n  return [];\n}\n\nconst messages = alertItems.map(item => `Significant Quantum Computing Trend detected: \"${item.json.text}\" with ${item.json.count} mentions. Latest mention on ${new Date(item.json.latestDate).toLocaleDateString()}.`);\n\nreturn [{ json: { message: messages.join('\\n') } }];"
+      },
+      "name": "Compose Alerts",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "alerts@quantumtrends.example.com",
+        "toEmail": "={{$credentials.usersEmails.emails}}",
+        "subject": "Quantum Computing Breakthrough Alert",
+        "text": "={{$json.message}}"
+      },
+      "name": "Send Alert Emails",
+      "type": "emailSend",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        700
+      ]
+    }
+  ],
+  "connections": {
+    "Fetch Latest Research Papers": {
+      "main": [
+        [
+          {
+            "node": "Fetch Latest News",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Latest News": {
+      "main": [
+        [
+          {
+            "node": "Combine and Format Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine and Format Data": {
+      "main": [
+        [
+          {
+            "node": "Extract Named Entities (NLP)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Named Entities (NLP)": {
+      "main": [
+        [
+          {
+            "node": "Aggregate and Rank Trends",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate and Rank Trends": {
+      "main": [
+        [
+          {
+            "node": "Prepare Visualization Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Compose Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose Alerts": {
+      "main": [
+        [
+          {
+            "node": "Send Alert Emails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "credentials": {
+    "newsApi": {
+      "name": "NewsAPI"
+    },
+    "usersEmails": {
+      "name": "UsersEmails"
+    }
+  }
+}
