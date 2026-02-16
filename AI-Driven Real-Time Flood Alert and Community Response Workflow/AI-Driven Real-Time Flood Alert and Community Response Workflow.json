@@ -1,0 +1,248 @@
+{
+  "name": "Real-Time AI-Powered Flood Warning and Community Response System",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.weather.com/v3/wx/conditions/current",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "geocode",
+              "value": "40.7128,-74.0060"
+            },
+            {
+              "name": "format",
+              "value": "json"
+            },
+            {
+              "name": "apiKey",
+              "value": "={{$credentials.weatherApi.apiKey}}"
+            }
+          ]
+        },
+        "options": {},
+        "responseFormat": "json",
+        "headerParametersUi": {
+          "parameter": []
+        }
+      },
+      "name": "Fetch Real-Time Weather Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "1",
+          "name": "weatherApi"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  AI-Powered Flood Risk Assessment Logic\n  Uses latest weather data to assess flood risk level\n  Output: riskLevel (Low, Moderate, High, Critical)\n*/\n\nconst weather = items[0].json;\n\n// Helper: sample heuristic flood risk assessment\nconst precipitation = weather.precipitationLastHour || 0;\nconst riverLevel = weather.riverLevel || 0;\nconst soilSaturation = weather.soilSaturation || 0;\n\nlet riskScore = 0;\n\nif (precipitation > 20) riskScore += 3;\nelse if (precipitation > 10) riskScore += 2;\nelse if (precipitation > 2) riskScore += 1;\n\nif (riverLevel > 90) riskScore += 3;\nelse if (riverLevel > 75) riskScore += 2;\nelse if (riverLevel > 50) riskScore += 1;\n\nif (soilSaturation > 80) riskScore += 3;\nelse if (soilSaturation > 60) riskScore += 2;\nelse if (soilSaturation > 40) riskScore += 1;\n\nlet riskLevel = 'Low';\n\nif (riskScore >= 7) riskLevel = 'Critical';\nelse if (riskScore >= 5) riskLevel = 'High';\nelse if (riskScore >= 3) riskLevel = 'Moderate';\n\nreturn [{ json: { riskLevel, riskScore, originalWeather: weather }}];"
+      },
+      "name": "Assess Flood Risk Level",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json[\"riskLevel\"]}}",
+              "operation": "in",
+              "value2": [
+                "High",
+                "Critical"
+              ]
+            }
+          ]
+        }
+      },
+      "name": "Check High Flood Risk",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "channel": "sms",
+        "to": "={{$credentials.localAuthorities.phone}},{{$credentials.residents.phoneGroup}}",
+        "message": "Flood Alert: Risk level {{$json[\"riskLevel\"]}} detected in your area. Please follow emergency instructions and prepare accordingly.",
+        "options": {}
+      },
+      "name": "Send Alert Notifications",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        250
+      ],
+      "credentials": {
+        "twilioApi": {
+          "id": "2",
+          "name": "twilioApi"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nTask assignments and resource mobilization\nGenerate tasks for community volunteers and emergency teams\nExample tasks based on riskLevel\n*/\nconst riskLevel = items[0].json.riskLevel;\n\nconst tasks = [];\n\nif (riskLevel === 'Critical' || riskLevel === 'High') {\n  tasks.push({\n    taskId: 'deploy_sandbags',\n    description: 'Deploy sandbags at identified flood-prone zones.',\n    team: 'volunteers',\n    priority: 'High'\n  });\n  tasks.push({\n    taskId: 'open_shelters',\n    description: 'Open emergency shelters and prepare for evacuees.',\n    team: 'emergency_services',\n    priority: 'High'\n  });\n  tasks.push({\n    taskId: 'check_drains',\n    description: 'Clear storm drains and remove blockages.',\n    team: 'public_works',\n    priority: 'Medium'\n  });\n} else if (riskLevel === 'Moderate') {\n  tasks.push({\n    taskId: 'monitor_river',\n    description: 'Monitor river levels and report anomalies.',\n    team: 'volunteers',\n    priority: 'Medium'\n  });\n}\n\nreturn tasks.map(task => ({ json: task }));"
+      },
+      "name": "Generate Community Tasks",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "tasks",
+        "operation": "create",
+        "additionalFields": {
+          "assignee": "={{$json.team}}",
+          "priority": "={{$json.priority}}",
+          "description": "={{$json.description}}",
+          "dueDate": "={{new Date(new Date().getTime() + 60*60*1000).toISOString()}}"
+        }
+      },
+      "name": "Assign Tasks",
+      "type": "n8n-nodes-base.trello",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        300
+      ],
+      "credentials": {
+        "trelloApi": {
+          "id": "3",
+          "name": "trelloApi"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "resourceAllocation",
+        "operation": "mobilize",
+        "fields": {
+          "resources": [
+            {
+              "type": "sandbags",
+              "quantity": 500,
+              "location": "flood_prone_zones"
+            },
+            {
+              "type": "emergency_shelters",
+              "quantity": 3,
+              "location": "city_halls"
+            }
+          ]
+        }
+      },
+      "name": "Mobilize Resources",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1750,
+        350
+      ]
+    },
+    {
+      "parameters": {},
+      "name": "No Action - Low Risk",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Fetch Real-Time Weather Data": {
+      "main": [
+        [
+          {
+            "node": "Assess Flood Risk Level",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assess Flood Risk Level": {
+      "main": [
+        [
+          {
+            "node": "Check High Flood Risk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check High Flood Risk": {
+      "main": [
+        [
+          {
+            "node": "Send Alert Notifications",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Action - Low Risk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Alert Notifications": {
+      "main": [
+        [
+          {
+            "node": "Generate Community Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Community Tasks": {
+      "main": [
+        [
+          {
+            "node": "Assign Tasks",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Mobilize Resources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
