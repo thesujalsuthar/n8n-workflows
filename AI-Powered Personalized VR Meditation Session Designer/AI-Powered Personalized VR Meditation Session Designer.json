@@ -1,0 +1,335 @@
+{
+  "name": "Adaptive AI-Driven VR Meditation Environment Designer",
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "User Input",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        150,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "mode": "list",
+          "list": [
+            "Zen Garden",
+            "Forest",
+            "Beach",
+            "Mountain",
+            "Space"
+          ]
+        }
+      },
+      "name": "Select Meditation Theme",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        400,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "mode": "list",
+          "list": [
+            "Rain",
+            "Ocean Waves",
+            "Birdsong",
+            "Wind Chimes",
+            "Ambient Drone"
+          ]
+        }
+      },
+      "name": "Select Ambient Sound",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "mode": "number",
+          "number": 15,
+          "minValue": 5,
+          "maxValue": 120,
+          "step": 5
+        }
+      },
+      "name": "Select Duration (minutes)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        400,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const previousSessions = items[0].json.previousSessions || [];\n\n// Analyze previous sessions for theme and ambient sound preference frequency\nconst themeCount = {};\nconst soundCount = {};\n\nfor (const session of previousSessions) {\n  if (session.theme) {\n    themeCount[session.theme] = (themeCount[session.theme] || 0) + 1;\n  }\n  if (session.ambientSound) {\n    soundCount[session.ambientSound] = (soundCount[session.ambientSound] || 0) + 1;\n  }\n}\n\nfunction getTopPreference(countObj) {\n  const entries = Object.entries(countObj);\n  if (entries.length === 0) return null;\n  entries.sort((a, b) => b[1] - a[1]);\n  return entries[0][0];\n}\n\nconst recommendedTheme = getTopPreference(themeCount) || 'Zen Garden';\nconst recommendedAmbientSound = getTopPreference(soundCount) || 'Rain';\n\nreturn [{\n  json: {\n    recommendedTheme,\n    recommendedAmbientSound\n  }\n}];"
+      },
+      "name": "AI Recommendation Engine",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const meditationSession = {\n  theme: $json[\"theme\"] || $json[\"recommendedTheme\"],\n  ambientSound: $json[\"ambientSound\"] || $json[\"recommendedAmbientSound\"],\n  duration: $json[\"duration\"] || 15,\n  sessionId: Date.now().toString(),\n  startTime: new Date().toISOString()\n};\n\nreturn [{ json: meditationSession }];"
+      },
+      "name": "Generate VR Session",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "event": "custom",
+        "eventName": "session.start"
+      },
+      "name": "Session Start Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "event": "custom",
+        "eventName": "session.end"
+      },
+      "name": "Session End Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "collection": "meditation_sessions",
+        "fields": {
+          "theme": "={{$node[\"Generate VR Session\"].json[\"theme\"]}}",
+          "ambientSound": "={{$node[\"Generate VR Session\"].json[\"ambientSound\"]}}",
+          "duration": "={{$node[\"Generate VR Session\"].json[\"duration\"]}}",
+          "sessionId": "={{$node[\"Generate VR Session\"].json[\"sessionId\"]}}",
+          "startTime": "={{$node[\"Generate VR Session\"].json[\"startTime\"]}}",
+          "endTime": null,
+          "status": "started"
+        }
+      },
+      "name": "Log Session Start",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        150
+      ],
+      "credentials": {
+        "mongoDb": "MongoDB Account"
+      },
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "collection": "meditation_sessions",
+        "query": {
+          "sessionId": "={{$json[\"sessionId\"]}}"
+        },
+        "updateFields": {
+          "endTime": "={{new Date().toISOString()}}",
+          "status": "completed",
+          "statistics": {
+            "durationCompleted": "={{$json[\"duration\"]}}"
+          }
+        }
+      },
+      "name": "Log Session End",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        350
+      ],
+      "credentials": {
+        "mongoDb": "MongoDB Account"
+      },
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {},
+      "name": "Fetch Previous Sessions",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        650,
+        100],
+      "credentials": {
+        "mongoDb": "MongoDB Account"
+      },
+      "options": {
+        "operation": "find",
+        "collection": "meditation_sessions",
+        "query": "{}",
+        "limit": 50,
+        "returnAll": false,
+        "options": {}
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.map(item => {\n  return {\n    json: {\n      theme: $json[\"theme\"],\n      ambientSound: $json[\"ambientSound\"],\n      duration: $json[\"duration\"]\n    }\n  };\n});"
+      },
+      "name": "Prepare Session Data for AI",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        150
+      ]
+    }
+  ],
+  "connections": {
+    "User Input": {
+      "main": [
+        [
+          {
+            "node": "Select Meditation Theme",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Select Ambient Sound",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Select Duration (minutes)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select Meditation Theme": {
+      "main": [
+        [
+          {
+            "node": "Generate VR Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select Ambient Sound": {
+      "main": [
+        [
+          {
+            "node": "Generate VR Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select Duration (minutes)": {
+      "main": [
+        [
+          {
+            "node": "Generate VR Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Previous Sessions": {
+      "main": [
+        [
+          {
+            "node": "Prepare Session Data for AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Session Data for AI": {
+      "main": [
+        [
+          {
+            "node": "AI Recommendation Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Recommendation Engine": {
+      "main": [
+        [
+          {
+            "node": "Generate VR Session",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Generate VR Session": {
+      "main": [
+        [
+          {
+            "node": "Log Session Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Session Start Trigger": {
+      "main": [
+        [
+          {
+            "node": "Log Session Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Session End Trigger": {
+      "main": [
+        [
+          {
+            "node": "Log Session End",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
