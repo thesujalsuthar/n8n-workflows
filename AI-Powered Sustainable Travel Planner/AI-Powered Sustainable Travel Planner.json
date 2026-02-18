@@ -1,0 +1,139 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "plan-trip",
+        "responseMode": "lastNode",
+        "jsonResponse": true,
+        "options": {}
+      },
+      "name": "HTTP Request Trigger",
+      "type": "n8n-nodes-base.httpTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "ai_sustainable_trip_planner"
+    },
+    {
+      "parameters": {
+        "functionCode": "const input = items[0].json;\n\n// Extract travel details\nconst origin = input.origin;\nconst destination = input.destination;\nconst departureDate = input.departureDate;\nconst returnDate = input.returnDate || null;\nconst preferences = input.preferences || {};\n\nreturn [\n  {\n    json: {\n      origin,\n      destination,\n      departureDate,\n      returnDate,\n      preferences\n    }\n  }\n];"
+      },
+      "name": "Parse Input",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n * Simulate optimizing travel routes focusing on sustainability: \n * Returns the recommended transportation modes with eco-friendliness prioritized,\n * estimated travel time, and intermediate stops.\n */\nconst origin = items[0].json.origin;\nconst destination = items[0].json.destination;\nconst preferences = items[0].json.preferences || {};\n\n// For demonstration, static recommendations\n\nconst transportationOptions = [\n  {\n    mode: 'electric_train',\n    carbonEmissionFactor: 0.014, // kg CO2 per km\n    averageSpeedKmH: 90\n  },\n  {\n    mode: 'electric_bus',\n    carbonEmissionFactor: 0.027,\n    averageSpeedKmH: 60\n  },\n  {\n    mode: 'carpool_ev',\n    carbonEmissionFactor: 0.05,\n    averageSpeedKmH: 70\n  },\n  {\n    mode: 'bike',\n    carbonEmissionFactor: 0,\n    averageSpeedKmH: 15\n  }\n];\n\n// Pick the best option according to preferences or prioritize lowest carbon\nlet bestOption = transportationOptions[0];\nfor (const option of transportationOptions) {\n  if (preferences.preferredModes && preferences.preferredModes.includes(option.mode)) {\n    bestOption = option;\n    break;\n  }\n}\n\n// Simulate distance between origin and destination (fake for now)\nconst distanceKm = 250; // example static distance\n\nconst estimatedTimeHours = distanceKm / bestOption.averageSpeedKmH;\nconst estimatedCO2Kg = distanceKm * bestOption.carbonEmissionFactor;\n\nreturn [\n  {\n    json: {\n      mode: bestOption.mode,\n      distanceKm,\n      estimatedTimeHours,\n      estimatedCO2Kg\n    }\n  }\n];"
+      },
+      "name": "Optimize Route & Transport",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n * Calculate carbon footprint for the entire trip (round trip if returnDate exists)\n */\nconst distanceKm = items[0].json.distanceKm;\nconst mode = items[0].json.mode;\nconst estimatedOneWayCO2 = items[0].json.estimatedCO2Kg;\nconst hasReturn = !!items[0].json.estimatedTimeHours && items[0].json.estimatedTimeHours > 0;\n\nconst totalDistance = hasReturn ? distanceKm * 2 : distanceKm;\nconst totalCO2Kg = estimatedOneWayCO2 * (hasReturn ? 2 : 1);\n\nreturn [\n  {\n    json: {\n      mode,\n      totalDistanceKm: totalDistance,\n      totalCO2Kg\n    }\n  }\n];"
+      },
+      "name": "Calculate Carbon Footprint",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        930,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n * Suggest carbon offset options based on footprint\n * Returns a list of project options user can choose from.\n */\nconst footprintKg = items[0].json.totalCO2Kg;\n\nconst offsetProjects = [\n  {\n    name: 'Reforestation in Amazon',\n    costPerKg: 0.02,\n    minPurchaseKg: 10,\n    description: 'Planting trees to absorb carbon emissions'\n  },\n  {\n    name: 'Wind Energy Support',\n    costPerKg: 0.015,\n    minPurchaseKg: 5,\n    description: 'Investing in clean wind energy projects'\n  },\n  {\n    name: 'Community Solar',\n    costPerKg: 0.018,\n    minPurchaseKg: 1,\n    description: 'Supporting solar power installations'\n  }\n];\n\nconst suggestions = offsetProjects.map(project => {\n  // Calculate minimum cost for offset\n  const purchaseKg = Math.max(project.minPurchaseKg, footprintKg);\n  const estimatedCost = purchaseKg * project.costPerKg;\n  return {\n    name: project.name,\n    purchaseKg,\n    estimatedCost,\n    description: project.description\n  };\n});\n\nreturn [\n  {\n    json: {\n      footprintKg,\n      offsetOptions: suggestions\n    }\n  }\n];"
+      },
+      "name": "Suggest Carbon Offsets",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1160,
+        300
+      ]
+    },
+    {
+      "parameters": {},
+      "name": "Respond with Plan",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "HTTP Request Trigger": {
+      "main": [
+        [
+          {
+            "node": "Parse Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Input": {
+      "main": [
+        [
+          {
+            "node": "Optimize Route & Transport",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Optimize Route & Transport": {
+      "main": [
+        [
+          {
+            "node": "Calculate Carbon Footprint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Carbon Footprint": {
+      "main": [
+        [
+          {
+            "node": "Suggest Carbon Offsets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Suggest Carbon Offsets": {
+      "main": [
+        [
+          {
+            "node": "Respond with Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
