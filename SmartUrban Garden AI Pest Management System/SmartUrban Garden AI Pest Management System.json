@@ -1,0 +1,292 @@
+{
+  "name": "SmartUrban Garden AI Pest Detection & Eco-Friendly Treatment Scheduler",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "webhook",
+        "path": "pest-detection-upload",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "name": "Pest Image Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "image",
+        "operation": "classify",
+        "model": "Custom Pest Detection Model",
+        "imageUrl": "={{$node[\"Pest Image Webhook\"].json[\"body\"][\"imageUrl\"]}}"
+      },
+      "name": "AI Pest Detection",
+      "type": "n8n-nodes-base.ai",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getEnvironmentData"
+      },
+      "name": "Get Environmental Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        500,
+        150
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "1",
+          "name": "EnvDataApiCredentials"
+        }
+      },
+      "notes": "Fetch temperature, humidity, light, and soil moisture from garden sensors or an open API"
+    },
+    {
+      "parameters": {
+        "functionCode": "const pestType = $json[\"prediction\"][0][\"label\"];\nconst envData = $items(\"Get Environmental Data\")[0].json;\n\n// Determine eco-friendly treatment based on pest type and environmental conditions\nlet treatment = null;\n\nif (pestType === \"aphids\") {\n  if (envData.humidity > 70) {\n    treatment = \"Apply neem oil spray early morning\";\n  } else {\n    treatment = \"Use insecticidal soap at midday\";\n  }\n} else if (pestType === \"spider_mites\") {\n  if (envData.temperature > 30) {\n    treatment = \"Increase humidity and apply predatory mites\";\n  } else {\n    treatment = \"Use horticultural oil spray\";\n  }\n} else if (pestType === \"whiteflies\") {\n  treatment = \"Introduce ladybugs and use yellow sticky traps\";\n} else {\n  treatment = \"Manual removal and monitor closely\";\n}\n\nreturn [{ json: { pestType, treatment }}];"
+      },
+      "name": "Determine Eco-Friendly Treatment",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "schedule",
+        "operation": "create",
+        "type": "interval",
+        "interval": 1,
+        "unit": "days",
+        "startDate": "={{new Date().toISOString()}}",
+        "workflowId": "={{$self.workflowId}}",
+        "name": "Daily Pest Treatment Reminder"
+      },
+      "name": "Schedule Treatment Reminder",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        750,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const treatment = $items(\"Determine Eco-Friendly Treatment\")[0].json.treatment;\n\nreturn [{\n  json: {\n    message: `Reminder: ${treatment} today to protect your plants.`\n  }\n}];"
+      },
+      "name": "Prepare Reminder Message",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        950,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "toEmail": "={{$json[\"userEmail\"] || $env.USER_EMAIL}}",
+        "subject": "Daily Eco-Friendly Pest Treatment Reminder",
+        "text": "={{ $json[\"message\"] }}"
+      },
+      "name": "Send Notification Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        450
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "2",
+          "name": "SmtpCredentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "path": "pest-management-report",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "name": "Report Request Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const pestDetection = $items(\"AI Pest Detection\")[0].json.prediction;\nconst treatmentInfo = $items(\"Determine Eco-Friendly Treatment\")[0].json;\nconst envData = $items(\"Get Environmental Data\")[0].json;\n\nreturn [{\n  json: {\n    report: {\n      detectedPests: pestDetection,\n      treatment: treatmentInfo.treatment,\n      environmentalConditions: envData\n    }\n  }\n}];"
+      },
+      "name": "Compile Pest Management Report",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "respondWithResult",
+        "options": {}
+      },
+      "name": "Respond with Report",
+      "type": "n8n-nodes-base.webhookResponse",
+      "typeVersion": 1,
+      "position": [
+        750,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "sensor",
+        "operation": "getLatestReadings",
+        "location": "urban_garden",
+        "maxResults": 1
+      },
+      "name": "Fetch Plant Health Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        500,
+        450
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "3",
+          "name": "PlantHealthApiCredentials"
+        }
+      },
+      "notes": "Fetch plant health metrics such as leaf moisture, color index, growth rate to optimize treatment"
+    }
+  ],
+  "connections": {
+    "Pest Image Webhook": {
+      "main": [
+        [
+          {
+            "node": "AI Pest Detection",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Environmental Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Plant Health Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Pest Detection": {
+      "main": [
+        [
+          {
+            "node": "Determine Eco-Friendly Treatment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Environmental Data": {
+      "main": [
+        [
+          {
+            "node": "Determine Eco-Friendly Treatment",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch Plant Health Data": {
+      "main": [
+        [
+          {
+            "node": "Determine Eco-Friendly Treatment",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Determine Eco-Friendly Treatment": {
+      "main": [
+        [
+          {
+            "node": "Schedule Treatment Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Treatment Reminder": {
+      "main": [
+        [
+          {
+            "node": "Prepare Reminder Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Reminder Message": {
+      "main": [
+        [
+          {
+            "node": "Send Notification Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Report Request Webhook": {
+      "main": [
+        [
+          {
+            "node": "Compile Pest Management Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compile Pest Management Report": {
+      "main": [
+        [
+          {
+            "node": "Respond with Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "smarturbanai-pestdetection-treatment"
+}
