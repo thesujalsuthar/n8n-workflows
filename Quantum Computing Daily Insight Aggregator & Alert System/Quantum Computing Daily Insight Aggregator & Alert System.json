@@ -1,0 +1,201 @@
+{
+  "name": "Quantum Computing Daily Research Trend Analyzer & Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.example-research-db.org/v1/publications?query=quantum+computing&from={{ $today }}&to={{ $today }}",
+        "responseFormat": "json",
+        "jsonParameters": true,
+        "options": {}
+      },
+      "name": "Fetch Research Publications",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://newsapi.org/v2/everything?q=quantum+computing&from={{ $today }}&to={{ $today }}&apiKey=YOUR_NEWSAPI_KEY",
+        "responseFormat": "json",
+        "jsonParameters": true,
+        "options": {}
+      },
+      "name": "Fetch News Articles",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.preprint-quantum.org/v1/search?query=quantum+computing&date={{ $today }}",
+        "responseFormat": "json",
+        "jsonParameters": true,
+        "options": {}
+      },
+      "name": "Fetch Preprints",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "passThrough"
+      },
+      "name": "Merge Fetch Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ],
+      "notesInFlow": true,
+      "notes": "Merge all fetched data into single stream"
+    },
+    {
+      "parameters": {
+        "language": "en",
+        "model": "gpt-4o-mini",
+        "options": {},
+        "prompt": "You are an AI that analyzes recent quantum computing research, news, and preprints. Based on the following data, identify emerging trends, significant breakthroughs, and summarize key insights in a concise manner:\n\n{{ $json.data }}\n\nReturn a summary highlighting the most important new developments."
+      },
+      "name": "AI Trend Analyzer & Summarizer",
+      "type": "n8n-nodes-base.openai",
+      "typeVersion": 1,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "alerts@quantumtrend.com",
+        "toEmail": "={{$json[\"subscribers\"].join(\",\")}}",
+        "subject": "Quantum Computing Daily Research Highlights - {{ $today }}",
+        "text": "={{ $json[\"choices\"][0][\"message\"][\"content\"] }}",
+        "options": {}
+      },
+      "name": "Send Email Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        900,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "chatMessage",
+        "operation": "send",
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "={{ $json[\"choices\"][0][\"message\"][\"content\"] }}",
+        "additionalFields": {}
+      },
+      "name": "Send Telegram Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        900,
+        350
+      ]
+    },
+    {
+      "parameters": {},
+      "name": "Get Subscribers",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [
+        250,
+        600
+      ],
+      "credentials": {
+        "googleApi": "Google Sheets API"
+      },
+      "notes": "Fetch list of subscriber emails/contacts"
+    }
+  ],
+  "connections": {
+    "Fetch Research Publications": {
+      "main": [
+        [
+          {
+            "node": "Merge Fetch Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch News Articles": {
+      "main": [
+        [
+          {
+            "node": "Merge Fetch Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch Preprints": {
+      "main": [
+        [
+          {
+            "node": "Merge Fetch Results",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Merge Fetch Results": {
+      "main": [
+        [
+          {
+            "node": "AI Trend Analyzer & Summarizer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Trend Analyzer & Summarizer": {
+      "main": [
+        [
+          {
+            "node": "Get Subscribers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Subscribers": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Telegram Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
