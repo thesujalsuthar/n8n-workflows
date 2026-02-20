@@ -1,0 +1,319 @@
+{
+  "name": "Smart Urban Garden AI Pest Detection & Eco-Friendly Treatment Scheduler",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 6,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://your-garden-camera/api/latest-image",
+        "responseFormat": "file",
+        "binaryPropertyName": "pestImage"
+      },
+      "name": "Fetch Latest Garden Image",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": "pest-detection-model-id",
+        "imageData": "={{$binary.pestImage.data}}",
+        "imageMimeType": "image/jpeg"
+      },
+      "name": "AI Pest Detection",
+      "type": "n8n-nodes-base.aiImageRecognition",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.detectedPests && $json.detectedPests.length > 0}}",
+              "operation": "isTrue"
+            }
+          ]
+        }
+      },
+      "name": "Check Pest Detection",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "chatId": "your-chat-id",
+        "text": "={{`Pests detected in your urban garden: ${$json.detectedPests.map(p => p.name).join(', ')}. Scheduling eco-friendly treatment.`}}"
+      },
+      "name": "Notify Gardener",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "chatId": "your-chat-id",
+        "text": "No pests detected today in your urban garden. Keep up the good work!"
+      },
+      "name": "Notify No Pests",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.open-meteo.com/v1/forecast?latitude=your_latitude&longitude=your_longitude&hourly=temperature_2m,precipitation,windspeed_10m",
+        "responseFormat": "json",
+        "jsonParse": true
+      },
+      "name": "Fetch Weather Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        750,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const pests = $json.detectedPests;\nconst weather = $json.weatherData;\n\n// Simple logic to schedule treatment when no rain is expected in next 6 hours and temperature above 15C\nconst now = new Date();\nconst hourlyTemps = weather.hourly.temperature_2m;\nconst hourlyPrecip = weather.hourly.precipitation;\nconst hourlyTimes = weather.hourly.time;\n\nlet suitableHour = null;\nfor (let i = 0; i < hourlyTimes.length; i++) {\n  const time = new Date(hourlyTimes[i]);\n  if (time > now && (time - now) / 3600000 <= 6) {\n    if (hourlyPrecip[i] < 0.1 && hourlyTemps[i] > 15) {\n      suitableHour = time;\n      break;\n    }\n  }\n}\n\nreturn [{\n  json: {\n    pestsDetected: pests,\n    treatmentTime: suitableHour ? suitableHour.toISOString() : null\n  }\n}];"
+      },
+      "name": "Determine Treatment Time",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "event",
+        "operation": "create",
+        "calendarId": "primary",
+        "summary": "Eco-Friendly Pest Treatment",
+        "description": "Apply eco-friendly treatments for detected pests: {{$json.pestsDetected.map(p => p.name).join(', ')}}",
+        "start": "={{$json.treatmentTime}}",
+        "end": "={{new Date(new Date($json.treatmentTime).getTime() + 3600000).toISOString()}}"
+      },
+      "name": "Schedule Treatment (Google Calendar)",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "chatId": "your-chat-id",
+        "text": "={{\n  $json.treatmentTime ?\n  `Treatment scheduled at ${new Date($json.treatmentTime).toLocaleString()}. Reminder will follow.` :\n  'No suitable treatment time found in the next 6 hours. Please review treatment schedule manually.'\n}}"
+      },
+      "name": "Notify Treatment Scheduled",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "chatId": "your-chat-id",
+        "text": "Reminder: It is time to apply eco-friendly pest treatment to your urban garden."
+      },
+      "name": "Send Treatment Reminder",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1750,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "waitUntil": "{{$json.treatmentTime}}"
+      },
+      "name": "Wait Until Treatment Time",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Latest Garden Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Latest Garden Image": {
+      "main": [
+        [
+          {
+            "node": "AI Pest Detection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Pest Detection": {
+      "main": [
+        [
+          {
+            "node": "Check Pest Detection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Pest Detection": {
+      "main": [
+        [
+          {
+            "node": "Notify Gardener",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Weather Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify No Pests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Gardener": {
+      "main": [
+        [
+          {
+            "node": "Fetch Weather Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Weather Data": {
+      "main": [
+        [
+          {
+            "node": "Determine Treatment Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Determine Treatment Time": {
+      "main": [
+        [
+          {
+            "node": "Schedule Treatment (Google Calendar)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Notify Treatment Scheduled",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Treatment (Google Calendar)": {
+      "main": [
+        [
+          {
+            "node": "Wait Until Treatment Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Treatment Scheduled": {
+      "main": [
+        [
+          {
+            "node": "Wait Until Treatment Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Until Treatment Time": {
+      "main": [
+        [
+          {
+            "node": "Send Treatment Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
