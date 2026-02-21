@@ -1,0 +1,203 @@
+{
+  "name": "EcoAware AI: Personalized Sustainability Tips & Habit Motivation",
+  "nodes": [
+    {
+      "parameters": {
+        "interval": 1,
+        "unit": "day",
+        "time": "08:00"
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const users = [\n  { id: 1, name: 'Alice', platform: 'telegram', platformId: '12345678' },\n  { id: 2, name: 'Bob', platform: 'email', email: 'bob@example.com' }\n];\n\nreturn users.map(user => ({ json: user }));"
+      },
+      "name": "Get Users",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "headerAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{ $credentials.openWeatherApi.apiKey }}"
+        },
+        "url": "https://api.openweathermap.org/data/2.5/weather",
+        "method": "GET",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "q",
+              "value": "San Francisco"
+            },
+            {
+              "name": "units",
+              "value": "metric"
+            }
+          ]
+        }
+      },
+      "name": "Fetch Environmental Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ],
+      "credentials": {
+        "openWeatherApi": {
+          "id": "1",
+          "name": "OpenWeather API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const weather = $items()[0].json;\nconst users = $items(\"Get Users\");\n\nconst tips = [\n  'Turn off lights when not in use.',\n  'Use reusable bags for shopping.',\n  'Reduce water waste by fixing leaks.',\n  'Opt for public transport or biking.',\n  'Recycle and compost your waste.'\n];\n\nconst motivators = [\n  'Every small step counts!',\n  'Your efforts make a difference!',\n  'Let’s keep our planet healthy!',\n  'Eco-friendly habits save resources.',\n  'Sustainability starts with you!'\n];\n\nconst temp = weather.main.temp;\nconst weatherCondition = weather.weather[0].main.toLowerCase();\n\nfunction selectTip(temp, condition) {\n  if (condition.includes('rain')) {\n    return 'Remember to use a reusable raincoat or umbrella!';\n  } else if (temp > 25) {\n    return 'Save energy by using fans instead of AC.';\n  } else if (temp < 10) {\n    return 'Dress warmly to reduce heating needs.';\n  } else {\n    const index = Math.floor(Math.random() * tips.length);\n    return tips[index];\n  }\n}\n\nreturn users.map(userItem => {\n  const user = userItem.json;\n  const tip = selectTip(temp, weatherCondition);\n  const motivation = motivators[Math.floor(Math.random() * motivators.length)];\n  return {\n    json: {\n      id: user.id,\n      name: user.name,\n      platform: user.platform,\n      platformId: user.platformId || null,\n      email: user.email || null,\n      message: `Hello ${user.name}! Today’s sustainability tip: ${tip} Motivation: ${motivation}`\n    }\n  };\n});"
+      },
+      "name": "Generate Personalized Messages",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{$json[\"platformId\"]}}",
+        "text": "={{$json[\"message\"]}}",
+        "additionalFields": {}
+      },
+      "name": "Send Telegram Message",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        220
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "1",
+          "name": "Telegram Bot"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "fromEmail": "noreply@ecoaware.ai",
+        "toEmail": "={{$json[\"email\"]}}",
+        "subject": "Your Daily EcoAware Sustainability Tip & Motivation",
+        "text": "={{$json[\"message\"]}}"
+      },
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        380
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "1",
+          "name": "SMTP Email"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {},
+      "name": "Split for Each User",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        300
+      ],
+      "continueOnFail": true,
+      "settings": {
+        "batchSize": 1
+      }
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Users",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Users": {
+      "main": [
+        [
+          {
+            "node": "Fetch Environmental Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Environmental Data": {
+      "main": [
+        [
+          {
+            "node": "Generate Personalized Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Personalized Messages": {
+      "main": [
+        [
+          {
+            "node": "Split for Each User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split for Each User": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Message",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "id": "1"
+}
