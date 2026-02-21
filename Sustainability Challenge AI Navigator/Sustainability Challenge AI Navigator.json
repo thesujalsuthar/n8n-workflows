@@ -1,0 +1,380 @@
+{
+  "name": "AI-Driven Personalized Daily Sustainability Challenge and Progress Tracker",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 8,
+              "minute": 0,
+              "second": 0
+            }
+          ]
+        }
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "passThrough",
+        "functionCode": "const users = [\n  { id: 'user1', name: 'Alice', email: 'alice@example.com', preferences: { wasteReduction: true, energySaving: true, waterConservation: false } },\n  { id: 'user2', name: 'Bob', email: 'bob@example.com', preferences: { wasteReduction: false, energySaving: true, waterConservation: true } }\n];\nreturn users.map(user => ({ json: user }));"
+      },
+      "name": "Get Users",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const challenges = [\n  { id: 'ch1', category: 'wasteReduction', title: 'Avoid single-use plastics today', description: 'Use reusable bags and bottles instead of disposables.' },\n  { id: 'ch2', category: 'energySaving', title: 'Turn off unused lights and electronics', description: 'Switch off all unnecessary lights and unplug devices.' },\n  { id: 'ch3', category: 'waterConservation', title: 'Take a 5-minute shower', description: 'Reduce your shower time to save water.' },\n  { id: 'ch4', category: 'wasteReduction', title: 'Compost your food waste', description: 'Start or add to a compost bin for organic waste.' },\n  { id: 'ch5', category: 'energySaving', title: 'Use natural light today', description: 'Open curtains and blinds instead of turning on lights.' },\n  { id: 'ch6', category: 'waterConservation', title: 'Fix a water leak', description: 'Check for and repair any leaking taps or toilets.' }\n];\n\nconst user = items[0].json;\n\n// Filter challenges matching user preferences\nconst possibleChallenges = challenges.filter(ch => user.preferences[ch.category]);\n\n// Randomly pick one\nconst challenge = possibleChallenges[Math.floor(Math.random() * possibleChallenges.length)] || null;\n\nif (!challenge) {\n  return [{ json: { message: `No available challenges for user ${user.name}` } }];\n}\n\nreturn [{ json: { userId: user.id, userName: user.name, email: user.email, challenge } }];"
+      },
+      "name": "Assign Challenge",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ],
+      "notesInFlow": true,
+      "notes": "Assigns a personalized daily challenge based on user preferences."
+    },
+    {
+      "parameters": {
+        "fromEmail": "noreply@sustainabilityapp.com",
+        "toEmail": "={{$json[\"email\"]}}",
+        "subject": "Your Daily Sustainability Challenge",
+        "text": "Hello {{$json[\"userName\"]}},\n\nToday's sustainability challenge for you is:\n\n* {{$json.challenge.title}} *\n\nDetails: {{$json.challenge.description}}\n\nGood luck and thank you for making a difference!\n\n--\nSustainability App Team"
+      },
+      "name": "Send Challenge Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "table": "user_challenges",
+        "keyColumn": "userId",
+        "keyValue": "={{$json[\"userId\"]}}",
+        "columns": {
+          "data": {
+            "challengeId": "={{$json.challenge.id}}",
+            "challengeTitle": "={{$json.challenge.title}}",
+            "challengeDescription": "={{$json.challenge.description}}",
+            "dateAssigned": "={{$now.toISOString().slice(0,10)}}",
+            "completed": false
+          }
+        }
+      },
+      "name": "Store Challenge In DB",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        850,
+        450
+      ],
+      "credentials": {
+        "postgres": "Postgres SustainabilityDB"
+      }
+    },
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 20,
+              "minute": 0,
+              "second": 0,
+              "dayOfWeek": "*"
+            }
+          ]
+        }
+      },
+      "name": "Daily Completion Check Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        250,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "table": "user_challenges",
+        "columns": [
+          "userId",
+          "challengeId",
+          "challengeTitle",
+          "dateAssigned",
+          "completed",
+          "email"
+        ],
+        "returnAll": true,
+        "filters": {
+          "dateAssigned": {
+            "condition": "equals",
+            "value": "={{$now.toISOString().slice(0,10)}}"
+          }
+        }
+      },
+      "name": "Get Today's Challenges From DB",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        450,
+        600
+      ],
+      "credentials": {
+        "postgres": "Postgres SustainabilityDB"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const results = [];\nfor (const item of items) {\n  const completed = item.json.completed;\n  const email = item.json.email;\n  const userId = item.json.userId;\n  const challengeTitle = item.json.challengeTitle;\n\n  let statusText = completed ? 'You completed today\\'s challenge. Great job!' : 'You have not marked today\\'s challenge as completed yet.';\n\n  results.push({\n    json: {\n      userId,\n      email,\n      message: `Hello! \\nYour challenge \\\"${challengeTitle}\\\" status: ${statusText}`\n    }\n  });\n}\nreturn results;"
+      },
+      "name": "Prepare Completion Reminder",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "noreply@sustainabilityapp.com",
+        "toEmail": "={{$json[\"email\"]}}",
+        "subject": "Reminder: Daily Sustainability Challenge Completion",
+        "text": "={{$json[\"message\"]}}"
+      },
+      "name": "Send Completion Reminder Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        850,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 9,
+              "minute": 0,
+              "second": 0,
+              "dayOfWeek": "1"
+            }
+          ]
+        }
+      },
+      "name": "Weekly Summary Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        250,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "table": "user_challenges",
+        "columns": [
+          "userId",
+          "challengeTitle",
+          "dateAssigned",
+          "completed"
+        ],
+        "returnAll": true,
+        "filters": {
+          "dateAssigned": {
+            "condition": "between",
+            "value": "={{new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0,10)}}",
+            "value2": "={{$now.toISOString().slice(0,10)}}"
+          }
+        }
+      },
+      "name": "Get Last Week Challenges",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        450,
+        900
+      ],
+      "credentials": {
+        "postgres": "Postgres SustainabilityDB"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const data = {};\n\nfor (const item of items) {\n  const userId = item.json.userId;\n  if (!data[userId]) {\n    data[userId] = {\n      challenges: [],\n      completedCount: 0\n    };\n  }\n  data[userId].challenges.push(item.json);\n  if (item.json.completed) {\n    data[userId].completedCount += 1;\n  }\n}\n\nconst summaries = [];\n\nfor (const userId in data) {\n  const userChallenges = data[userId].challenges;\n  const completedCount = data[userId].completedCount;\n\n  const completionRate = (completedCount / userChallenges.length) * 100 || 0;\n\n  let tips = '';\n  if (completionRate < 50) {\n    tips = 'Try setting daily reminders and keeping a journal to track your sustainable actions.';\n  } else if (completionRate < 80) {\n    tips = 'Great progress! Challenge yourself to complete every daily task this week.';\n  } else {\n    tips = 'Excellent work! Consider sharing your journey with friends to inspire others.';\n  }\n\n  summaries.push({\n    json: {\n      userId,\n      summaryText: `You completed ${completedCount} out of ${userChallenges.length} challenges last week (${completionRate.toFixed(1)}%).`,\n      tips\n    }\n  });\n}\n\nreturn summaries;"
+      },
+      "name": "Generate Weekly Summary",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const userInfo = {\n  user1: { email: 'alice@example.com', name: 'Alice' },\n  user2: { email: 'bob@example.com', name: 'Bob' }\n};\n\nreturn items.map(item => {\n  const user = userInfo[item.json.userId];\n  return {\n    json: {\n      email: user.email,\n      userName: user.name,\n      summaryText: item.json.summaryText,\n      tips: item.json.tips\n    }\n  };\n});"
+      },
+      "name": "Add User Info to Summary",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "noreply@sustainabilityapp.com",
+        "toEmail": "={{$json[\"email\"]}}",
+        "subject": "Your Weekly Sustainability Summary & Tips",
+        "text": "Hello {{$json[\"userName\"]}},\n\nHere is your weekly sustainability challenge summary:\n\n{{$json.summaryText}}\n\nTips to improve:\n{{$json.tips}}\n\nKeep up the great work!\n\n--\nSustainability App Team"
+      },
+      "name": "Send Weekly Summary Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        900
+      ]
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Users",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Users": {
+      "main": [
+        [
+          {
+            "node": "Assign Challenge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assign Challenge": {
+      "main": [
+        [
+          {
+            "node": "Send Challenge Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Store Challenge In DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Completion Check Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Today's Challenges From DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Today's Challenges From DB": {
+      "main": [
+        [
+          {
+            "node": "Prepare Completion Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Completion Reminder": {
+      "main": [
+        [
+          {
+            "node": "Send Completion Reminder Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Weekly Summary Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Last Week Challenges",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Last Week Challenges": {
+      "main": [
+        [
+          {
+            "node": "Generate Weekly Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Weekly Summary": {
+      "main": [
+        [
+          {
+            "node": "Add User Info to Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add User Info to Summary": {
+      "main": [
+        [
+          {
+            "node": "Send Weekly Summary Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
