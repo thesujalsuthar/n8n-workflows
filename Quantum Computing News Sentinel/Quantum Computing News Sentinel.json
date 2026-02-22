@@ -1,0 +1,244 @@
+{
+  "name": "Quantum Computing Trend Insight Aggregator and Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 8,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Daily Scheduler",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://newsapi.org/v2/everything?q=quantum+computing&sortBy=publishedAt&apiKey=YOUR_NEWSAPI_KEY",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Fetch News Articles",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        520,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const items = [];\n\nconst keywordFilter = $json[\"userKeywords\"] || [];\n\n// Extract articles from the fetched news\nconst articles = $json.articles;\n\nfor (const article of articles) {\n  const titleLower = article.title.toLowerCase();\n  const descriptionLower = article.description ? article.description.toLowerCase() : \"\";\n\n  // If keywords are defined, filter articles by keywords\n  if (keywordFilter.length === 0 || keywordFilter.some(keyword => titleLower.includes(keyword.toLowerCase()) || descriptionLower.includes(keyword.toLowerCase()))) {\n    items.push({\n      json: {\n        title: article.title,\n        description: article.description,\n        url: article.url,\n        publishedAt: article.publishedAt,\n        sourceName: article.source.name\n      }\n    });\n  }\n}\n\nreturn items;"
+      },
+      "name": "Filter News by Keywords",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        760,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "analyzeSentiment",
+        "text": "={{ $json.description || $json.title }}"
+      },
+      "name": "Sentiment Analysis",
+      "type": "n8n-nodes-base.textSentiment",
+      "typeVersion": 1,
+      "position": [
+        1020,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.map(item => {\n  const sentiment = item.json.sentimentScore || 0;\n  // Mark critical if sentiment very negative or high-impact keywords present\n  const criticalKeywords = ['breakthrough', 'critical', 'crash', 'failure', 'urgent', 'alert'];\n  const combinedText = (item.json.title + ' ' + (item.json.description || '')).toLowerCase();\n\n  const isCritical = sentiment < -0.5 || criticalKeywords.some(word => combinedText.includes(word));\n\n  item.json.isCritical = isCritical;\n  return item;\n});"
+      },
+      "name": "Determine Critical Alerts",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1280,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "splitInBatches",
+        "size": 1
+      },
+      "name": "Split Items for Notifications",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 1,
+      "position": [
+        1420,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "alerts@yourdomain.com",
+        "toEmail": "={{$node[\"User Input\"].json.email || \"user@example.com\"}}",
+        "subject": "Quantum Computing Critical Alert: {{$json.title}}",
+        "text": "A critical update has been detected in Quantum Computing research:\n\nTitle: {{$json.title}}\n\nDescription: {{$json.description}}\n\nSource: {{$json.sourceName}}\n\nPublished At: {{$json.publishedAt}}\n\nRead more: {{$json.url}}"
+      },
+      "name": "Send Email Notification",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1660,
+        50
+      ]
+    },
+    {
+      "parameters": {
+        "channel": "quantum-alerts",
+        "text": "⚠️ *Critical Quantum Computing Update:*\n*Title:* {{$json.title}}\n*Description:* {{$json.description}}\n*Source:* {{$json.sourceName}}\n*Published:* {{$json.publishedAt}}\n*Read more:* {{$json.url}"
+      },
+      "name": "Send Slack Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1660,
+        250
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "your-slack-credentials-id",
+          "name": "Slack API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.filter(item => item.json.isCritical);"
+      },
+      "name": "Filter Critical Alerts",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{\n  json: {\n    userKeywords: [\n      \"quantum\",\n      \"qubit\",\n      \"quantum algorithm\",\n      \"superposition\",\n      \"entanglement\",\n      \"quantum error correction\"\n    ],\n    email: \"recipient@example.com\"\n  }\n}];"
+      },
+      "name": "User Input",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        100,
+        250
+      ]
+    }
+  ],
+  "connections": {
+    "Daily Scheduler": {
+      "main": [
+        [
+          {
+            "node": "User Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "User Input": {
+      "main": [
+        [
+          {
+            "node": "Fetch News Articles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch News Articles": {
+      "main": [
+        [
+          {
+            "node": "Filter News by Keywords",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter News by Keywords": {
+      "main": [
+        [
+          {
+            "node": "Sentiment Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sentiment Analysis": {
+      "main": [
+        [
+          {
+            "node": "Determine Critical Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Determine Critical Alerts": {
+      "main": [
+        [
+          {
+            "node": "Filter Critical Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Critical Alerts": {
+      "main": [
+        [
+          {
+            "node": "Split Items for Notifications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Items for Notifications": {
+      "main": [
+        [
+          {
+            "node": "Send Email Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Slack Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": 1
+}
