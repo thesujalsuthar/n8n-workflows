@@ -1,0 +1,215 @@
+{
+  "name": "Real-Time AI Agriculture Disease and Pest Outbreak Prediction and Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.openweathermap.org/data/2.5/weather?q=YOUR_LOCATION&appid=YOUR_API_KEY",
+        "queryParameters": [],
+        "headerParameters": [],
+        "options": {}
+      },
+      "name": "Get Weather Data",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "https://api.satelliteimageryprovider.com/v1/imagery?location=YOUR_LOCATION&date={{$now.format(\"YYYY-MM-DD\")}}&apikey=YOUR_API_KEY",
+        "queryParameters": [],
+        "headerParameters": [],
+        "options": {}
+      },
+      "name": "Get Satellite Imagery Data",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "url": "http://localsensors.api/fieldsensors/data?location=YOUR_LOCATION",
+        "queryParameters": [],
+        "headerParameters": [],
+        "options": {}
+      },
+      "name": "Get Local Sensor Data",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const weatherData = items.find(i => i.json.hasOwnProperty('weather')).json;\nconst satelliteData = items.find(i => i.json.hasOwnProperty('imagery')).json || items[1].json;\nconst localSensorData = items.find(i => i.json.hasOwnProperty('sensor_data')).json || items[2].json;\n\n// Compose payload for ML model\nconst mlPayload = {\n  weather: weatherData,\n  satelliteImagery: satelliteData,\n  sensorData: localSensorData\n};\n\nreturn [{ json: { mlPayload } }];"
+      },
+      "name": "Aggregate Data",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "https://api.yourmlservice.com/v1/predict",
+        "options": {},
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "data",
+              "value": "={{JSON.stringify($json.mlPayload)}",
+              "type": "json"
+            }
+          ]
+        },
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_ML_API_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        }
+      },
+      "name": "AI Prediction API",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const prediction = items[0].json.prediction || {};\n\nconst alertNeeded = prediction.diseaseRisk > 0.7 || prediction.pestRisk > 0.7;\n\nif (!alertNeeded) {\n  return [];\n}\n\nconst message = `Alert: Potential disease risk at ${Math.round(prediction.diseaseRisk * 100)}% and pest risk at ${Math.round(prediction.pestRisk * 100)}% detected in your crops. Recommended measures: ${prediction.recommendations || 'Monitor closely and apply preventive treatments as advised.'}`;\n\nreturn [{ json: { message, farmerEmail: 'farmer@example.com', farmerPhone: '+1234567890' } }];"
+      },
+      "name": "Evaluate Prediction and Create Alert",
+      "type": "function",
+      "typeVersion": 1,
+      "position": [
+        950,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "alerts@yourdomain.com",
+        "toEmail": "={{$json.farmerEmail}}",
+        "subject": "Crop Disease and Pest Outbreak Alert",
+        "text": "={{$json.message}}"
+      },
+      "name": "Send Email Alert",
+      "type": "emailSend",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "smsMessage",
+        "operation": "send",
+        "to": "={{$json.farmerPhone}}",
+        "message": "={{$json.message}}"
+      },
+      "name": "Send SMS Alert",
+      "type": "twilio",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Get Weather Data": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Satellite Imagery Data": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Get Local Sensor Data": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Data",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Aggregate Data": {
+      "main": [
+        [
+          {
+            "node": "AI Prediction API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Prediction API": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Prediction and Create Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Prediction and Create Alert": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send SMS Alert",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  }
+}
