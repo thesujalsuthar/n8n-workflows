@@ -1,0 +1,156 @@
+{
+  "name": "AI-Powered Work-Life Balance Wellness Insights & Personalized Action Plan Generator",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "submitUserData",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "name": "Webhook - Collect User Input",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const {workHours, stressLevel, sleepHours, exerciseFreq, mood} = $json;\n\nconst userProfile = {\n  workHours: Number(workHours) || 8,\n  stressLevel: Number(stressLevel) || 5,\n  sleepHours: Number(sleepHours) || 7,\n  exerciseFreq: Number(exerciseFreq) || 3,\n  mood: mood || 'neutral'\n};\n\nreturn [{json: userProfile}];"
+      },
+      "name": "Process User Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.open-meteo.com/v1/forecast?latitude=40.7128&longitude=-74.0060&daily=temperature_2m_max,precipitation_sum&timezone=auto",
+        "options": {},
+        "responseFormat": "json"
+      },
+      "name": "Fetch External Wellness Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const user = $items(\"Process User Data\")[0].json;\nconst weather = $items(\"Fetch External Wellness Data\")[0].json;\n\nconst todayWeather = weather.daily;\n\n// Simple heuristic for wellness external data\nconst weatherScore = (todayWeather.temperature_2m_max[0] > 20 && todayWeather.precipitation_sum[0] < 5) ? 8 : 5;\n\nreturn [{\n  json: {\n    user,\n    weatherScore\n  }\n}];"
+      },
+      "name": "Analyze Wellness Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "resource": "chatCompletion",
+        "options": {},
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an AI wellness coach specializing in work-life balance. Analyze user lifestyle data along with a wellness score based on external data and generate daily insights, personalized tips, and a 3-step actionable plan to improve their work-life harmony."
+          },
+          {
+            "role": "user",
+            "content": "User data: {{ $json.user | json }}\nExternal wellness score: {{ $json.weatherScore }}\n\nProvide a personalized daily insight, 3 health & work-life balance tips, and a personalized 3-step action plan."
+          }
+        ],
+        "temperature": 0.7,
+        "maxTokens": 500
+      },
+      "name": "Generate AI Wellness Insights",
+      "type": "n8n-nodes-base.openAIApi",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "expression": "return {\n  statusCode: 200,\n  body: {\n    insights: $json[\"choices\"][0].message.content\n  }\n};"
+      },
+      "name": "Prepare Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook - Collect User Input": {
+      "main": [
+        [
+          {
+            "node": "Process User Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process User Data": {
+      "main": [
+        [
+          {
+            "node": "Fetch External Wellness Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch External Wellness Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze Wellness Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Wellness Data": {
+      "main": [
+        [
+          {
+            "node": "Generate AI Wellness Insights",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate AI Wellness Insights": {
+      "main": [
+        [
+          {
+            "node": "Prepare Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  ],
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
