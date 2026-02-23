@@ -1,0 +1,194 @@
+{
+  "name": "AI-Driven Chronic Disease Management and Personalized Care Plan Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "resource": "patient",
+        "operation": "get",
+        "patientId": "={{$json[\"patientId\"]}}"
+      },
+      "name": "Get Patient Health Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const healthData = items[0].json;\nconst symptomData = items[1].json;\nconst medicationAdherence = items[2].json;\n\n// Aggregate data\nreturn [{\n  json: {\n    combinedData: {\n      healthData,\n      symptomData,\n      medicationAdherence\n    }\n  }\n}];"
+      },
+      "name": "Aggregate Patient Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "temperature": 0.4,
+        "max_tokens": 1200,
+        "prompt": "You are a healthcare AI assistant. Using the following combined patient data, generate a personalized chronic disease management and care plan including symptom insights, medication adherence recommendations, monitoring plan, and any warnings requiring urgent care.\n\nPatient Data: {{ $json.combinedData }}\n\nReturn the care plan in structured JSON with keys: personalizedPlan, riskAlerts, medicationAdjustments, monitoringSchedule."
+      },
+      "name": "Generate Personalized Care Plan (AI)",
+      "type": "n8n-nodes-base.openAI",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const carePlan = JSON.parse(items[0].json.choices[0].text);\n\nconst alerts = carePlan.riskAlerts || [];\n\n// Only send alert if there are risk alerts\nif(alerts.length > 0){\n  return [{json: {alerts}}];\n}\n\nreturn [];"
+      },
+      "name": "Parse AI Care Plan and Extract Alerts",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "toEmail": "healthcare_provider@example.com",
+        "subject": "Urgent Patient Risk Alerts for Intervention",
+        "message": "Patient {{ $json.patientId }} has the following risk alerts requiring your attention:\n\n{{JSON.stringify($json.alerts, null, 2)}}"
+      },
+      "name": "Send Real-Time Alerts to Provider",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "patient",
+        "operation": "update",
+        "patientId": "={{$json[\"patientId\"]}}",
+        "updateFields": {
+          "carePlan": "={{$json}}"
+        }
+      },
+      "name": "Update Patient Record with Care Plan",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "symptom",
+        "operation": "getRecent",
+        "patientId": "={{$json[\"patientId\"]}}",
+        "limit": 10
+      },
+      "name": "Get Recent Symptom Monitoring Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "medicationAdherence",
+        "operation": "getRecent",
+        "patientId": "={{$json[\"patientId\"]}}",
+        "limit": 10
+      },
+      "name": "Get Medication Adherence Records",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "Get Patient Health Data": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Patient Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Recent Symptom Monitoring Data": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Patient Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Get Medication Adherence Records": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Patient Data",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Aggregate Patient Data": {
+      "main": [
+        [
+          {
+            "node": "Generate Personalized Care Plan (AI)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Personalized Care Plan (AI)": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Care Plan and Extract Alerts",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Update Patient Record with Care Plan",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Parse AI Care Plan and Extract Alerts": {
+      "main": [
+        [
+          {
+            "node": "Send Real-Time Alerts to Provider",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {}
+}
