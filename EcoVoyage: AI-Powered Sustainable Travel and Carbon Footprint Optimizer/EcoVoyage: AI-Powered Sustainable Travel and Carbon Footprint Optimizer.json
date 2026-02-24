@@ -1,0 +1,163 @@
+{
+  "name": "AI-Driven Personalized Sustainable Travel Planner and Carbon Footprint Optimizer",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "plan-travel",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const data = items[0].json;\n\n// Extract user preferences and travel details\nconst travelPreferences = {\n  origin: data.origin,\n  destination: data.destination,\n  travelDates: data.travelDates,\n  interests: data.interests || [],\n  travelStyle: data.travelStyle || 'eco-friendly',\n  maxCarbonFootprint: data.maxCarbonFootprint || null\n};\n\nreturn [{ json: { travelPreferences } }];"
+      },
+      "name": "Extract Preferences",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "temperature": 0.7,
+        "maxTokens": 600,
+        "topP": 1,
+        "frequencyPenalty": 0,
+        "presencePenalty": 0,
+        "returnFullText": true,
+        "prompt": "You are an expert AI Travel Planner specializing in eco-friendly and sustainable travel. Given the travelPreferences, create a personalized travel itinerary that optimizes for low carbon footprint. Recommend transportation options, accommodations, activities, and local dining that support sustainability. Include carbon footprint estimates for each travel leg and activity. Format the output as a JSON including itinerary steps and total estimated carbon footprint.\n\nTravel Preferences:\n{{ $json.travelPreferences | json }}\n\nOutput JSON example:\n{\n \"itinerary\": [\n   {\"day\":1, \"activity\":\"...\", \"carbonFootprintKgCO2\":\"...\"},\n   ...\n ],\n \"totalCarbonFootprintKgCO2\": \"...\"\n}"
+      },
+      "name": "Generate Itinerary with GPT-4",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const itineraryJson = JSON.parse(items[0].json.choices[0].message.content);\n\nreturn [{ json: itineraryJson }];"
+      },
+      "name": "Parse GPT Output",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "name": "Calculate Additional Carbon Offsets",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300,
+        1250,
+        350
+      ],
+      "notesInFlow": "Can be enhanced to calculate more refined offsets and link with carbon credit APIs, currently placeholder"
+    },
+    {
+      "parameters": {
+        "functionCode": "const itinerary = items[0].json.itinerary;\nconst totalCarbon = parseFloat(items[0].json.totalCarbonFootprintKgCO2);\n\nlet offsetSuggestions = [];\n\nif (totalCarbon > 0) {\n  offsetSuggestions.push({ method: 'Plant trees', estimatedOffsetsKgCO2: totalCarbon * 1 });\n  offsetSuggestions.push({ method: 'Purchase carbon credits', estimatedOffsetsKgCO2: totalCarbon });\n}\n\nreturn [{ json: { itinerary, totalCarbonFootprintKgCO2: totalCarbon, offsetSuggestions } }];"
+      },
+      "name": "Calculate Carbon Offsets",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "passThrough",
+        "options": {}
+      },
+      "name": "Respond with Plan",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1750,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Extract Preferences",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Preferences": {
+      "main": [
+        [
+          {
+            "node": "Generate Itinerary with GPT-4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Itinerary with GPT-4": {
+      "main": [
+        [
+          {
+            "node": "Parse GPT Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse GPT Output": {
+      "main": [
+        [
+          {
+            "node": "Calculate Carbon Offsets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Carbon Offsets": {
+      "main": [
+        [
+          {
+            "node": "Respond with Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "id": "1"
+}
