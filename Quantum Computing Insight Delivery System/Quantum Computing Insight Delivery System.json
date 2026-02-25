@@ -1,0 +1,243 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 8,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Scheduler",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "article",
+        "operation": "getMany",
+        "queryParameters": {
+          "q": "quantum computing",
+          "sort": "newest",
+          "pageSize": 50
+        },
+        "auth": {
+          "apiKey": "={{$credentials.pubmedApi.apiKey}}"
+        }
+      },
+      "name": "Fetch Research Publications",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        550,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://newsapi.org/v2/everything?q=quantum+computing&sortBy=publishedAt&pageSize=50",
+        "options": {},
+        "headers": {
+          "Authorization": "Bearer {{$credentials.newsApi.key}}"
+        }
+      },
+      "name": "Fetch Quantum Computing News",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        550,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "mergeByKey",
+        "inputData": [
+          {
+            "node": "Fetch Research Publications",
+            "output": "main"
+          },
+          {
+            "node": "Fetch Quantum Computing News",
+            "output": "main"
+          }
+        ],
+        "options": {
+          "key": "id"
+        }
+      },
+      "name": "Merge Publications & News",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 1,
+      "position": [
+        800,
+        175
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const combinedItems = items.map(item => {\n  if (item.json.articles) {\n    return item.json.articles.map(article => ({\n      title: article.title,\n      description: article.description || article.summary || '',\n      publishedAt: article.publishedAt || article.pubDate || '',\n      source: article.source || article.source.name || '',\n      url: article.url || article.link || ''\n    }));\n  }\n  return [];\n}).flat();\n\nreturn combinedItems.map(item => ({ json: item }));"
+      },
+      "name": "Normalize Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        175
+      ]
+    },
+    {
+      "parameters": {
+        "model": "text-davinci-003",
+        "temperature": 0.3,
+        "maxTokens": 512,
+        "topP": 1,
+        "frequencyPenalty": 0,
+        "presencePenalty": 0,
+        "stopSequences": [],
+        "prompt": "Analyze the following quantum computing research and news items for emerging trends, frequent topics, and sentiment. Produce a structured summary highlighting key research focuses, recent breakthroughs, and notable shifts in the field.\n\nItems:\n{{$json.items.map(i => `Title: ${i.title}\\nDescription: ${i.description}\\n`).join('\\n')}}\n\nSummary:"
+      }
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "toEmail": "={{$json.email}}",
+        "subject": "Quantum Computing Research Trend Summary - {{new Date().toLocaleDateString()}}",
+        "text": "={{$json.summary}}"
+      },
+      "name": "Send Email Alerts",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "chat.postMessage",
+        "operation": "post",
+        "channel": "={{$json.slackChannel}}",
+        "text": "Quantum Computing Research Trend Summary - {{new Date().toLocaleDateString()}}\n\n{{$json.summary}}"
+      },
+      "name": "Send Slack Alerts",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.map(item => {\n  return {\n    json: {\n      email: 'researcher@example.com',\n      slackChannel: '#quantum-alerts'\n    }\n  };\n});"
+      },
+      "name": "Load Subscribers",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        225
+      ]
+    }
+  ],
+  "connections": {
+    "Scheduler": {
+      "main": [
+        [
+          {
+            "node": "Fetch Research Publications",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Quantum Computing News",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Research Publications": {
+      "main": [
+        [
+          {
+            "node": "Merge Publications & News",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Quantum Computing News": {
+      "main": [
+        [
+          {
+            "node": "Merge Publications & News",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Publications & News": {
+      "main": [
+        [
+          {
+            "node": "Normalize Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Data": {
+      "main": [
+        [
+          {
+            "node": "AI Trend Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Trend Analysis": {
+      "main": [
+        [
+          {
+            "node": "Load Subscribers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Subscribers": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alerts",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Slack Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "id": "quantum-computing-trend-analyzer"
+}
