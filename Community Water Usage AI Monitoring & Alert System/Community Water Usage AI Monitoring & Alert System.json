@@ -1,0 +1,360 @@
+{
+  "name": "AI-Enhanced Community Water Usage Monitoring & Conservation Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 8,
+              "minute": 0,
+              "mode": "everyDay"
+            }
+          ]
+        }
+      },
+      "name": "Scheduled Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getMany",
+        "resource": "json",
+        "url": "https://api.communitywaterdata.local/usage/realtime",
+        "responseFormat": "json",
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_API_KEY"
+            }
+          ]
+        }
+      },
+      "name": "Fetch Real-Time Water Usage Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        550,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const usageData = items[0].json.usage;\n\n// Basic statistics extraction for AI input\nconst dataPayload = {\n  communityId: items[0].json.communityId || 'community_001',\n  timestamp: new Date().toISOString(),\n  usage: usageData\n};\n\nreturn [{ json: dataPayload }];"
+      },
+      "name": "Prepare AI Input Payload",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "completion",
+        "operation": "create",
+        "model": "gpt-4",
+        "prompt": "Analyze the community water usage data below and detect unusual consumption patterns. For any anomalies detected, provide a summary of the issue and generate personalized actionable water-saving recommendations for residents in clear, friendly language.\n\nData:\n{{ $json.usage }}\n\nRespond JSON format:\n{\n  \"anomaly_detected\": true/false,\n  \"summary\": \"...\",\n  \"recommendations\": [\"...\", \"...\"]\n}",
+        "maxTokens": 400,
+        "temperature": 0.7
+      },
+      "name": "AI Analyze Usage Patterns",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const aiResponse = JSON.parse(items[0].json.choices[0].message.content);\n\nif (!aiResponse.anomaly_detected) {\n  return [];\n}\n\nreturn [{ json: aiResponse }];"
+      },
+      "name": "Parse AI Response & Filter Anomalies",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "contact",
+        "operation": "getAll",
+        "filters": {}
+      },
+      "name": "Fetch Residents Contact List",
+      "type": "n8n-nodes-base.crm",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const contacts = items[1].json;\nconst aiData = items[0].json;\n\nreturn contacts.map(contact => {\n  return {\n    json: {\n      contactId: contact.id,\n      email: contact.email,\n      phone: contact.phone,\n      appUserId: contact.appUserId,\n      message: `Hello ${contact.name},\\n\\n${aiData.summary}\\n\\nRecommended water-saving tips:\\n${aiData.recommendations.map((rec, i) => (i + 1) + '. ' + rec).join('\\n')}\\n\\nThank you for helping conserve water!`\n    }\n  };\n});"
+      },
+      "name": "Generate Personalized Messages",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "community@waterconserve.org",
+        "toEmail": "={{$json.email}}",
+        "subject": "Important: Water Usage Alert & Personalized Conservation Tips",
+        "text": "={{$json.message}}"
+      },
+      "name": "Send Email Alerts",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1750,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "toNumber": "={{$json.phone}}",
+        "message": "={{$json.message}}"
+      },
+      "name": "Send SMS Alerts",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1750,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "notification",
+        "operation": "send",
+        "userId": "={{$json.appUserId}}",
+        "title": "Water Usage Alert & Tips",
+        "message": "={{$json.message}}",
+        "deepLink": "app://water-usage-dashboard"
+      },
+      "name": "Send App Notifications",
+      "type": "n8n-nodes-base.pushNotification",
+      "typeVersion": 1,
+      "position": [
+        1750,
+        650
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "set",
+        "mode": "merge",
+        "values": {
+          "boolean": [
+            {
+              "name": "anomaly_detected",
+              "value": "={{$json.anomaly_detected}}"
+            }
+          ],
+          "string": [
+            {
+              "name": "summary",
+              "value": "={{$json.summary}}"
+            }
+          ],
+          "json": [
+            {
+              "name": "recommendations",
+              "value": "={{$json.recommendations}}"
+            }
+          ]
+        }
+      },
+      "name": "Prepare Dashboard Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "indexTitle": "community-water-usage",
+        "document": "={{$json}}"
+      },
+      "name": "Index Data to Dashboard DB",
+      "type": "n8n-nodes-base.elasticsearch",
+      "typeVersion": 1,
+      "position": [
+        1750,
+        150
+      ]
+    },
+    {
+      "parameters": {},
+      "name": "No Anomaly Detected - End",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        50
+      ]
+    }
+  ],
+  "connections": {
+    "Scheduled Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Real-Time Water Usage Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Real-Time Water Usage Data": {
+      "main": [
+        [
+          {
+            "node": "Prepare AI Input Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare AI Input Payload": {
+      "main": [
+        [
+          {
+            "node": "AI Analyze Usage Patterns",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Analyze Usage Patterns": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response & Filter Anomalies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response & Filter Anomalies": {
+      "main": [
+        [
+          {
+            "node": "Fetch Residents Contact List",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "No Anomaly Detected - End",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Residents Contact List": {
+      "main": [
+        [
+          {
+            "node": "Generate Personalized Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Personalized Messages": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alerts",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send SMS Alerts",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send App Notifications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email Alerts": {
+      "main": [
+        [
+          {
+            "node": "Prepare Dashboard Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send SMS Alerts": {
+      "main": [
+        [
+          {
+            "node": "Prepare Dashboard Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send App Notifications": {
+      "main": [
+        [
+          {
+            "node": "Prepare Dashboard Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Dashboard Data": {
+      "main": [
+        [
+          {
+            "node": "Index Data to Dashboard DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
