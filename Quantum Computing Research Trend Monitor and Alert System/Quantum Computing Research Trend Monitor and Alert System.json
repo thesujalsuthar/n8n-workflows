@@ -1,0 +1,244 @@
+{
+  "name": "Quantum Computing Research Trend Analyzer and Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://export.arxiv.org/api/query?search_query=all:quantum+computing&start=0&max_results=20&sortBy=lastUpdatedDate&sortOrder=descending",
+        "options": {
+          "headers": {
+            "User-Agent": "n8n-QuantumResearchBot/1.0"
+          }
+        },
+        "responseFormat": "string"
+      },
+      "name": "Fetch arXiv Quantum Computing Papers",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const xml2js = require('xml2js');\n\nreturn new Promise((resolve, reject) => {\n  xml2js.parseString(items[0].json.body, { explicitArray: false }, (err, result) => {\n    if (err) {\n      reject(err);\n    } else {\n      const entries = result.feed.entry || [];\n      const papers = Array.isArray(entries) ? entries : [entries];\n      const formatted = papers.map(paper => ({\n        title: paper.title.trim(),\n        summary: paper.summary.trim(),\n        authors: Array.isArray(paper.author) ? paper.author.map(a => a.name) : [paper.author.name],\n        published: paper.published,\n        link: paper.id\n      }));\n      resolve(formatted.map(paper => ({ json: paper })));\n    }\n  });\n});"
+      },
+      "name": "Parse arXiv XML",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        300,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.biorxiv.org/details/quant-ph/0/20",
+        "options": {}
+      },
+      "name": "Fetch bioRxiv quantum preprints",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        100,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const papers = items[0].json.collection || [];\nconst filtered = papers.map(item => ({\n  title: item.title,\n  authors: item.authors.split(';').map(a => a.trim()),\n  published: item.date,\n  summary: item.abstract,\n  link: `https://www.biorxiv.org/content/${item.biorxiv}`\n}));\nreturn filtered.map(paper => ({ json: paper }));"
+      },
+      "name": "Parse bioRxiv JSON",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        300,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "passThrough",
+        "operation": "mergeByKey",
+        "keyProperty": "title"
+      },
+      "name": "Merge Papers",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 1,
+      "position": [
+        500,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "generateText",
+        "model": "gpt-4o-mini",
+        "prompt": "Analyze the following list of quantum computing research paper abstracts and titles to identify key trends, emerging topics, and keywords. Return a JSON array of top 5 trends with a short description and associated keywords.\n\nPapers:\n{{ $json }}",
+        "additionalOptions": {},
+        "temperature": 0.7,
+        "maxTokens": 1000
+      },
+      "name": "AI Trend Analysis",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        700,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Filter user subscriptions for matching keywords\nconst userSubs = global.get('userSubscriptions') || [];\nconst trends = JSON.parse(items[0].json.choices[0].message.content || '[]');\n\nlet alerts = [];\n\nuserSubs.forEach(user => {\n  const matchedTrends = trends.filter(trend => {\n    return user.keywords.some(kw => trend.keywords.some(trendKw => trendKw.toLowerCase().includes(kw.toLowerCase())));\n  });\n\n  if (matchedTrends.length > 0) {\n    alerts.push({\n      email: user.email,\n      telegramId: user.telegramId || null,\n      matchedTrends\n    });\n  }\n});\n\nreturn alerts.map(alert => ({ json: alert }));"
+      },
+      "name": "Match Trends To User Interests",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "alerts@quantumresearch.ai",
+        "toEmail": "={{$json.email}}",
+        "subject": "Quantum Computing Research Alert: New Trends Detected",
+        "text": "Hello,\n\nBased on your subscriptions to quantum computing research interests, we found new trends matching your keywords:\n\n{{$json.matchedTrends.map(t => `- ${t.description} (Keywords: ${t.keywords.join(', ')})`).join('\\n')}}\n\nStay informed with the latest research!\n\nBest regards,\nQuantum Research Alerts"
+      },
+      "name": "Send Email Alerts",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{$json.telegramId}}",
+        "text": "New quantum computing research trends matching your interests detected:\n\n{{$json.matchedTrends.map(t => `- ${t.description} (Keywords: ${t.keywords.join(', ')})`).join('\\n')}}"
+      },
+      "name": "Send Telegram Alerts",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        250
+      ]
+    },
+    {
+      "parameters": {},
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [
+        0,
+        200
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Fetch bioRxiv quantum preprints",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch arXiv Quantum Computing Papers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch bioRxiv quantum preprints": {
+      "main": [
+        [
+          {
+            "node": "Parse bioRxiv JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch arXiv Quantum Computing Papers": {
+      "main": [
+        [
+          {
+            "node": "Parse arXiv XML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse bioRxiv JSON": {
+      "main": [
+        [
+          {
+            "node": "Merge Papers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse arXiv XML": {
+      "main": [
+        [
+          {
+            "node": "Merge Papers",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Papers": {
+      "main": [
+        [
+          {
+            "node": "AI Trend Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Trend Analysis": {
+      "main": [
+        [
+          {
+            "node": "Match Trends To User Interests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Match Trends To User Interests": {
+      "main": [
+        [
+          {
+            "node": "Send Email Alerts",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Telegram Alerts",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
