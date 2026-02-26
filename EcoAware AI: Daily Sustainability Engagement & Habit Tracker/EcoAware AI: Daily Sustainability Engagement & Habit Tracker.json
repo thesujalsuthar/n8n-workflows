@@ -1,0 +1,357 @@
+{
+  "name": "EcoAware AI: Personalized Daily Sustainability Engagement and Habit Motivation System",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": [
+          {
+            "hour": 8,
+            "minute": 0,
+            "mode": "time"
+          }
+        ],
+        "options": {}
+      },
+      "id": "1",
+      "name": "Daily Scheduler",
+      "type": "n8n-nodes-base.scheduler",
+      "typeVersion": 1,
+      "position": [
+        200,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const habits = [\n  { id: 'reduce_plastic', name: 'Reduce Plastic Use' },\n  { id: 'save_water', name: 'Save Water' },\n  { id: 'energy_saving', name: 'Energy Saving' },\n  { id: 'composting', name: 'Composting' },\n  { id: 'bike_or_walk', name: 'Bike or Walk Instead of Driving' }\n];\n\nconst tipTemplates = {\n  reduce_plastic: [\n    'Try using a reusable water bottle today to reduce plastic waste.',\n    'Avoid single-use plastics like straws and bags to protect our oceans.'\n  ],\n  save_water: [\n    'Turn off the tap while brushing your teeth to conserve water.',\n    'Fix any leaks in your home to save gallons of water daily.'\n  ],\n  energy_saving: [\n    'Switch off lights in rooms when not in use to save energy.',\n    'Unplug electronics when they are not being used.'\n  ],\n  composting: [\n    'Start composting your organic waste to reduce landfill contributions.',\n    'Learn how to compost properly to enrich your garden soil.'\n  ],\n  bike_or_walk: [\n    'Choose biking or walking for short trips to lower your carbon footprint.',\n    'Take a walk after lunch to incorporate eco-friendly transport and get exercise.'\n  ]\n};\n\n// Select a habit randomly\nconst habit = habits[Math.floor(Math.random() * habits.length)];\n// Select a tip randomly from that habit\nconst tips = tipTemplates[habit.id];\nconst tip = tips[Math.floor(Math.random() * tips.length)];\n\nreturn [{\n  json: {\n    habitId: habit.id,\n    habitName: habit.name,\n    tip: tip\n  }\n}];"
+      },
+      "id": "2",
+      "name": "Generate Daily Tip",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const motivationalMessages = [\n  'Every small step makes a big difference!',\n  'Your eco-friendly habits inspire others.',\n  'Keep up the great work for our planet!',\n  'Sustainability starts with you.',\n  'Together we can create a greener future.'\n];\n\nconst message = motivationalMessages[Math.floor(Math.random() * motivationalMessages.length)];\n\nreturn [{\n  json: {\n    motivation: message\n  }\n}];"
+      },
+      "id": "3",
+      "name": "Generate Motivation Message",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "email",
+        "operation": "send",
+        "toEmail": "={{$json[\"userEmail\"] || $node[\"User Input\"].json[\"email\"]}}",
+        "subject": "Your Daily Eco-Friendly Tip",
+        "text": "Hello,\n\nHere is your personalized sustainability tip for today:\n\n{{$json[\"tip\"]}}\n\nMotivation: {{$json[\"motivation\"]}}\n\nKeep making a positive impact!\n\nEcoAware AI Team"
+      },
+      "id": "4",
+      "name": "Send Email Notification",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        700,
+        300
+      ],
+      "credentials": {
+        "smtp": "SMTP Account"
+      }
+    },
+    {
+      "parameters": {
+        "from": "EcoAware AI <no-reply@ecoaware.ai>",
+        "to": "={{$json[\"userPhone\"] || $node[\"User Input\"].json[\"phone\"]}}",
+        "message": "Your daily sustainability tip: {{$json[\"tip\"]}}. Motivation: {{$json[\"motivation\"]}}. Keep it green with EcoAware AI!"
+      },
+      "id": "5",
+      "name": "Send SMS Notification",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        700,
+        420
+      ],
+      "credentials": {
+        "twilioApi": "Twilio Account"
+      }
+    },
+    {
+      "parameters": {
+        "updateKey": "habitId",
+        "options": {},
+        "fields": [
+          "habitId",
+          "habitName",
+          "date",
+          "progress"
+        ],
+        "values": {
+          "habitId": "={{$json[\"habitId\"]}}",
+          "habitName": "={{$json[\"habitName\"]}}",
+          "date": "={{ (new Date()).toISOString().split('T')[0] }}",
+          "progress": "={{$json[\"progress\"] || 0}}"
+        }
+      },
+      "name": "Update Habit Progress",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [
+        900,
+        150
+      ],
+      "credentials": {
+        "googleSheetsOAuth2": "Google Sheets OAuth"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const habitData = items.map(item => item.json);\n\nconst summary = {};\n\nhabitData.forEach(({ habitName, progress }) => {\n  if (!summary[habitName]) {\n    summary[habitName] = 0;\n  }\n  summary[habitName] += Number(progress) || 0;\n});\n\nconst summaryArray = Object.entries(summary).map(([habit, totalProgress]) => ({ habit, totalProgress }));\n\nreturn [{ json: { summary: summaryArray } }];"
+      },
+      "id": "6",
+      "name": "Generate Analytics Summary",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "email",
+        "operation": "send",
+        "toEmail": "={{$json[\"userEmail\"] || $node[\"User Input\"].json[\"email\"]}}",
+        "subject": "Your Sustainability Impact Summary",
+        "text": "Hello,\n\nHere is your sustainability progress summary:\n\n{{$json[\"summary\"].map(s => `${s.habit}: ${s.totalProgress}`).join('\\n')}}\n\nKeep up the excellent eco-friendly habits!\n\nEcoAware AI Team"
+      },
+      "id": "7",
+      "name": "Send Analytics Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        300
+      ],
+      "credentials": {
+        "smtp": "SMTP Account"
+      }
+    },
+    {
+      "parameters": {
+        "resource": "email",
+        "operation": "read",
+        "additionalFields": {}
+      },
+      "name": "User Input",
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 1,
+      "position": [
+        200,
+        500
+      ],
+      "credentials": {
+        "imap": "IMAP User Account"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const input = $json[\"text\"]?.toLowerCase() || '';\n\n// Example formats: 'progress reduce_plastic 3' or 'progress save_water 5'\nconst regex = /progress\\s+(\\w+)\\s+(\\d+)/i;\nconst match = input.match(regex);\n\nif (!match) {\n  return [{ json: { valid: false, message: 'Invalid input format. Use: progress <habitId> <value>' } }];\n}\n\nreturn [{\n  json: {\n    valid: true,\n    habitId: match[1],\n    progress: Number(match[2])\n  }\n}];"
+      },
+      "id": "8",
+      "name": "Parse User Habit Command",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "if (!$json[\"valid\"]) {\n  throw new Error($json[\"message\"] || 'Invalid user input');\n}\n\nreturn items;"
+      },
+      "id": "9",
+      "name": "Validate User Input",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "updateKey": "habitId",
+        "options": {},
+        "fields": [
+          "habitId",
+          "progress",
+          "date"
+        ],
+        "values": {
+          "habitId": "={{$json[\"habitId\"]}}",
+          "progress": "={{$json[\"progress\"]}}",
+          "date": "={{ (new Date()).toISOString().split('T')[0] }}"
+        }
+      },
+      "name": "Log Habit Progress",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [
+        900,
+        500
+      ],
+      "credentials": {
+        "googleSheetsOAuth2": "Google Sheets OAuth"
+      }
+    },
+    {
+      "parameters": {
+        "message": "Habit progress for {{$json[\"habitId\"]}} updated to {{$json[\"progress\"]}} on {{$json[\"date\"]}}. Thanks for doing your part for the planet!"
+      },
+      "id": "10",
+      "name": "User Confirmation Message",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "email",
+        "operation": "send",
+        "toEmail": "={{$json[\"fromEmail\"] || $node[\"User Input\"].json[\"from\"]}}",
+        "subject": "Habit Progress Logged",
+        "text": "{{$json[\"message\"]}}"
+      },
+      "id": "11",
+      "name": "Send Confirmation Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        500
+      ],
+      "credentials": {
+        "smtp": "SMTP Account"
+      }
+    }
+  ],
+  "connections": {
+    "Daily Scheduler": {
+      "main": [
+        [
+          {
+            "node": "Generate Daily Tip",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate Motivation Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Daily Tip": {
+      "main": [
+        [
+          {
+            "node": "Send Email Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send SMS Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Motivation Message": {
+      "main": [
+        [
+          {
+            "node": "Send Email Notification",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "Send SMS Notification",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "User Input": {
+      "main": [
+        [
+          {
+            "node": "Parse User Habit Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse User Habit Command": {
+      "main": [
+        [
+          {
+            "node": "Validate User Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate User Input": {
+      "main": [
+        [
+          {
+            "node": "Log Habit Progress",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Habit Progress": {
+      "main": [
+        [
+          {
+            "node": "User Confirmation Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "User Confirmation Message": {
+      "main": [
+        [
+          {
+            "node": "Send Confirmation Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
