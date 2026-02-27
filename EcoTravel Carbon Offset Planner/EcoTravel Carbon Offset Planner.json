@@ -1,0 +1,173 @@
+{
+  "name": "AI-Powered Sustainable Travel & Carbon Offset Planner",
+  "nodes": [
+    {
+      "parameters": {
+        "functionCode": "const { destination, startDate, endDate, preferences } = $json;\n\nreturn [{\n  json: {\n    destination,\n    startDate,\n    endDate,\n    preferences\n  }\n}];"
+      },
+      "name": "Extract User Input",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.travel-sustainable-options.com/v1/options",
+        "queryParametersUi": {
+          "queryParameters": [
+            {
+              "name": "destination",
+              "value": "={{$json[\"destination\"]}}"
+            },
+            {
+              "name": "startDate",
+              "value": "={{$json[\"startDate\"]}}"
+            },
+            {
+              "name": "endDate",
+              "value": "={{$json[\"endDate\"]}}"
+            },
+            {
+              "name": "preferences",
+              "value": "={{JSON.stringify($json[\"preferences\"])}}"
+            }
+          ]
+        },
+        "options": {},
+        "responseFormat": "json",
+        "headerParametersUi": {
+          "parameter": []
+        }
+      },
+      "name": "Fetch Sustainable Travel Options",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        550,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const sustainableOptions = $items(\"Fetch Sustainable Travel Options\")[0].json.options;\n\n// Mock logic: Calculate estimated carbon footprint based on travel modes and distance\nlet totalCarbonKg = 0;\nsustainableOptions.forEach(option => {\n  // Assume each option contains distance in km and mode's emission factor (kg CO2 per km)\n  const distance = option.distance_km || 0;\n  const emissionFactor = option.emission_factor_kg_per_km || 0;\n  totalCarbonKg += distance * emissionFactor;\n});\n\nreturn [{ json: { sustainableOptions, totalCarbonKg } }];"
+      },
+      "name": "Calculate Carbon Footprint",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.carbon-offsets.org/v2/projects",
+        "queryParametersUi": {
+          "queryParameters": [
+            {
+              "name": "max_emissions_kg",
+              "value": "={{$json[\"totalCarbonKg\"]}}"
+            },
+            {
+              "name": "type",
+              "value": "all"
+            }
+          ]
+        },
+        "options": {},
+        "responseFormat": "json"
+      },
+      "name": "Fetch Carbon Offset Programs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const sustainableOptions = $items(\"Calculate Carbon Footprint\")[0].json.sustainableOptions;\nconst totalCarbonKg = $items(\"Calculate Carbon Footprint\")[0].json.totalCarbonKg;\nconst offsetProjects = $items(\"Fetch Carbon Offset Programs\")[0].json.projects;\n\n// Generate personalized recommendations\nconst recommendedProjects = offsetProjects.filter(proj => proj.available_credits_kg >= totalCarbonKg).slice(0, 3);\n\nreturn [{\n  json: {\n    sustainableTravelOptions: sustainableOptions,\n    estimatedCarbonFootprintKg: totalCarbonKg,\n    recommendedCarbonOffsetProjects: recommendedProjects,\n    actionPlan: {\n      summary: `For your trip to ${$json.destination}, your estimated carbon footprint is ${totalCarbonKg.toFixed(2)} kg of CO2. Consider these travel options and offset programs.`,\n      steps: [\n        \"Select one or more sustainable travel options from the list provided.\",\n        \"Purchase carbon offsets from recommended projects to neutralize emissions.\",\n        \"Follow best eco-friendly travel practices included in the travel options details.\"\n      ]\n    }\n  }\n}];"
+      },
+      "name": "Generate Personalized Insights & Action Plan",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "passThrough"
+      },
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [
+        50,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Extract User Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract User Input": {
+      "main": [
+        [
+          {
+            "node": "Fetch Sustainable Travel Options",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Sustainable Travel Options": {
+      "main": [
+        [
+          {
+            "node": "Calculate Carbon Footprint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Carbon Footprint": {
+      "main": [
+        [
+          {
+            "node": "Fetch Carbon Offset Programs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Carbon Offset Programs": {
+      "main": [
+        [
+          {
+            "node": "Generate Personalized Insights & Action Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
