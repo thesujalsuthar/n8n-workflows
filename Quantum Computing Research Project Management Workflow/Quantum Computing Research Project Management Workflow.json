@@ -1,0 +1,178 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "webhookPath": "quantum-research-webhook",
+        "httpMethod": "POST"
+      },
+      "name": "Receive Project Update",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ],
+      "webhookId": "quantumResearchWebhook"
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "resource": "item",
+        "collectionId": "quantum_research_projects",
+        "fields": {
+          "json": "={{ $json }}"
+        }
+      },
+      "name": "Add Project to DB",
+      "type": "n8n-nodes-base.nocoDb",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ],
+      "credentials": {
+        "nocoDbApi": {
+          "id": "1",
+          "name": "NoCoDB API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "text": "New Quantum Computing Research Project Added:\n\nTitle: {{$json[\"title\"]}}\nLead Researcher: {{$json[\"leadResearcher\"]}}\nSummary: {{$json[\"summary\"]}}\n\nCheck the project dashboard for more details."
+      },
+      "name": "Format Notification Message",
+      "type": "n8n-nodes-base.functionItem",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "channel": "#quantum-updates",
+        "text": "={{ $json[\"text\"] }}"
+      },
+      "name": "Send Slack Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "1",
+          "name": "Slack Workspace"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "resource": "item",
+        "collectionId": "quantum_research_projects",
+        "filters": {}
+      },
+      "name": "Fetch All Projects",
+      "type": "n8n-nodes-base.nocoDb",
+      "typeVersion": 1,
+      "position": [
+        250,
+        600
+      ],
+      "credentials": {
+        "nocoDbApi": {
+          "id": "1",
+          "name": "NoCoDB API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const projects = items.map(item => item.json);\nreturn projects.map(project => ({ json: project }));"
+      },
+      "name": "Format Projects for Output",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "httpStatusCode": 200,
+        "respondWith": "lastNode"
+      },
+      "name": "Respond with Projects",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        750,
+        600
+      ]
+    }
+  ],
+  "connections": {
+    "Receive Project Update": {
+      "main": [
+        [
+          {
+            "node": "Add Project to DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Project to DB": {
+      "main": [
+        [
+          {
+            "node": "Format Notification Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Notification Message": {
+      "main": [
+        [
+          {
+            "node": "Send Slack Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch All Projects": {
+      "main": [
+        [
+          {
+            "node": "Format Projects for Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Projects for Output": {
+      "main": [
+        [
+          {
+            "node": "Respond with Projects",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "id": "quantum-computing-research-collaboration"
+}
