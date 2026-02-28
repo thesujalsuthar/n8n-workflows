@@ -1,0 +1,364 @@
+{
+  "name": "EcoAware AI: Daily Personalized Sustainability Messaging Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "resource": "database",
+        "operation": "getAll",
+        "table": "user_profiles"
+      },
+      "name": "Fetch User Profiles",
+      "type": "n8n-nodes-base.database",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.map(item => {\n  const preferences = item.json.preferences || {};\n  return {\n    json: {\n      userId: item.json.userId,\n      email: item.json.email,\n      phone: item.json.phone,\n      pushToken: item.json.pushToken,\n      preferences\n    }\n  };\n});"
+      },
+      "name": "Prepare User Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "completion",
+        "model": "gpt-4",
+        "temperature": 0.7,
+        "top_p": 1,
+        "frequency_penalty": 0,
+        "presence_penalty": 0,
+        "messages": [
+          {
+            "role": "system",
+            "content": "You generate personalized daily sustainability tips and habit motivation messages based on user preferences and past message engagement."
+          },
+          {
+            "role": "user",
+            "content": "Generate a personalized sustainability tip and motivational message considering the following preferences: {{ $json.preferences }}."
+          }
+        ]
+      },
+      "name": "Generate Personalized Tip",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        720,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const messages = [];\nconst json = item.json;\n\nif (json.email) {\n  messages.push({\n    channel: 'email',\n    to: json.email,\n    subject: 'Your Daily EcoAware Sustainability Tip',\n    body: json.choices[0].message.content\n  });\n}\nif (json.phone) {\n  messages.push({\n    channel: 'sms',\n    to: json.phone,\n    message: json.choices[0].message.content\n  });\n}\nif (json.pushToken) {\n  messages.push({\n    channel: 'push',\n    to: json.pushToken,\n    message: json.choices[0].message.content\n  });\n}\n\nreturn messages.map(msg => ({ json: { ...msg, userId: json.userId }}));"
+      },
+      "name": "Create Send Messages",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        950,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "toEmail": "={{$json.to}}",
+        "subject": "={{$json.subject}}",
+        "message": "={{$json.body}}"
+      },
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        220
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "1",
+          "name": "SMTP Credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "sms",
+        "operation": "send",
+        "to": "={{$json.to}}",
+        "message": "={{$json.message}}"
+      },
+      "name": "Send SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        320
+      ],
+      "credentials": {
+        "twilioApi": {
+          "id": "2",
+          "name": "Twilio Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "token": "={{$json.to}}",
+        "title": "Your Daily EcoAware Tip",
+        "message": "={{$json.message}}"
+      },
+      "name": "Send Push Notification",
+      "type": "n8n-nodes-base.pushNotification",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        420
+      ],
+      "credentials": {
+        "pushNotificationService": {
+          "id": "3",
+          "name": "Push Notification Service"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "table": "user_engagement",
+        "updateKey": "userId",
+        "updateFields": {
+          "lastMessageSentAt": "={{new Date().toISOString()}}",
+          "lastMessageContent": "={{$json.message || $json.body}}",
+          "channel": "={{$json.channel}}"
+        }
+      },
+      "name": "Track Engagement",
+      "type": "n8n-nodes-base.database",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "cronExpression": "0 8 * * *",
+        "timezone": "UTC"
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "database",
+        "operation": "getAll",
+        "table": "user_engagement"
+      },
+      "name": "Fetch User Engagement",
+      "type": "n8n-nodes-base.database",
+      "typeVersion": 1,
+      "position": [
+        480,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const engagementMap = {};\nfor (const eng of items) {\n  engagementMap[eng.json.userId] = eng.json;\n}\nreturn items[0].map(user => ({\n  json: {\n    ...user.json,\n    engagement: engagementMap[user.json.userId] || {}\n  }\n}));"
+      },
+      "name": "Merge Engagement with Users",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        720,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const results = [];\nfor (const item of items) {\n  if (!item.json.email && !item.json.phone && !item.json.pushToken) continue;\n  results.push({ json: item.json });\n}\nreturn results;"
+      },
+      "name": "Filter Users With Contact",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        600,
+        300
+      ]
+    },
+    {
+      "parameters": {},
+      "name": "Analytics - Collect Stats",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        320
+      ],
+      "notesInFlow": true,
+      "notes": "Aggregate delivery status and user engagement for message optimization."
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch User Profiles",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch User Engagement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch User Profiles": {
+      "main": [
+        [
+          {
+            "node": "Filter Users With Contact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch User Engagement": {
+      "main": [
+        [
+          {
+            "node": "Merge Engagement with Users",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Users With Contact": {
+      "main": [
+        [
+          {
+            "node": "Merge Engagement with Users",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Engagement with Users": {
+      "main": [
+        [
+          {
+            "node": "Prepare User Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare User Data": {
+      "main": [
+        [
+          {
+            "node": "Generate Personalized Tip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Personalized Tip": {
+      "main": [
+        [
+          {
+            "node": "Create Send Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Send Messages": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send SMS",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Push Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email": {
+      "main": [
+        [
+          {
+            "node": "Track Engagement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send SMS": {
+      "main": [
+        [
+          {
+            "node": "Track Engagement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Push Notification": {
+      "main": [
+        [
+          {
+            "node": "Track Engagement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Track Engagement": {
+      "main": [
+        [
+          {
+            "node": "Analytics - Collect Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
