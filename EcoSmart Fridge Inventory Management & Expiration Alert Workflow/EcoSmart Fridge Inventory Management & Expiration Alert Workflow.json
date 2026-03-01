@@ -1,0 +1,282 @@
+{
+  "name": "EcoSmart Fridge Inventory & Expiration Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 9,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.ecosmartfridge.local/inventory",
+        "method": "GET",
+        "responseFormat": "json",
+        "authentication": "headerAuth",
+        "headerAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$credentials.ecoSmartFridgeApi.apiKey}}"
+        }
+      },
+      "name": "Fetch Fridge Inventory",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const inventory = items[0].json.items;\nconst today = new Date();\n\nconst soonToExpire = inventory.filter(item => {\n  if (!item.expiryDate) return false;\n  const expiry = new Date(item.expiryDate);\n  const diffDays = (expiry - today) / (1000 * 60 * 60 * 24);\n  return diffDays >= 0 && diffDays <= 3;\n});\n\nreturn [{json: {soonToExpire, inventory}}];"
+      },
+      "name": "Filter Soon-To-Expire Items",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": "FindUserPreferences"
+      },
+      "name": "Get User Preferences",
+      "type": "n8n-nodes-base.workflowCall",
+      "typeVersion": 1,
+      "position": [
+        700,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const soonToExpire = items[0].json.soonToExpire;\nconst preferences = items[1].json.preferences;\n\n// Simple recipe suggestion logic based on soonToExpire items\nconst suggestedRecipes = [];\n\nsoonToExpire.forEach(item => {\n  if (preferences.recipeTypes.includes(item.category)) {\n    suggestedRecipes.push(`Try a recipe with ${item.name} before it expires.`);\n  }\n});\n\nreturn [{json: {soonToExpire, suggestedRecipes, preferences}}];"
+      },
+      "name": "Suggest Recipes",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        940,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "toEmail": "={{$json[\"preferences\"].email}}",
+        "subject": "Your EcoSmart Fridge - Items Approaching Expiration & Recipe Suggestions",
+        "text": "Hello {{$json.preferences.name}},\n\nThe following items in your fridge are about to expire soon:\n\n{{$json.soonToExpire.map(item => `- ${item.name} (expires on ${item.expiryDate})`).join('\\n')}}\n\nRecipe Suggestions:\n{{$json.suggestedRecipes.join('\\n')}}\n\nKeep your fridge smart and your meals fresh!\n\nBest,\nEcoSmart Team"
+      },
+      "name": "Send Email Reminder",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "title": "Items Near Expiration in Your EcoSmart Fridge",
+        "message": "{{$json.soonToExpire.length}} item(s) will expire soon. Check your email for recipes and details!",
+        "deviceToken": "={{$json.preferences.deviceToken}}"
+      },
+      "name": "Send Push Notification",
+      "type": "n8n-nodes-base.pushNotification",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const inventory = items[0].json.inventory;\nconst lowStockThreshold = 2;\n\nconst toRestock = inventory.filter(item => item.quantity <= lowStockThreshold);\nreturn [{json: {toRestock}}];"
+      },
+      "name": "Identify Items To Restock",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        700,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.grocerydelivery.local/order",
+        "method": "POST",
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "items",
+              "value": "={{JSON.stringify($json[\"toRestock\"])} }"
+            }
+          ]
+        },
+        "options": {},
+        "authentication": "headerAuth",
+        "headerAuth": {
+          "name": "Authorization",
+          "value": "Bearer {{$credentials.groceryApi.apiKey}}"
+        }
+      },
+      "name": "Place Restock Order",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        950,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const inventory = items[0].json.inventory;\n\n// Analytics: Compute food usage patterns - Example daily consumption counts\nconst usageStats = {};\n\ninventory.forEach(item => {\n  if (!usageStats[item.category]) {\n    usageStats[item.category] = 0;\n  }\n  if (item.usedLastWeek) {\n    usageStats[item.category] += item.usedLastWeek;\n  }\n});\n\nreturn [{json: {usageStats}}];"
+      },
+      "name": "Compute Usage Analytics",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        700,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "destination": "data-warehouse.ecosmart.local/usage-analytics",
+        "protocol": "https",
+        "method": "POST",
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "analyticsData",
+              "value": "={{JSON.stringify($json[\"usageStats\"])}}"
+            }
+          ]
+        }
+      },
+      "name": "Send Analytics Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        950,
+        600
+      ]
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Fridge Inventory",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get User Preferences",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Fridge Inventory": {
+      "main": [
+        [
+          {
+            "node": "Filter Soon-To-Expire Items",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Identify Items To Restock",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Compute Usage Analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get User Preferences": {
+      "main": [
+        [
+          {
+            "node": "Suggest Recipes",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Filter Soon-To-Expire Items": {
+      "main": [
+        [
+          {
+            "node": "Suggest Recipes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Suggest Recipes": {
+      "main": [
+        [
+          {
+            "node": "Send Email Reminder",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Push Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Identify Items To Restock": {
+      "main": [
+        [
+          {
+            "node": "Place Restock Order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Usage Analytics": {
+      "main": [
+        [
+          {
+            "node": "Send Analytics Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
