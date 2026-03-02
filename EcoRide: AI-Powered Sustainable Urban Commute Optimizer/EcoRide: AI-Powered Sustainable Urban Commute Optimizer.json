@@ -1,0 +1,269 @@
+{
+  "name": "EcoRide: AI-Powered Sustainable Urban Mobility and Carbon Footprint Optimizer",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.urbanmobilitydata.com/realtime",
+        "method": "GET",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Fetch Real-Time Urban Mobility Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const mobilityData = items[0].json; // Assuming JSON array of routes\n\n// Simple sustainability score calculation example\nconst optimizedRoutes = mobilityData.routes.map(route => {\n  // Example: Incorporate bike lanes, public transport options, and traffic congestion\n  const sustainabilityScore = (route.bikeLanePercentage * 0.4) + (route.publicTransportAvailability * 0.4) - (route.trafficCongestion * 0.2);\n\n  return {\n    ...route,\n    sustainabilityScore\n  };\n});\n\n// Sort routes descending by sustainabilityScore\noptimizedRoutes.sort((a, b) => b.sustainabilityScore - a.sustainabilityScore);\n\nreturn [{ json: { optimizedRoutes } }];"
+      },
+      "name": "Optimize Routes for Sustainability",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const routes = items[0].json.optimizedRoutes;\n\n// Carbon footprint calculation assumptions (kg CO2 per km)\nconst carbonFactors = {\n  car: 0.192,\n  publicTransport: 0.105,\n  bike: 0,\n  walk: 0\n};\n\nconst routesWithCarbon = routes.map(route => {\n  // weighted average based on travel mode\n  const distance = route.distanceKm;\n  const mode = route.travelMode; // Assume travelMode: 'car', 'publicTransport', 'bike', 'walk'\n  const carbonFootprint = carbonFactors[mode] ? carbonFactors[mode] * distance : 0;\n\n  return {\n    ...route,\n    carbonFootprint\n  };\n});\n\nreturn [{ json: { routesWithCarbon } }];"
+      },
+      "name": "Calculate Carbon Footprints",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const routes = items[0].json.routesWithCarbon;\n\nconst bestRoute = routes[0];\n\nconst suggestions = [];\n\n// Suggest alternatives if carbon footprint is high\nif (bestRoute.carbonFootprint > 1) {\n  if (bestRoute.travelMode === 'car') {\n    suggestions.push('Consider switching to public transportation or carpooling to reduce your carbon footprint.');\n  }\n  if (bestRoute.travelMode === 'publicTransport' && bestRoute.sustainabilityScore < 0.5) {\n    suggestions.push('Try adjusting your departure time to reduce waiting and emissions.');\n  }\n  if (bestRoute.travelMode === 'bike' || bestRoute.travelMode === 'walk') {\n    suggestions.push('Great choice! Keep it up for a sustainable commute.');\n  }\n} else {\n  suggestions.push('Your selected route is optimized for sustainability. Keep it up!');\n}\n\nreturn [{ json: { bestRoute, suggestions } }];"
+      },
+      "name": "Generate Emission Reduction Suggestions",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "toEmail": "={{$json[\"userEmail\"]}}",
+        "subject": "Your EcoRide Daily Commute Recommendations",
+        "html": "Hello,<br><br>Your optimized sustainable commute route:<br><ul><li>Mode: {{$json[\"bestRoute\"].travelMode}}</li><li>Distance: {{$json[\"bestRoute\"].distanceKm}} km</li><li>Estimated Carbon Footprint: {{$json[\"bestRoute\"].carbonFootprint.toFixed(2)}} kg CO2</li></ul><br>Suggestions to reduce emissions:<br><ul>{{ $json[\"suggestions\"].map(s => `<li>${s}</li>`).join('') }}</ul><br>Travel sustainably!<br><br>EcoRide Team"
+      },
+      "name": "Send Personalized Notification",
+      "type": "n8n-nodes-base.sendEmail",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "setup",
+        "tableName": "eco_ride_commutes",
+        "columns": [
+          {
+            "name": "userId",
+            "type": "string"
+          },
+          {
+            "name": "travelMode",
+            "type": "string"
+          },
+          {
+            "name": "distanceKm",
+            "type": "number"
+          },
+          {
+            "name": "carbonFootprint",
+            "type": "number"
+          },
+          {
+            "name": "date",
+            "type": "date"
+          }
+        ]
+      },
+      "name": "Setup Database",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        100,
+        100
+      ],
+      "credentials": {
+        "postgres": "Postgres EcoRide DB"
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": "public",
+        "table": "eco_ride_commutes",
+        "columns": [
+          "userId",
+          "travelMode",
+          "distanceKm",
+          "carbonFootprint",
+          "date"
+        ],
+        "values": [
+          [
+            "={{$json[\"userId\"]}}",
+            "={{$json[\"bestRoute\"].travelMode}}",
+            "={{$json[\"bestRoute\"].distanceKm}}",
+            "={{$json[\"bestRoute\"].carbonFootprint}}",
+            "={{new Date().toISOString().slice(0, 10)}}"
+          ]
+        ]
+      },
+      "name": "Log Commute Data",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        100
+      ],
+      "credentials": {
+        "postgres": "Postgres EcoRide DB"
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT date, AVG(carbonFootprint) as avgCarbonFootprint, travelMode FROM eco_ride_commutes WHERE userId = {{$json[\"userId\"]}} GROUP BY date, travelMode ORDER BY date DESC LIMIT 30;"
+      },
+      "name": "Fetch User Commute Analytics",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        500
+      ],
+      "credentials": {
+        "postgres": "Postgres EcoRide DB"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const analytics = items[0].json;\n\nconst chartData = analytics.map(row => ({\n  date: row.date,\n  avgCarbonFootprint: parseFloat(row.avgCarbonFootprint),\n  travelMode: row.travelMode\n}));\n\nreturn [{ json: { chartData } }];"
+      },
+      "name": "Format Analytics Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "html": "<html><body><h2>EcoRide Dashboard: Carbon Footprint Trends</h2><canvas id=\"carbonChart\" width=\"600\" height=\"400\"></canvas><script src=\"https://cdn.jsdelivr.net/npm/chart.js\"></script><script>const ctx = document.getElementById('carbonChart').getContext('2d');const data = {{ $json.chartData }};const labels = [...new Set(data.map(d => d.date))];const modes = [...new Set(data.map(d => d.travelMode))];const datasets = modes.map(mode => ({label: mode, data: labels.map(label => {const point = data.find(d => d.date === label && d.travelMode === mode);return point ? point.avgCarbonFootprint : 0;}), borderColor: mode === 'car' ? 'red' : mode === 'publicTransport' ? 'blue' : 'green', fill: false}));new Chart(ctx, {type: 'line', data: {labels, datasets}, options: {responsive: false, scales: {y: {beginAtZero: true, title: {display: true, text: 'Avg CO2 (kg)'}}}}});</script></body></html>",
+        "options": {}
+      },
+      "name": "Render Analytics Dashboard",
+      "type": "n8n-nodes-base.httpResponse",
+      "typeVersion": 1,
+      "position": [
+        1800,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "Fetch Real-Time Urban Mobility Data": {
+      "main": [
+        [
+          {
+            "node": "Optimize Routes for Sustainability",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Optimize Routes for Sustainability": {
+      "main": [
+        [
+          {
+            "node": "Calculate Carbon Footprints",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Carbon Footprints": {
+      "main": [
+        [
+          {
+            "node": "Generate Emission Reduction Suggestions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Emission Reduction Suggestions": {
+      "main": [
+        [
+          {
+            "node": "Send Personalized Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log Commute Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Commute Data": {
+      "main": [
+        [
+          {
+            "node": "Fetch User Commute Analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch User Commute Analytics": {
+      "main": [
+        [
+          {
+            "node": "Format Analytics Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Analytics Data": {
+      "main": [
+        [
+          {
+            "node": "Render Analytics Dashboard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "id": "1"
+}
