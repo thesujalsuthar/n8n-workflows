@@ -1,0 +1,199 @@
+{
+  "name": "Quantum Computing Research Collaboration and Innovation Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.crossref.org/works?query=quantum+computing&filter=from-pub-date:2023-01-01&sort=published&order=desc&rows=20",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Fetch Recent Quantum Computing Papers",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const papers = items[0].json.message.items;\nreturn papers.map(paper => ({\n  json: {\n    title: paper.title ? paper.title[0] : \"\",\n    authors: paper.author ? paper.author.map(a => `${a.given} ${a.family}`).join(\", \") : \"\",\n    publishedDate: paper.published ? paper.published['date-parts'][0].join('-') : \"\",\n    doi: paper.DOI || \"\",\n    url: paper.URL || \"\",\n    abstract: paper.abstract || \"\"\n  }\n}));"
+      },
+      "name": "Extract Paper Details",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "text",
+        "operation": "sentimentAnalyze",
+        "input": "={{$json.abstract || $json.title}}"
+      },
+      "name": "Analyze Impact & Relevance AI",
+      "type": "n8n-nodes-base.openAI",
+      "typeVersion": 1,
+      "position": [
+        700,
+        300
+      ],
+      "credentials": {
+        "openAIApi": "OpenAI API"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.map(item => {\n  const analysis = item.json.choices && item.json.choices[0] ? item.json.choices[0].message.content : '';\n  return {\n    json: {\n      title: item.json.title,\n      authors: item.json.authors,\n      publishedDate: item.json.publishedDate,\n      doi: item.json.doi,\n      url: item.json.url,\n      impactAnalysis: analysis\n    }\n  };\n});"
+      },
+      "name": "Format Analysis Output",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/* \n  Identify potential collaboration opportunities by matching overlapping authors,\n  keywords, or institutions from the aggregated papers.\n  For demo, assume sending to Slack channel and also prepare collaboration invites.\n*/\n\nconst collaborations = [];\n\n// Simple example: group papers by author to find overlapping authors\nconst authorMap = {};\n\nfor (const item of items) {\n  const authors = item.json.authors.split(\", \");\n  for (const author of authors) {\n    if (!authorMap[author]) authorMap[author] = [];\n    authorMap[author].push({ title: item.json.title, url: item.json.url });\n  }\n}\n\nfor (const author in authorMap) {\n  if (authorMap[author].length > 1) {\n    collaborations.push({\n      author,\n      papers: authorMap[author]\n    });\n}\n}\n\nreturn collaborations.length\n  ? [{ json: { collaborations } }]\n  : [{ json: { collaborations: \"No immediate collaboration opportunities found.\" } }];"
+      },
+      "name": "Identify Collaboration Opportunities",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "channel": "quantum-research-collab",
+        "text": "={{ $json.collaborations === \"No immediate collaboration opportunities found.\" ? $json.collaborations : `Collaboration opportunities identified:\\n${JSON.stringify($json.collaborations, null, 2)}` }}"
+      },
+      "name": "Notify Collaborators Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        300
+      ],
+      "credentials": {
+        "slackApi": "Slack API"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "/* Generate innovation insights summary report from paper impact analyses and collaboration opportunities. */\n\nconst papersAnalysis = items[0].json.map(paper => `- Title: ${paper.title}\\n  Impact & Relevance: ${paper.impactAnalysis}`);\n\nconst collaborations = items[1].json.collaborations;\n\nlet collaborationSummary = '';\nif (collaborations === \"No immediate collaboration opportunities found.\") {\n  collaborationSummary = 'No collaboration opportunities found based on current dataset.';\n} else {\n  collaborationSummary = collaborations.map(c => `* ${c.author} involved in papers: ${c.papers.map(p => p.title).join('; ')}`).join('\\n');\n}\n\nconst report = `Quantum Computing Research Innovation Insights Report\\n\\nResearch Papers Analysis:\\n${papersAnalysis.join('\\n\\n')}\\n\\nCollaboration Opportunities:\\n${collaborationSummary}`;\n\nreturn [{ json: { report } }];"
+      },
+      "name": "Generate Innovation Insights Report",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "channel": "quantum-research-community",
+        "text": "={{$json.report}}"
+      },
+      "name": "Send Report Notification to Community",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [
+        1700,
+        300
+      ],
+      "credentials": {
+        "slackApi": "Slack API"
+      }
+    }
+  ],
+  "connections": {
+    "Fetch Recent Quantum Computing Papers": {
+      "main": [
+        [
+          {
+            "node": "Extract Paper Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Paper Details": {
+      "main": [
+        [
+          {
+            "node": "Analyze Impact & Relevance AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Impact & Relevance AI": {
+      "main": [
+        [
+          {
+            "node": "Format Analysis Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Analysis Output": {
+      "main": [
+        [
+          {
+            "node": "Identify Collaboration Opportunities",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate Innovation Insights Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Identify Collaboration Opportunities": {
+      "main": [
+        [
+          {
+            "node": "Notify Collaborators Slack",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate Innovation Insights Report",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Generate Innovation Insights Report": {
+      "main": [
+        [
+          {
+            "node": "Send Report Notification to Community",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
