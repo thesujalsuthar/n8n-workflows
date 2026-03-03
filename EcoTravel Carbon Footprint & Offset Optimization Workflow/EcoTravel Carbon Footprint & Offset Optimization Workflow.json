@@ -1,0 +1,257 @@
+{
+  "name": "Sustainable Travel Planning & Carbon Offset Optimization",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "plan-itinerary",
+        "options": {},
+        "responseMode": "lastNode"
+      },
+      "name": "HTTP Trigger - Plan Itinerary",
+      "type": "n8n-nodes-base.httpTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "requestBody": "={{ { origin: $json.origin, destination: $json.destination, departureDate: $json.departureDate, returnDate: $json.returnDate, preferences: $json.preferences } }}"
+      },
+      "name": "Extract User Input",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "={{`https://api.traveldata.com/routes?origin=${$json.origin}&destination=${$json.destination}&departureDate=${$json.departureDate}&returnDate=${$json.returnDate}`}}",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_TRAVEL_API_KEY"
+            }
+          ]
+        }
+      },
+      "name": "Get Travel Routes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n This node calculates carbon footprints based on route details\n*/\nconst routes = $items()[0].json.routes;\nconst preferences = $items()[0].json.preferences || {};\n\n/**\n * Carbon emission factors per mode of transport (kg CO2 per km) - example values\n */\nconst carbonFactors = {\n  flight: 0.255,\n  train: 0.041,\n  bus: 0.105,\n  car: 0.192\n};\n\nfunction calculateRouteCarbon(route) {\n  return route.segments.reduce((total, segment) => {\n    const factor = carbonFactors[segment.mode.toLowerCase()] || 0.2;\n    return total + segment.distanceKm * factor;\n  }, 0);\n}\n\nconst enrichedRoutes = routes.map(route => {\n  const carbonFootprintKg = calculateRouteCarbon(route);\n  const sustainabilityScore = 1 - Math.min(carbonFootprintKg / 1000, 1); // normalized score\n\n  // Adjust score based on user preferences if provided (example: prefer trains)\n  let adjustedScore = sustainabilityScore;\n  if (preferences.preferredModes) {\n    if (preferences.preferredModes.includes('train') && route.segments.some(seg => seg.mode.toLowerCase() === 'train')) {\n      adjustedScore += 0.1;\n    }\n    if (preferences.avoidFlights && route.segments.some(seg => seg.mode.toLowerCase() === 'flight')) {\n      adjustedScore -= 0.2;\n    }\n  }\n\n  adjustedScore = Math.min(Math.max(adjustedScore, 0), 1);\n\n  return {\n    ...route,\n    carbonFootprintKg,\n    sustainabilityScore: adjustedScore\n  };\n});\n\nreturn enrichedRoutes.map(route => ({ json: route }));"
+      },
+      "name": "Calculate Carbon Footprint & Score",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n * Dynamically adjust routes based on sustainability scores and user preferences\n * Here, we filter or rank routes to optimize eco-friendliness\n */\nconst routes = $items();\nconst minScore = $json.preferences && $json.preferences.minimumSustainabilityScore ? $json.preferences.minimumSustainabilityScore : 0.5;\n\nconst filteredRoutes = routes.filter(route => route.json.sustainabilityScore >= minScore);\n\nif (filteredRoutes.length === 0) {\n  // If no route meets min score, fallback to best possible (highest score)\n  const bestRoute = routes.sort((a,b) => b.json.sustainabilityScore - a.json.sustainabilityScore)[0];\n  return [bestRoute];\n}\n\n// Optionally sort by sustainability score descending\nfilteredRoutes.sort((a,b) => b.json.sustainabilityScore - a.json.sustainabilityScore);\n\nreturn filteredRoutes;"
+      },
+      "name": "Filter & Rank Routes",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "https://api.carbonoffset.com/options",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_CARBON_OFFSET_API_KEY"
+            }
+          ]
+        }
+      },
+      "name": "Get Carbon Offset Options",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        1500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n * Select recommended carbon offset options based on route's carbon footprint\n * Example logic: select offsets where offsetKg >= footprintKg or bundle several\n */\nconst route = $items()[0].json;\nconst carbonOffsets = $items()[1].json.offsets || [];\n\nconst neededOffset = route.carbonFootprintKg;\n\n// Filter and sort offsets by price ascending\nconst suitableOffsets = carbonOffsets\n  .filter(offset => offset.offsetKg >= neededOffset)\n  .sort((a, b) => a.priceUSD - b.priceUSD);\n\n// If none single offset covers, find combination (simple approach: select multiple smallest offsets)\nlet selectedOffsets = [];\nif (suitableOffsets.length > 0) {\n  selectedOffsets = [suitableOffsets[0]];\n} else {\n  let sumOffset = 0;\n  selectedOffsets = [];\n  const sortedByOffset = carbonOffsets.sort((a, b) => a.offsetKg - b.offsetKg);\n  for (const offset of sortedByOffset) {\n    selectedOffsets.push(offset);\n    sumOffset += offset.offsetKg;\n    if (sumOffset >= neededOffset) break;\n  }\n}\n\nroute.recommendedOffsets = selectedOffsets;\n\nreturn [{ json: route }];"
+      },
+      "name": "Recommend Carbon Offsets",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "mode": "mergeByIndex"
+        }
+      },
+      "name": "Merge Route & Offset Data",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 1,
+      "position": [
+        1700,
+        320
+      ],
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n * Final formatting and filtering for output response\n */\nconst route = $json;\n\nreturn [{\n  json: {\n    itinerary: {\n      start: route.origin,\n      end: route.destination,\n      departureDate: route.departureDate,\n      returnDate: route.returnDate,\n      segments: route.segments\n    },\n    carbonFootprintKg: route.carbonFootprintKg,\n    sustainabilityScore: route.sustainabilityScore,\n    recommendedCarbonOffsets: route.recommendedOffsets\n  }\n}];"
+      },
+      "name": "Format Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        2000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "passThrough"
+      },
+      "name": "HTTP Response",
+      "type": "n8n-nodes-base.httpResponse",
+      "typeVersion": 1,
+      "position": [
+        2250,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "HTTP Trigger - Plan Itinerary": {
+      "main": [
+        [
+          {
+            "node": "Extract User Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract User Input": {
+      "main": [
+        [
+          {
+            "node": "Get Travel Routes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Travel Routes": {
+      "main": [
+        [
+          {
+            "node": "Calculate Carbon Footprint & Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Carbon Footprint & Score": {
+      "main": [
+        [
+          {
+            "node": "Filter & Rank Routes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter & Rank Routes": {
+      "main": [
+        [
+          {
+            "node": "Merge Route & Offset Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Carbon Offset Options",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Carbon Offset Options": {
+      "main": [
+        [
+          {
+            "node": "Merge Route & Offset Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Route & Offset Data": {
+      "main": [
+        [
+          {
+            "node": "Recommend Carbon Offsets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recommend Carbon Offsets": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Response": {
+      "main": [
+        [
+          {
+            "node": "HTTP Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
