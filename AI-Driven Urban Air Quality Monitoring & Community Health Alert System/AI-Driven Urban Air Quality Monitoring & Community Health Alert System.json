@@ -1,0 +1,120 @@
+{
+  "name": "AI-Powered Urban Air Quality Optimization & Community Health Advisory",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.openaq.org/v2/latest?city=YourCityName",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "name": "Fetch Air Quality Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const data = items[0].json.results;\n\n// Extract relevant pollutants and measurements\nconst pollutants = data.map(location => {\n  return location.measurements.reduce((acc, m) => {\n    acc[m.parameter] = m.value;\n    return acc;\n  }, { location: location.location, city: location.city, coordinates: location.coordinates });\n});\n\nreturn pollutants.map(pollutant => ({ json: pollutant }));"
+      },
+      "name": "Parse and Structure Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Simulate AI analysis on pollution patterns.\n  E.g., Determine pollution levels, trends, and suggest alerts severity.\n*/\nconst analyzedItems = items.map(item => {\n  const json = item.json;\n\n  // Analyze PM2.5 for severity\n  const pm25 = json.pm25 || 0;\n  let severity = 'Low';\n  if (pm25 > 75) severity = 'High';\n  else if (pm25 > 35) severity = 'Moderate';\n\n  // Recommend alert messages based on severity\n  const alertMessage = {\n    Low: 'Air quality is good. Enjoy your outdoor activities!',\n    Moderate: 'Air quality is moderate. Sensitive groups should reduce prolonged exertion outdoors.',\n    High: 'Air quality is poor. Everyone should limit outdoor activities.'\n  }[severity];\n\n  return {\n    json: {\n      location: json.location,\n      city: json.city,\n      coordinates: json.coordinates,\n      pollution: {\n        pm25,\n        severity\n      },\n      alertMessage\n    }\n  };\n});\n\nreturn analyzedItems;"
+      },
+      "name": "AI Analyze Pollution Patterns",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n  Generate personalized health and environmental recommendations per location.\n  Example basic heuristic logic:\n*/\nconst healthRecommendations = items.map(item => {\n  const { severity, pm25 } = item.json.pollution;\n  let recommendations = [];\n\n  if (severity === 'High') {\n    recommendations.push('Wear N95 masks when going outside.');\n    recommendations.push('Use air purifiers indoors.');\n    recommendations.push('Avoid outdoor exercise.');\n  } else if (severity === 'Moderate') {\n    recommendations.push('Consider wearing masks during prolonged outdoor activities.');\n    recommendations.push('Keep windows closed if sensitive.');\n  } else {\n    recommendations.push('Air quality is safe. Maintain healthy lifestyle.');\n  }\n\n  // Environmental action recommendations\n  if (pm25 > 35) {\n    recommendations.push('Support local initiatives to reduce traffic and emissions.');\n  } else {\n    recommendations.push('Participate in local green activities and tree planting.');\n  }\n\n  return {\n    json: {\n      ...item.json,\n      recommendations\n    }\n  };\n});\n\nreturn healthRecommendations;"
+      },
+      "name": "Generate Health & Environmental Recommendations",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "alerts@urbanhealth.ai",
+        "toEmail": "={{$json[\"location\"] + \"_residents@example.com\"}}",
+        "subject": "Community Air Quality Alert: {{$json.pollution.severity}} Level",
+        "text": "Hello Residents of {{$json.location}},\n\nCurrent air quality is evaluated as {{$json.pollution.severity}} level with PM2.5 at {{$json.pollution.pm25}} µg/m³.\n\nAlert: {{$json.alertMessage}}\n\nRecommendations:\n- {{$json.recommendations.join('\\n- ')}}\n\nStay safe,\nUrban Health Advisory Team",
+        "options": {}
+      },
+      "name": "Send Community Alert Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Fetch Air Quality Data": {
+      "main": [
+        [
+          {
+            "node": "Parse and Structure Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse and Structure Data": {
+      "main": [
+        [
+          {
+            "node": "AI Analyze Pollution Patterns",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Analyze Pollution Patterns": {
+      "main": [
+        [
+          {
+            "node": "Generate Health & Environmental Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Health & Environmental Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Send Community Alert Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
