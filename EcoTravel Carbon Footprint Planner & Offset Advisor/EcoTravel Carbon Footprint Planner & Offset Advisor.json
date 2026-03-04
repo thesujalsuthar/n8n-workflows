@@ -1,0 +1,225 @@
+{
+  "name": "AI-Driven Personalized Eco-Friendly Travel Planner and Carbon Offset Advisor",
+  "nodes": [
+    {
+      "parameters": {
+        "functionCode": "const { destination, travelDates, preferences } = $json;\nreturn [{ destination, travelDates, preferences }];"
+      },
+      "id": "1",
+      "name": "Extract User Input",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "transport",
+        "operation": "getOptions",
+        "query": "={{$json.destination}}",
+        "additionalFields": {}
+      },
+      "id": "2",
+      "name": "Fetch Transportation Options",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        500,
+        200
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "",
+          "name": ""
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "accommodation",
+        "operation": "getEcoRatings",
+        "query": "={{$json.destination}}",
+        "additionalFields": {}
+      },
+      "id": "3",
+      "name": "Fetch Accommodation Eco-Ratings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        500,
+        400
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "",
+          "name": ""
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const transportOptions = $items(\"Fetch Transportation Options\")[0].json.options;\nconst accommodationRatings = $items(\"Fetch Accommodation Eco-Ratings\")[0].json.ratings;\n\n// Example flat carbon footprint data for demo; in practice, fetch or calculate\nconst carbonFootprint = {\n  transportation: transportOptions.map(t => ({ type: t.type, footprint: t.distance * 0.12 })),\n  accommodation: accommodationRatings.map(a => ({ name: a.name, footprint: 5 - a.ecoScore }))\n};\n\nreturn [{ carbonFootprint, transportOptions, accommodationRatings }];"
+      },
+      "id": "4",
+      "name": "Calculate Carbon Footprint",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const { carbonFootprint } = $json;\n\nconst totalTransportation = carbonFootprint.transportation.reduce((acc, cur) => acc + cur.footprint, 0);\nconst totalAccommodation = carbonFootprint.accommodation.reduce((acc, cur) => acc + cur.footprint, 0);\nconst totalCarbon = totalTransportation + totalAccommodation;\n\n// Suggest offset: 110% of calculated footprint\nconst suggestedOffset = totalCarbon * 1.1;\n\nreturn [{ totalCarbon, suggestedOffset }];"
+      },
+      "id": "5",
+      "name": "Compute Offset Suggestions",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        950,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "carbonOffsetProjects",
+        "operation": "list",
+        "filters": {
+          "type": "reforestation"
+        }
+      },
+      "id": "6",
+      "name": "Fetch Carbon Offset Projects",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        950,
+        500
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "",
+          "name": ""
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const offsetProjects = $items(\"Fetch Carbon Offset Projects\")[0].json.projects;\nconst suggestedAmount = $items(\"Compute Offset Suggestions\")[0].json.suggestedOffset;\n\nconst sortedProjects = offsetProjects.sort((a,b) => b.rating - a.rating);\nconst recommendedProjects = sortedProjects.slice(0, 3);\n\nreturn [{ recommendedProjects, suggestedAmount }];"
+      },
+      "id": "7",
+      "name": "Recommend Offset Contributions",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "passThrough",
+        "options": {}
+      },
+      "id": "8",
+      "name": "Return Final Plan",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1350,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Extract User Input": {
+      "main": [
+        [
+          {
+            "node": "Fetch Transportation Options",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Accommodation Eco-Ratings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Transportation Options": {
+      "main": [
+        [
+          {
+            "node": "Calculate Carbon Footprint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Accommodation Eco-Ratings": {
+      "main": [
+        [
+          {
+            "node": "Calculate Carbon Footprint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Carbon Footprint": {
+      "main": [
+        [
+          {
+            "node": "Compute Offset Suggestions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Offset Suggestions": {
+      "main": [
+        [
+          {
+            "node": "Fetch Carbon Offset Projects",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Carbon Offset Projects": {
+      "main": [
+        [
+          {
+            "node": "Recommend Offset Contributions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recommend Offset Contributions": {
+      "main": [
+        [
+          {
+            "node": "Return Final Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
