@@ -1,0 +1,460 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 8,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "find",
+        "collection": "users",
+        "filters": {}
+      },
+      "name": "Get Users",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ],
+      "credentials": {
+        "mongodb": "MongoDB Credentials"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const enrichedUsers = [];\n\n// Iterate over users to fetch local environmental data and prepare for personalization\nfor (const user of items) {\n  const city = user.json.location.city;\n  const country = user.json.location.country;\n  enrichedUsers.push({\n    json: {\n      userId: user.json._id,\n      email: user.json.email,\n      phone: user.json.phone,\n      preferences: user.json.preferences,\n      location: user.json.location,\n      city,\n      country\n    }\n  });\n}\nreturn enrichedUsers;"
+      },
+      "name": "Prepare Users",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.openaq.org/v2/latest",
+        "method": "GET",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "city",
+              "value": "={{ $json.city }}"
+            }
+          ]
+        },
+        "responseFormat": "json"
+      },
+      "name": "Fetch Air Quality Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        850,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.openweathermap.org/data/2.5/weather",
+        "method": "GET",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "q",
+              "value": "={{ $json.city }},{{$json.country}}"
+            },
+            {
+              "name": "appid",
+              "value": "={{$credentials.openWeatherMapApi.apiKey}}"
+            },
+            {
+              "name": "units",
+              "value": "metric"
+            }
+          ]
+        },
+        "responseFormat": "json"
+      },
+      "name": "Fetch Weather Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "OpenWeatherMap API"
+        }
+      },
+      "position": [
+        850,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "for (const item of items) {\n  const airQuality = item.json['Fetch Air Quality Data']?.results?.[0]?.measurements?.[0] || null;\n  const weather = item.json['Fetch Weather Data'] || null;\n\n  item.json.environmentalData = {\n    airQualityIndex: airQuality ? airQuality.value : null,\n    airQualityParameter: airQuality ? airQuality.parameter : null,\n    temperature: weather ? weather.main.temp : null,\n    weatherDescription: weather ? weather.weather[0].description : null\n  };\n}\nreturn items;"
+      },
+      "name": "Combine Environmental Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "prompt": "You are EcoAware AI. Given the user's preferences and current environmental data, generate a personalized daily sustainability tip and a call to action for the user. User preferences: {{ $json.preferences | json }}\nEnvironmental data: {{ $json.environmentalData | json }}\nGenerate a friendly, short tip and action in JSON format:\n{\n  \"tip\": \"...\",\n  \"action\": \"...\"\n}\nReturn only the JSON.",
+        "temperature": 0.7,
+        "maxTokens": 200
+      },
+      "name": "Generate Personalized Message",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "credentials": {
+        "openAIApi": "OpenAI API"
+      },
+      "position": [
+        1250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "for (const item of items) {\n  try {\n    const content = JSON.parse(item.json.text);\n    item.json.tip = content.tip;\n    item.json.action = content.action;\n  } catch (error) {\n    item.json.tip = \"Remember to live sustainably today!\";\n    item.json.action = \"Review your sustainability goals.\";\n  }\n}\nreturn items;"
+      },
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.map(item => {\n  const engagementScore = item.json.engagementScore || 0;\n  let subject = \"Your Daily Sustainability Tip\";\n  if (engagementScore < 0.3) {\n    subject = \"Discover New Ways to Be Eco-Friendly Today!\";\n  } else if (engagementScore > 0.7) {\n    subject = \"Keep Up the Great Sustainable Work!\";\n  }\n\n  let message = `Hello! 🌿\\n\\nTip of the day: ${item.json.tip}\\nAction to take: ${item.json.action}\\n\\nStay EcoAware!`;\n\n  return {\n    json: {\n      ...item.json,\n      subject,\n      message\n    }\n  };\n});"
+      },
+      "name": "Craft Email/SMS Content",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "to": "={{ $json.email }}",
+        "subject": "={{ $json.subject }}",
+        "text": "={{ $json.message }}"
+      },
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1800,
+        240
+      ],
+      "credentials": {
+        "smtp": "SMTP Credentials"
+      }
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "to": "={{ $json.phone }}",
+        "message": "={{ $json.message }}"
+      },
+      "name": "Send SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1800,
+        360
+      ],
+      "credentials": {
+        "twilioApi": "Twilio Account"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.filter(item => item.json.preferences?.contactMethod === 'email');"
+      },
+      "name": "Filter Email Users",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1700,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.filter(item => item.json.preferences?.contactMethod === 'sms');"
+      },
+      "name": "Filter SMS Users",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1700,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "collection": "userEngagement",
+        "filter": {
+          "userId": "={{$json.userId}}"
+        },
+        "updateFields": {
+          "$inc": {
+            "sentMessages": 1
+          },
+          "$setOnInsert": {
+            "lastSent": "={{$now}}"
+          }
+        },
+        "upsert": true
+      },
+      "name": "Track Message Sent",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        1950,
+        300
+      ],
+      "credentials": {
+        "mongodb": "MongoDB Credentials"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.map(item => {\n  // Dummy engagement scoring based on placeholder logic\n  item.json.engagementScore = item.json.engagementScore ? Math.min(1, item.json.engagementScore + 0.05) : 0.5;\n  return item;\n});"
+      },
+      "name": "Update Engagement Score",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1700,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "collection": "userEngagement",
+        "filter": {
+          "userId": "={{$json.userId}}"
+        },
+        "updateFields": {
+          "engagementScore": "={{$json.engagementScore}}"
+        },
+        "upsert": true
+      },
+      "name": "Save Engagement Score",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        1850,
+        480
+      ],
+      "credentials": {
+        "mongodb": "MongoDB Credentials"
+      }
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Users",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Users": {
+      "main": [
+        [
+          {
+            "node": "Prepare Users",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Users": {
+      "main": [
+        [
+          {
+            "node": "Fetch Air Quality Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Weather Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Air Quality Data": {
+      "main": [
+        [
+          {
+            "node": "Combine Environmental Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Weather Data": {
+      "main": [
+        [
+          {
+            "node": "Combine Environmental Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Combine Environmental Data": {
+      "main": [
+        [
+          {
+            "node": "Generate Personalized Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Personalized Message": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Craft Email/SMS Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Craft Email/SMS Content": {
+      "main": [
+        [
+          {
+            "node": "Filter Email Users",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Filter SMS Users",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "Update Engagement Score",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Filter Email Users": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter SMS Users": {
+      "main": [
+        [
+          {
+            "node": "Send SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email": {
+      "main": [
+        [
+          {
+            "node": "Track Message Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send SMS": {
+      "main": [
+        [
+          {
+            "node": "Track Message Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Engagement Score": {
+      "main": [
+        [
+          {
+            "node": "Save Engagement Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}
